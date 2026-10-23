@@ -88,6 +88,68 @@ func (a *App) sheet(c *ui.Context) {
 		a.reportSheet(c)
 	case modalAbout:
 		a.aboutSheet(c)
+	case modalDetail:
+		a.detailSheet(c)
+	}
+}
+
+// detailSheet is 详细信息: the row's numbers written out, with the one path it
+// stands for revealed or copied from here rather than only from the menu.
+func (a *App) detailSheet(c *ui.Context) {
+	p := a.pal
+	d := a.detail
+	if d == nil {
+		a.dismiss()
+		return
+	}
+	open := true
+	w, _ := c.Size()
+	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
+		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
+		panel.Width(min(520, w-32)).Background(p.Surface).Radius(10).Border(1, p.RuleStrong).
+			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
+			ui.Column(c).Children(func() {
+				ui.Row(c).Height(64).Padding(0, 24).Gap(12).AlignItems(ui.Center).Children(func() {
+					ui.Column(c).Grow(1).Gap(2).Children(func() {
+						ui.Text(c, d.title).FontSize(18).FontWeight(650).TextColor(p.Ink).SingleLine()
+						ui.Text(c, d.kicker).FontSize(11).TextColor(p.Ink3).SingleLine()
+					})
+					ui.Spacer(c).Shrink(0)
+				})
+				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+				ui.Column(c).Padding(20, 24).Gap(10).Children(func() {
+					for _, line := range d.lines {
+						if line.value == "" {
+							continue
+						}
+						ui.Row(c).Gap(16).AlignItems(ui.Start).Children(func() {
+							ui.Text(c, line.label).FontSize(12).TextColor(p.Ink2).Width(64).Shrink(0)
+							ui.Text(c, line.value).Font(core.Mono()).FontSize(12).
+								TextColor(p.Ink).Grow(1)
+						})
+					}
+					if d.note != "" {
+						ui.Text(c, d.note).FontSize(12).TextColor(p.Ink2).Padding(0, 0, 2, 0)
+					}
+					if d.err != "" {
+						ui.Text(c, "读取不全："+d.err).Font(core.Mono()).FontSize(11).
+							TextColor(p.Danger)
+					}
+				})
+				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+				ui.Row(c).Height(60).Padding(0, 24).Gap(8).AlignItems(ui.Center).Children(func() {
+					if d.path != "" {
+						a.actionButton(c, "复制路径", false, true, func() { c.WriteClipboard(d.path) })
+						a.actionButton(c, "在文件夹中显示", false, true, func() { revealPath(d.path) })
+					}
+					ui.Spacer(c)
+					a.actionButton(c, "关闭", true, true, a.dismiss)
+				})
+			})
+		})
+	})
+	if !open {
+		a.dismiss()
 	}
 }
 
