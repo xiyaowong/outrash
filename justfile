@@ -21,4 +21,4 @@ safe:
 
 # Regenerate testdata/shots/*.png from the render tests.
 shots:
-    go test . -count=1
+    go test ./internal/app -count=1

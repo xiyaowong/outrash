@@ -4,33 +4,30 @@
 package main
 
 import (
-	_ "embed"
 	"flag"
 	"log"
 	"os"
 
 	"github.com/egoist/mygo"
 
+	"outrash/internal/app"
 	"outrash/internal/core"
 )
-
-//go:embed rules.json
-var rulesJSON []byte
 
 func main() {
 	debug := flag.Bool("debug", false, "list plans on stdout and never delete")
 	noDelete := flag.Bool("no-delete", false, "refuse every deletion, keeping the window's plan view")
 	flag.Parse()
 
-	cfg, err := core.Parse(rulesJSON)
+	cfg, err := core.Parse(core.Rules)
 	if err != nil {
 		log.Fatal(err)
 	}
-	a := newApp(cfg, core.DefaultOptions(), options{debug: *debug, noDelete: *noDelete || *debug})
 
 	mygo.App.SetName("outrash")
 	mygo.App.WhenReady(func() {
-		a.win = mygo.NewWindow(mygo.WindowOptions{
+		a := app.New(cfg, core.DefaultOptions(), app.Options{Debug: *debug, NoDelete: *noDelete || *debug})
+		a.Window = mygo.NewWindow(mygo.WindowOptions{
 			Title:           "outrash",
 			Width:           940,
 			Height:          660,
@@ -38,9 +35,9 @@ func main() {
 			MinHeight:       560,
 			BackgroundColor: "#F6F6F4",
 			TitleBarStyle:   mygo.TitleBarHidden,
-			Content:         uiView(a),
+			Content:         app.View(a),
 		})
-		a.scan()
+		a.Scan()
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)

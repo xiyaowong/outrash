@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 )
 
 // groupPicks is every leaf of every scanned item in a group.
-func (a *app) groupPicks(g groupState) []core.Pick {
+func (a *App) groupPicks(g groupState) []core.Pick {
 	var picks []core.Pick
 	for _, it := range g.items {
 		picks = append(picks, allPicks(it.res)...)
@@ -40,7 +40,7 @@ func allPicks(res core.Result) []core.Pick {
 }
 
 // setChecks replaces the selection inside picks with the chosen paths.
-func (a *app) setChecks(picks []core.Pick, chosen []core.Step) {
+func (a *App) setChecks(picks []core.Pick, chosen []core.Step) {
 	for _, p := range picks {
 		delete(a.checked, p.Path)
 	}
@@ -49,7 +49,7 @@ func (a *app) setChecks(picks []core.Pick, chosen []core.Step) {
 	}
 }
 
-func (a *app) checkState(picks []core.Pick) (on, total int) {
+func (a *App) checkState(picks []core.Pick) (on, total int) {
 	for _, p := range picks {
 		if a.checked[p.Path] {
 			on++
@@ -58,7 +58,7 @@ func (a *app) checkState(picks []core.Pick) (on, total int) {
 	return on, len(picks)
 }
 
-func (a *app) toggleChecks(picks []core.Pick) {
+func (a *App) toggleChecks(picks []core.Pick) {
 	on, total := a.checkState(picks)
 	for _, p := range picks {
 		if on == total {
@@ -81,7 +81,7 @@ type preset struct {
 // presets are the one-page selections a family offers: two at most, so the
 // header keeps its air. 保留最新 never widens to caches without versions:
 // a plain entry has no newest, so the preset would just delete it all.
-func (a *app) presets(picks []core.Pick) []preset {
+func (a *App) presets(picks []core.Pick) []preset {
 	if len(picks) == 0 {
 		return nil
 	}
@@ -96,7 +96,7 @@ func (a *app) presets(picks []core.Pick) []preset {
 	return []preset{{label: fmt.Sprintf("%d 天未用", a.cfg.StaleDays), pol: core.Policy{StaleDays: a.cfg.StaleDays, Now: a.now}, scope: picks, picks: picks}, all}
 }
 
-func (a *app) chip(c *ui.Context, act preset) {
+func (a *App) chip(c *ui.Context, act preset) {
 	p := a.pal
 	steps := core.Select(act.picks, act.pol).Steps
 	n := len(steps)
@@ -113,7 +113,7 @@ func (a *app) chip(c *ui.Context, act preset) {
 	}
 }
 
-func (a *app) itemRow(c *ui.Context, it itemState) {
+func (a *App) itemRow(c *ui.Context, it itemState) {
 	p := a.pal
 	picks := allPicks(it.res)
 	if len(picks) == 0 && !it.res.Failed() {
@@ -152,7 +152,7 @@ func rootPath(res core.Result) string {
 	return res.Roots[0].Path
 }
 
-func (a *app) itemMeta(res core.Result) string {
+func (a *App) itemMeta(res core.Result) string {
 	versions, entries, newest := 0, 0, time.Time{}
 	for _, root := range res.Roots {
 		for _, e := range root.Entries {
@@ -191,7 +191,7 @@ func (a *app) itemMeta(res core.Result) string {
 	return head
 }
 
-func (a *app) entries(c *ui.Context, it itemState) {
+func (a *App) entries(c *ui.Context, it itemState) {
 	for _, root := range it.res.Roots {
 		for _, e := range root.Entries {
 			if len(e.Versions) > 0 {
@@ -203,7 +203,7 @@ func (a *app) entries(c *ui.Context, it itemState) {
 	}
 }
 
-func (a *app) versioned(c *ui.Context, ent core.Entry) {
+func (a *App) versioned(c *ui.Context, ent core.Entry) {
 	p := a.pal
 	picks := make([]core.Pick, 0, len(ent.Versions))
 	for _, v := range ent.Versions {
@@ -233,7 +233,7 @@ func (a *app) versioned(c *ui.Context, ent core.Entry) {
 	}
 }
 
-func (a *app) leaf(c *ui.Context, name, path string, size int64, mod time.Time) {
+func (a *App) leaf(c *ui.Context, name, path string, size int64, mod time.Time) {
 	p := a.pal
 	on := a.checked[path]
 	m := markOff
@@ -277,7 +277,7 @@ func stateOf(on, total int) mark {
 
 // check draws a tri-state box: ink fill for included, a bar for partly
 // included. Clicking it flips the whole set; the row around it expands.
-func (a *app) check(c *ui.Context, m mark, flip func()) {
+func (a *App) check(c *ui.Context, m mark, flip func()) {
 	p := a.pal
 	border := p.RuleStrong
 	if m != markOff {
@@ -303,7 +303,7 @@ func (a *app) check(c *ui.Context, m mark, flip func()) {
 
 // expander is the +/− at the row's end. It is not clickable: the row is,
 // and the hit test gives the click to it.
-func (a *app) expander(c *ui.Context, open bool) {
+func (a *App) expander(c *ui.Context, open bool) {
 	p := a.pal
 	ui.Box(c).Size(24, 24).Shrink(0).Draw(func(pt *ui.Painter, r ui.Rect) {
 		cx, cy := r.X+r.W/2, r.Y+r.H/2
@@ -330,7 +330,7 @@ func ageText(now, mod time.Time) string {
 	return fmt.Sprintf("%d 年前", int(d.Hours()/(24*365)))
 }
 
-func (a *app) selectedPlan() *core.Plan {
+func (a *App) selectedPlan() *core.Plan {
 	p := &core.Plan{}
 	for _, g := range a.groups {
 		for _, it := range g.items {
@@ -351,7 +351,7 @@ func (a *app) selectedPlan() *core.Plan {
 	return p
 }
 
-func (a *app) checkedTotal() (n int, bytes int64) {
+func (a *App) checkedTotal() (n int, bytes int64) {
 	for _, g := range a.groups {
 		for _, it := range g.items {
 			for _, p := range allPicks(it.res) {
@@ -365,7 +365,7 @@ func (a *app) checkedTotal() (n int, bytes int64) {
 	return n, bytes
 }
 
-func (a *app) clearChecks() {
+func (a *App) clearChecks() {
 	for k := range a.checked {
 		delete(a.checked, k)
 	}
