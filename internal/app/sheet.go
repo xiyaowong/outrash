@@ -101,8 +101,8 @@ func (a *App) planSheet(c *ui.Context) {
 	w, _ := c.Size()
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
-		panel.Width(min(720, w-32)).Background(p.Surface).Border(1, p.RuleStrong).
-			Shadow(0, 16, 40, 0, ui.RGBA(0, 0, 0, 0.22)).Children(func() {
+		panel.Width(min(720, w-32)).Background(p.Surface).Radius(10).Border(1, p.RuleStrong).
+			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
 			ui.Column(c).Children(func() {
 				ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, pl.Title).FontSize(20).FontWeight(600).TextColor(p.Ink).Grow(1).SingleLine()
@@ -259,8 +259,8 @@ func (a *App) reportSheet(c *ui.Context) {
 	w, _ := c.Size()
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
-		panel.Width(min(420, w-32)).Background(p.Surface).Border(1, p.RuleStrong).
-			Shadow(0, 16, 40, 0, ui.RGBA(0, 0, 0, 0.22)).Children(func() {
+		panel.Width(min(420, w-32)).Background(p.Surface).Radius(10).Border(1, p.RuleStrong).
+			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
 			ui.Column(c).Children(func() {
 				ui.Row(c).Height(64).Padding(0, 24).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, "清理完成").FontSize(20).FontWeight(600).TextColor(p.Ink)

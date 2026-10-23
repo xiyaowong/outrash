@@ -118,7 +118,7 @@ func (a *App) chip(c *ui.Context, act preset) {
 	if n == 0 {
 		fg = p.Ink3
 	}
-	row := ui.ButtonBase(c).Height(24).Radius(3).Padding(0, 9).Shrink(0).
+	row := ui.ButtonBase(c).Height(24).Radius(12).Padding(0, 10).Shrink(0).
 		AlignItems(ui.Center).Border(1, p.RuleStrong)
 	if n > 0 {
 		row.Cursor(ui.CursorPointer).OnClick(func() { a.setChecks(act.scope, steps) })
@@ -127,9 +127,11 @@ func (a *App) chip(c *ui.Context, act preset) {
 	switch {
 	case n == 0:
 	case row.Pressed():
-		bg = p.Selected
+		bg = p.AccentSoft
+		row.Border(1, p.Accent)
 	case row.Hovered():
 		bg = p.Hover
+		row.Border(1, p.RuleStrong)
 	}
 	row.Background(bg)
 	row.Children(func() {
@@ -149,9 +151,9 @@ func (a *App) familyRow(c *ui.Context, g groupState) {
 	open := a.open[key]
 	picks := a.groupPicks(g)
 	on, total := a.checkState(picks)
-	row := ui.Row(c).Height(36).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
+	row := ui.Row(c).Height(38).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open })
-	row.Background(hoverFill(row, tint(p.Ink2, p.Surface, 0.035), p.Hover))
+	row.Background(hoverFill(row, tint(p.Ink2, p.Surface, 0.03), p.Hover))
 	row.Children(func() {
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
 		ui.Text(c, g.group.Name).FontSize(13).FontWeight(600).TextColor(p.Ink).
@@ -398,7 +400,11 @@ func (a *App) leaf(c *ui.Context, name, path string, size int64, mod time.Time, 
 		a.check(c, m, nil)
 		// The age rides with the name: a leaf has no entry count, and an age
 		// under the 文件数量 heading would read as one.
-		ui.Text(c, name).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).SingleLine().
+		nameColor := p.Ink2
+		if on {
+			nameColor = p.Ink
+		}
+		ui.Text(c, name).Font(core.Mono()).FontSize(12).TextColor(nameColor).SingleLine().
 			Ellipsis("…").Grow(1).Tooltip(path)
 		if age := ageText(a.now, mod); age != "" {
 			ui.Text(c, age).FontSize(11).TextColor(p.Ink3).Shrink(0)
@@ -429,15 +435,15 @@ func stateOf(on, total int) mark {
 	return markOff
 }
 
-// check draws a tri-state box: ink fill for included, a bar for partly
+// check draws a tri-state box: accent fill for included, a bar for partly
 // included. Clicking it flips the whole set; the row around it expands.
 func (a *App) check(c *ui.Context, m mark, flip func()) {
 	p := a.pal
 	border := p.RuleStrong
 	if m != markOff {
-		border = p.Ink
+		border = p.Accent
 	}
-	box := ui.Box(c).Size(16, 16).Shrink(0).Background(ui.Transparent).Border(1, border)
+	box := ui.Box(c).Size(16, 16).Shrink(0).Background(ui.Transparent).Border(1, border).Radius(4)
 	if flip != nil {
 		box.Cursor(ui.CursorPointer).OnClick(flip)
 	}
@@ -445,13 +451,16 @@ func (a *App) check(c *ui.Context, m mark, flip func()) {
 		if m == markOff {
 			return
 		}
+		pt.Fill(ui.Rect{X: r.X + 1, Y: r.Y + 1, W: r.W - 2, H: r.H - 2}, p.Accent, 3)
 		if m == markPart {
-			pt.Fill(ui.Rect{X: r.X + 1, Y: r.Y + 1, W: r.W - 2, H: r.H - 2}, p.Ink, 0)
-			pt.Fill(ui.Rect{X: r.X + 4, Y: r.Y + r.H/2 - 1, W: r.W - 8, H: 2}, p.Canvas, 0)
+			pt.Fill(ui.Rect{X: r.X + 4, Y: r.Y + r.H/2 - 1, W: r.W - 8, H: 2}, p.Surface, 1)
 			return
 		}
-		pt.Fill(ui.Rect{X: r.X + 1, Y: r.Y + 1, W: r.W - 2, H: r.H - 2}, p.Ink, 0)
-		pt.Fill(ui.Rect{X: r.X + 5, Y: r.Y + 5, W: 6, H: 6}, p.Canvas, 0)
+		pt.StrokePolyline([][2]float32{
+			{r.X + 4, r.Y + 8.5},
+			{r.X + 6.8, r.Y + 11.2},
+			{r.X + 11.8, r.Y + 5},
+		}, 1.6, p.Surface)
 	})
 }
 
