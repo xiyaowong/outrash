@@ -219,7 +219,7 @@ func (a *app) finish(out core.Outcome) {
 		r = &report{}
 		a.report = r
 	}
-	r.freed, r.failed, r.elapsed = out.Freed, out.Failed, out.Elapsed
+	r.freed, r.failed, r.gone, r.elapsed = out.Freed, out.Failed, out.Gone, out.Elapsed
 	for _, run := range out.Runs {
 		if run.Err != nil {
 			r.lines = append(r.lines, fmt.Sprintf("未能删除 %s：%v", run.Path, run.Err))
@@ -254,6 +254,9 @@ func (a *app) reportSheet(c *ui.Context) {
 						a.stat(c, "耗时", r.elapsed.Round(time.Millisecond).String())
 						if r.failed > 0 {
 							a.stat(c, "跳过", fmt.Sprint(r.failed))
+						}
+						if r.gone > 0 {
+							a.stat(c, "已不存在", fmt.Sprint(r.gone))
 						}
 					})
 					a.receiptBlock(c, r)

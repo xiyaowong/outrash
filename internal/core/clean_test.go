@@ -72,6 +72,21 @@ func TestRemoveRefusesBeforeTouchingDisk(t *testing.T) {
 	}
 }
 
+// A cache that vanished between the scan and the run is not a failure; the
+// error list has to stay reserved for paths that really would not go.
+func TestRemoveTreatsVanishedPathAsDone(t *testing.T) {
+	root := t.TempDir()
+	entry := filepath.Join(root, "pkg", "1.0.0") // never created
+	p := &Plan{Steps: []Step{{Path: entry, Bytes: 10}}}
+	out := Remove(p, []string{root})
+	if out.Failed != 0 || out.Freed != 0 || out.Gone != 1 {
+		t.Fatalf("outcome %+v, want one gone path and no failure", out)
+	}
+	if out.Runs[0].Err != nil || !out.Runs[0].Gone {
+		t.Fatalf("run %+v", out.Runs[0])
+	}
+}
+
 func mkdir(t *testing.T, p string) {
 	t.Helper()
 	if err := os.MkdirAll(p, 0o755); err != nil {
