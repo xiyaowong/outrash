@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"outrash/internal/core"
@@ -85,7 +86,82 @@ func (a *App) sheet(c *ui.Context) {
 		a.planSheet(c)
 	case modalReport:
 		a.reportSheet(c)
+	case modalAbout:
+		a.aboutSheet(c)
 	}
+}
+
+// aboutSheet is the one screen with nothing to decide: what this build is,
+// where it comes from, and the licence it comes under.
+func (a *App) aboutSheet(c *ui.Context) {
+	p := a.pal
+	open := true
+	w, _ := c.Size()
+	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
+		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
+		panel.Width(min(400, w-32)).Background(p.Surface).Radius(10).Border(1, p.RuleStrong).
+			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
+			ui.Column(c).Children(func() {
+				ui.Column(c).Padding(28, 24, 24, 24).Gap(6).AlignItems(ui.Center).Children(func() {
+					ui.Box(c).Size(40, 40).Radius(10).Background(p.Accent).AlignItems(ui.Center).
+						Justify(ui.Center).Children(func() {
+						ui.Text(c, "O").FontSize(20).FontWeight(700).TextColor(p.OnAccent)
+					})
+					ui.Text(c, "Outrash").FontSize(20).FontWeight(650).TextColor(p.Ink).SingleLine()
+					ui.Text(c, "版本 "+appVersion()).Font(core.Mono()).FontSize(12).
+						TextColor(p.Ink3).SingleLine()
+					ui.Text(c, "扫描并清理开发工具留下的缓存").FontSize(12).
+						TextColor(p.Ink2).SingleLine()
+				})
+				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+				ui.Column(c).Padding(20, 24).Gap(8).Children(func() {
+					a.aboutLine(c, "作者", "xiyaowong")
+					a.aboutLine(c, "许可", "MIT")
+					a.aboutLine(c, "内置规则", fmt.Sprintf("第 %d 版 · %d 项缓存", a.cfg.Version, a.ruleCount()))
+					ui.Row(c).Gap(8).AlignItems(ui.Baseline).Children(func() {
+						ui.Text(c, "项目主页").FontSize(12).TextColor(p.Ink2).Grow(1)
+						ui.Link(c, "github.com/xiyaowong/outrash", "https://github.com/xiyaowong/outrash").
+							FontSize(12).TextColor(p.Accent)
+					})
+				})
+				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+				ui.Row(c).Height(60).Padding(0, 24).Justify(ui.End).AlignItems(ui.Center).Children(func() {
+					a.actionButton(c, "关闭", true, true, a.dismiss)
+				})
+			})
+		})
+	})
+	if !open {
+		a.dismiss()
+	}
+}
+
+func (a *App) aboutLine(c *ui.Context, label, value string) {
+	p := a.pal
+	ui.Row(c).Gap(8).AlignItems(ui.Baseline).Children(func() {
+		ui.Text(c, label).FontSize(12).TextColor(p.Ink2).Grow(1)
+		ui.Text(c, value).Font(core.Mono()).FontSize(12).TextColor(p.Ink).Shrink(0)
+	})
+}
+
+// ruleCount is the catalog's size, which tells a reader on an old build which
+// tools it does not know about yet.
+func (a *App) ruleCount() int {
+	n := 0
+	for _, g := range a.cfg.Groups {
+		n += len(g.Items)
+	}
+	return n
+}
+
+// appVersion is the version the platform reports. An unpackaged build, as
+// `go run .` makes, carries none; it says so rather than borrow a number from
+// the packaging file that could drift from it.
+func appVersion() string {
+	if v := mygo.App.Version(); v != "" {
+		return v
+	}
+	return "开发版"
 }
 
 // planSheet is the review step: every path, its size, the order, and the one

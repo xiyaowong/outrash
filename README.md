@@ -35,3 +35,7 @@ go run .         # 打开窗口，扫描后按工具分组显示
 go test ./...
 go tool mygo vet .
 ```
+
+## 许可
+
+MIT，见 [LICENSE](LICENSE)。

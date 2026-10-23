@@ -788,6 +788,38 @@ func TestHoverEasesIn(t *testing.T) {
 	}
 }
 
+// The rail's last control is the about sheet, and the sheet has to say what
+// this build is: version, author, licence, and how large its catalog is.
+func TestAboutSheetFromRail(t *testing.T) {
+	a := testApp(t, false)
+	a.now = fixedTime(0)
+	tt := ui.NewTester(a.view, 1200, 780)
+	if tt.HasText("只清除可重新下载") {
+		t.Fatal("the rail still carries the footer note")
+	}
+	if err := tt.Click("关于"); err != nil {
+		t.Fatalf("the about control is not in the rail: %v", err)
+	}
+	if a.modal != modalAbout {
+		t.Fatalf("clicking 关于 opened modal %v", a.modal)
+	}
+	for _, want := range []string{"Outrash", "xiyaowong", "MIT", "github.com/xiyaowong/outrash"} {
+		if !tt.HasText(want) {
+			t.Fatalf("about sheet missing %q; texts %v", want, tt.Texts())
+		}
+	}
+	if !tt.HasText("内置规则") {
+		t.Fatalf("about sheet does not name the catalog; texts %v", tt.Texts())
+	}
+	write(t, "about.png", tt.Image())
+	if err := tt.Click("关闭"); err != nil {
+		t.Fatal(err)
+	}
+	if a.modal != modalNone {
+		t.Fatalf("关闭 left modal %v open", a.modal)
+	}
+}
+
 func fixedTime(daysAgo int) (t time.Time) {
 	return time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC).AddDate(0, 0, -daysAgo)
 }

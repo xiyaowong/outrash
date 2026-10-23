@@ -142,6 +142,7 @@ const (
 	modalNone modal = iota
 	modalPlan
 	modalReport
+	modalAbout
 )
 
 type report struct {
@@ -644,7 +645,7 @@ func (a *App) nav(c *ui.Context) {
 			})
 			ui.Spacer(c)
 			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-			a.navFooter(c)
+			ui.Column(c).Padding(10, 8).Children(func() { a.navFooter(c) })
 		})
 }
 
@@ -655,6 +656,7 @@ const (
 	iconResults
 	iconLog
 	iconRules
+	iconAbout
 )
 
 func (a *App) navItem(c *ui.Context, pg page, label string, icon navIcon) {
@@ -717,15 +719,22 @@ func (a *App) icon(c *ui.Context, kind navIcon, fg ui.Color) {
 				pt.Fill(ui.Rect{X: x + 1, Y: yy, W: 14, H: 1}, fg, 0)
 				pt.Fill(ui.Rect{X: x + 4 + float32(i)*3, Y: yy - 2, W: 2, H: 5}, fg, 0)
 			}
+		case iconAbout:
+			pt.Stroke(ui.Rect{X: x + 1.5, Y: y + 1.5, W: 13, H: 13}, fg, 7, 1)
+			pt.Fill(ui.Rect{X: x + 7.4, Y: y + 4.5, W: 1.6, H: 1.6}, fg, 0)
+			pt.Fill(ui.Rect{X: x + 7.2, Y: y + 7.5, W: 1.6, H: 4.5}, fg, 0)
 		}
 	})
 }
 
 func (a *App) navFooter(c *ui.Context) {
 	p := a.pal
-	ui.Column(c).Padding(10, 14, 10, 12).Gap(4).Children(func() {
-		ui.Text(c, "只清除可重新下载").FontSize(11).TextColor(p.Ink3).SingleLine()
-		ui.Text(c, "或重新编译的缓存").FontSize(11).TextColor(p.Ink3).SingleLine()
+	row := ui.ButtonBase(c).Height(32).Padding(0, 10).Gap(9).AlignItems(ui.Center).
+		Justify(ui.Start).Label("关于").OnClick(func() { a.modal = modalAbout })
+	row.Background(hoverFill(row, ui.Transparent, p.Hover)).Radius(6)
+	row.Children(func() {
+		a.icon(c, iconAbout, p.Ink2)
+		ui.Text(c, "关于").FontSize(13).TextColor(p.Ink2).SingleLine()
 	})
 }
 
