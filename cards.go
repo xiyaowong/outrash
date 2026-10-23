@@ -124,6 +124,7 @@ func (a *app) itemRow(c *ui.Context, it itemState) {
 	on, total := a.checkState(picks)
 	row := ui.Row(c).Height(56).Padding(0, 32).Gap(12).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open })
+	row.Background(hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
 		ui.Column(c).Grow(1).Gap(2).Children(func() {
@@ -216,6 +217,7 @@ func (a *app) versioned(c *ui.Context, ent core.Entry) {
 	on, total := a.checkState(picks)
 	row := ui.Row(c).Height(32).Padding(0, 32, 0, 68).Gap(12).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open })
+	row.Background(hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
 		ui.Text(c, ent.Name).Font(core.Mono()).FontSize(12).TextColor(p.Ink).SingleLine().Grow(1)
@@ -240,6 +242,11 @@ func (a *app) leaf(c *ui.Context, name, path string, size int64, mod time.Time) 
 	}
 	row := ui.Row(c).Height(32).Padding(0, 32, 0, 68).Gap(12).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.checked[path] = !on })
+	resting := ui.Transparent
+	if on {
+		resting = p.Selected
+	}
+	row.Background(hoverFill(row, resting, p.Hover))
 	row.Children(func() {
 		a.check(c, m, nil)
 		ui.Text(c, name).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
