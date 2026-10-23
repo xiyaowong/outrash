@@ -184,6 +184,7 @@ func (a *app) run() {
 	a.busy = true
 	a.msg = "正在清理…"
 	a.clearChecks()
+	a.busyBar(true)
 	a.repaint()
 	roots := a.roots()
 	go func() {
