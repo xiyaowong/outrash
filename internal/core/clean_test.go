@@ -3,9 +3,27 @@ package core
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
+
+// dirLink makes a directory link. Windows grants mklink /J without the
+// privilege os.Symlink needs, so these guards stay under test on the machine
+// the product ships for.
+func dirLink(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err == nil {
+		return
+	}
+	if runtime.GOOS != "windows" {
+		t.Skip("directory links need a privilege this account lacks")
+	}
+	if out, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput(); err != nil {
+		t.Skipf("no directory links available: %v (%s)", err, out)
+	}
+}
 
 func TestCheckRefusesUnsafePaths(t *testing.T) {
 	tmp := t.TempDir()
@@ -52,11 +70,43 @@ func TestCheckRefusesSymlink(t *testing.T) {
 	mkdir(t, root)
 	mkdir(t, target)
 	link := filepath.Join(root, "link")
-	if err := os.Symlink(target, link); err != nil {
-		t.Skip("symlinks need a privilege this account lacks")
-	}
+	dirLink(t, target, link)
 	if err := check(link, []string{root}); !errors.Is(err, ErrUnsafe) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// A link planted below the root after the scan makes RemoveAll act on a
+// directory outside it, while the literal path still reads as contained.
+// Lstat on the entry alone cannot see that; every component must be checked.
+func TestCheckRefusesEntryBehindMidPathLink(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "cache")
+	outside := filepath.Join(tmp, "outside")
+	mkdir(t, root)
+	mkdir(t, filepath.Join(outside, "1.0.0"))
+
+	swapped := filepath.Join(root, "pkg")
+	dirLink(t, outside, swapped)
+	entry := filepath.Join(swapped, "1.0.0")
+	if err := check(entry, []string{root}); !errors.Is(err, ErrUnsafe) {
+		t.Fatalf("a link below the root carried the step outside it: got %v", err)
+	}
+}
+
+// The same swap at the root itself: a cache root turned into a junction
+// after the scan takes every step with it.
+func TestCheckRefusesRootSwappedForLink(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "cache")
+	outside := filepath.Join(tmp, "outside")
+	mkdir(t, outside)
+	mkdir(t, filepath.Join(outside, "pkg"))
+	dirLink(t, outside, root)
+
+	entry := filepath.Join(root, "pkg")
+	if err := check(entry, []string{root}); !errors.Is(err, ErrUnsafe) {
+		t.Fatalf("a linked root carried the step outside it: got %v", err)
 	}
 }
 

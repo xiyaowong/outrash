@@ -626,7 +626,7 @@ func (a *App) panel(c *ui.Context) {
 					for _, line := range []string{
 						"只清理能重新下载或重新编译的内容，不碰源码与项目目录。",
 						"清理后各工具会在下次使用时自行恢复。",
-						"扫描不跟随符号链接，读不到的位置会标出来。",
+						"缓存根是链接时不扫描，链接也不会把删除带到根之外。",
 					} {
 						ui.Row(c).AlignItems(ui.Start).Gap(6).Children(func() {
 							ui.Box(c).Size(3, 3).Shrink(0).Margin(0, 6, 0, 0).Background(p.Ink3)

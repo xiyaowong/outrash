@@ -304,6 +304,29 @@ func TestScanItemSkipsExcludedChildren(t *testing.T) {
 	}
 }
 
+// A root that is itself a link is refused: every entry under it would look
+// contained while RemoveAll acted on the link target.
+func TestScanRefusesLinkedRoot(t *testing.T) {
+	tmp := t.TempDir()
+	target := filepath.Join(tmp, "real")
+	mkdir(t, filepath.Join(target, "pkg"))
+	link := filepath.Join(tmp, "cache")
+	dirLink(t, target, link)
+	it := Item{
+		ID: "cache", Name: "cache", Unit: UnitEntries,
+		Paths: map[string][]string{runtime.GOOS: {link}},
+	}
+	o := Options{GOOS: runtime.GOOS, Getenv: func(string) string { return "" }}
+
+	r := scanItem("grp", it, o, nil)
+	if len(r.Roots) != 0 {
+		t.Fatalf("a linked root was scanned: %+v", r.Roots)
+	}
+	if !r.Failed() {
+		t.Fatal("the refusal has to reach the window as a warning")
+	}
+}
+
 func TestResultUnreadable(t *testing.T) {
 	if (Result{}).Failed() {
 		t.Fatal("a complete scan is not failed")

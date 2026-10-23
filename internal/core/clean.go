@@ -97,14 +97,47 @@ func check(p string, roots []string) error {
 		if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
 			continue
 		}
-		info, err := os.Lstat(p)
-		if err != nil {
+		// The root's own link is caught at scan time; anything left between
+		// it and the entry is caught here, for every component: RemoveAll
+		// walks through a junction inside the root and acts on its target.
+		if err := noLinks(filepath.Clean(root), p); err != nil {
 			return err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("%w：%s 是链接", ErrUnsafe, p)
 		}
 		return nil
 	}
 	return ErrUnsafe
+}
+
+// noLinks fails if the root itself or any component of p below it is a
+// link. A root swapped for a junction after the scan moves everything under
+// it, and a link inside the root moves one step; both would let RemoveAll
+// act outside the directory the scan measured. Only junctions and symlinks
+// matter here: a plain folder at the entry is exactly what a plan step is.
+func noLinks(root, p string) error {
+	rel, err := filepath.Rel(root, p)
+	if err != nil {
+		return ErrUnsafe
+	}
+	dir := root
+	if err := linkCheck(dir); err != nil {
+		return err
+	}
+	for name := range strings.SplitSeq(rel, string(filepath.Separator)) {
+		dir = filepath.Join(dir, name)
+		if err := linkCheck(dir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func linkCheck(p string) error {
+	info, err := os.Lstat(p)
+	if err != nil {
+		return err
+	}
+	if isLink(info) {
+		return fmt.Errorf("%w：%s 是链接", ErrUnsafe, p)
+	}
+	return nil
 }
