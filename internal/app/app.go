@@ -1013,7 +1013,9 @@ func (a *App) actionBar(c *ui.Context) {
 				ui.Text(c, a.barSub()).FontSize(11).TextColor(p.Ink3).SingleLine()
 			})
 			if n > 0 {
-				a.textButton(c, "清空", a.clearChecks)
+				// Paired with 全选 above: the bar's two selection verbs read
+				// as one pair, and neither can be mistaken for 开始清理.
+				a.textButton(c, "全不选", a.clearChecks)
 			}
 			a.actionButton(c, "重新扫描", false, a.phase != phaseScanning, a.Scan)
 			label := "开始清理"

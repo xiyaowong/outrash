@@ -44,14 +44,12 @@ func (a *App) leafMenu(c *ui.Context, it itemState, name, path string, size int6
 	pick := core.Pick{Path: path, Name: name, Bytes: size, ModTime: mod}
 	return func(m *ui.Menu) {
 		on := a.checked[path]
-		label := "选中此项"
-		if on {
-			label = "取消选中此项"
-		}
-		if m.Item(label).Chosen() {
+		// A check mark carries the state, so the label stays one word and the
+		// menu never grows a 取消… twin for every verb.
+		if m.Item("勾选").Checked(on).Chosen() {
 			a.checked[path] = !on
 		}
-		if m.Item("仅选此项").Chosen() {
+		if m.Item("仅勾选此项").Chosen() {
 			a.onlyPick(pick)
 		}
 		m.Separator()
@@ -76,15 +74,11 @@ func (a *App) leafMenu(c *ui.Context, it itemState, name, path string, size int6
 func (a *App) packageMenu(c *ui.Context, it itemState, ent core.Entry) func(m *ui.Menu) {
 	picks := versionPicks(ent)
 	return func(m *ui.Menu) {
-		if m.Item("选择全部版本").Chosen() {
-			a.checkAll(picks)
-		}
-		if m.Item("仅选旧版本").Chosen() {
-			a.setChecks(picks, core.Select(picks, core.Policy{KeepNewest: true, Now: a.now}).Steps)
-		}
-		if m.Item("清空此包").Chosen() {
-			a.clearPicks(picks)
-		}
+		a.selectItems(m, picks, func(m *ui.Menu) {
+			if m.Item("仅旧版本").Chosen() {
+				a.setChecks(picks, core.Select(picks, core.Policy{KeepNewest: true, Now: a.now}).Steps)
+			}
+		})
 		m.Separator()
 		if m.Item("复制包路径").Chosen() {
 			c.WriteClipboard(ent.Path)
@@ -105,12 +99,7 @@ func (a *App) itemMenu(c *ui.Context, it itemState, family string) func(m *ui.Me
 	picks := allPicks(it.res)
 	roots := rootPaths(it.res)
 	return func(m *ui.Menu) {
-		if m.Item("全选此缓存").Chosen() {
-			a.checkAll(picks)
-		}
-		if m.Item("清空此缓存").Chosen() {
-			a.clearPicks(picks)
-		}
+		a.selectItems(m, picks, nil)
 		m.Separator()
 		a.pathItems(m, "复制缓存路径", roots, func(p string) { c.WriteClipboard(p) })
 		a.pathItems(m, "打开缓存目录", roots, openPath)
@@ -127,25 +116,41 @@ func (a *App) familyMenu(g groupState) func(m *ui.Menu) {
 	picks := a.groupPicks(g)
 	key := "g:" + g.group.ID
 	return func(m *ui.Menu) {
-		label := "展开该分组"
+		label := "展开"
 		if a.open[key] {
-			label = "折叠该分组"
+			label = "折叠"
 		}
 		if m.Item(label).Chosen() {
 			a.open[key] = !a.open[key]
 		}
 		m.Separator()
-		if m.Item("全选此分组").Chosen() {
-			a.checkAll(picks)
-		}
-		if m.Item("清空此分组").Chosen() {
-			a.clearPicks(picks)
-		}
+		a.selectItems(m, picks, nil)
 		m.Separator()
 		if m.Item("详细信息").Chosen() {
 			a.showDetail(a.familyDetail(g))
 		}
 	}
+}
+
+// selectItems is the one selection group every depth of the table offers, so
+// the same three verbs mean the same three things on a version, a cache and a
+// family. extra adds the depth's own policy, such as 仅旧版本, inside it: a
+// submenu keeps each label down to the word that differs, and keeps 选择 out
+// of every row of the parent menu, where it would read as the whole list.
+func (a *App) selectItems(m *ui.Menu, picks []core.Pick, extra func(m *ui.Menu)) {
+	m.Submenu("选择", func(sub *ui.Menu) {
+		on, _ := a.checkState(picks)
+		if sub.Item(fmt.Sprintf("全选 %d 项", len(picks))).Chosen() {
+			a.checkAll(picks)
+		}
+		if sub.Item("全不选").Disabled(on == 0).Chosen() {
+			a.clearPicks(picks)
+		}
+		if extra != nil {
+			sub.Separator()
+			extra(sub)
+		}
+	})
 }
 
 // pathItems adds one item for a single path, or a submenu of them. A cache
