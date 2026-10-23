@@ -15,12 +15,12 @@
 ## 构建与运行
 
 ```sh
-go run .              # 打开窗口，扫描后按工具分组显示
-go run . -debug       # 查看计划时把路径、大小和顺序打印到 stdout，并禁用删除
-go run . -no-delete   # 正常界面，但拒绝执行任何删除
+just debug       # 查看计划时把路径、大小和顺序打印到 stdout，并禁用删除
+just safe        # 正常界面，但拒绝执行任何删除
+go run .         # 打开窗口，扫描后按工具分组显示
 ```
 
-`-debug` 隐含 `-no-delete`。
+`-debug` 隐含 `-no-delete`。`just ci` 跑 build、vet 和测试。
 
 ## 添加一个缓存
 
