@@ -750,6 +750,44 @@ func TestPlanSheetLongPaths(t *testing.T) {
 	}
 }
 
+// Hover is a transition, not a switch: the row under the pointer must pass
+// through a shade that is neither its resting fill nor its hover fill.
+func TestHoverEasesIn(t *testing.T) {
+	a := testApp(t, false)
+	a.now = fixedTime(0)
+	tt := ui.NewTester(a.view, 1200, 780)
+	tt.Frame()
+	row, ok := tt.Find("Go")
+	if !ok {
+		t.Fatalf("no row to hover; texts %v", tt.Texts())
+	}
+	// Off the text and left of the panel, so the sample is the row fill alone.
+	x, y := float32(500), row.Y+row.H/2
+	at := func() [4]uint8 {
+		t.Helper()
+		p := tt.Image().Pix[tt.Image().PixOffset(int(x), int(y)):]
+		return [4]uint8{p[0], p[1], p[2], p[3]}
+	}
+
+	rest := at()
+	tt.Move(x, y)
+	tt.Frame()
+	moved := at()
+	if moved != rest {
+		t.Fatalf("the row jumped to its hover fill on the first frame: %v", moved)
+	}
+	tt.Advance(hoverAnim.Duration / 2)
+	mid := at()
+	tt.Advance(hoverAnim.Duration)
+	done := at()
+	if mid == rest || mid == done {
+		t.Fatalf("no shade between resting %v and hover %v: %v", rest, done, mid)
+	}
+	if done == rest {
+		t.Fatalf("the row never reached its hover fill: %v", done)
+	}
+}
+
 func fixedTime(daysAgo int) (t time.Time) {
 	return time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC).AddDate(0, 0, -daysAgo)
 }
