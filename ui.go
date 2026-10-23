@@ -90,11 +90,19 @@ type receipt struct {
 	before  int64
 	groups  []delta
 	planned map[string]bool
+	// failed marks steps the removal could not delete; they can never count
+	// as regenerated.
+	failed map[string]bool
+	// end is when the removal returned. Only a rescan entry modified after
+	// it was written back by someone else.
+	end time.Time
 	// after is filled by the rescan; until then the sheet says it is
 	// measuring.
 	after       int64
 	regenerated int
 	regenBytes  int64
+	still       int
+	stillBytes  int64
 	measured    bool
 }
 
@@ -188,7 +196,7 @@ func (a *app) scan() {
 // openReceipt snapshots what the families hold before a clean, and which
 // paths the plan will remove, so the rescan can prove both numbers.
 func (a *app) openReceipt(pl *core.Plan) *receipt {
-	r := &receipt{planned: map[string]bool{}, after: -1}
+	r := &receipt{planned: map[string]bool{}, failed: map[string]bool{}, after: -1}
 	for _, g := range a.groups {
 		r.groups = append(r.groups, delta{name: g.group.Name, before: g.size})
 		r.before += g.size
@@ -199,8 +207,10 @@ func (a *app) openReceipt(pl *core.Plan) *receipt {
 	return r
 }
 
-// closeReceipt compares a finished rescan with the snapshot. It only fills
-// in a receipt that was opened by a clean and not yet measured.
+// closeReceipt compares a finished rescan with the snapshot. A planned path
+// that is back counts as regenerated only if it was written after the
+// removal returned; anything else was never removed, which is a failure and
+// is already listed as one.
 func (a *app) closeReceipt(cache *core.Cache) {
 	if a.report == nil || a.report.receipt == nil || a.report.receipt.measured {
 		return
@@ -223,10 +233,17 @@ func (a *app) closeReceipt(cache *core.Cache) {
 	for _, res := range cache.Results {
 		for _, root := range res.Roots {
 			for _, p := range treePaths(root) {
-				if r.planned[p] {
-					r.regenerated++
-					r.regenBytes += sizeOf(root, p)
+				if !r.planned[p] || r.failed[p] {
+					continue
 				}
+				n, mtime := sizeOf(root, p)
+				if mtime.After(r.end) {
+					r.regenerated++
+					r.regenBytes += n
+					continue
+				}
+				r.still++
+				r.stillBytes += n
 			}
 		}
 	}
@@ -248,18 +265,19 @@ func treePaths(root core.Root) []string {
 	return out
 }
 
-func sizeOf(root core.Root, p string) int64 {
+// sizeOf returns an entry's bytes and newest modification time.
+func sizeOf(root core.Root, p string) (int64, time.Time) {
 	for _, e := range root.Entries {
 		if e.Path == p {
-			return e.Size
+			return e.Size, e.ModTime
 		}
 		for _, v := range e.Versions {
 			if v.Path == p {
-				return v.Size
+				return v.Size, v.ModTime
 			}
 		}
 	}
-	return 0
+	return 0, time.Time{}
 }
 
 // busyBar is the scan/clean indicator: a busy progress bar in the taskbar

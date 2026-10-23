@@ -220,9 +220,17 @@ func (a *app) finish(out core.Outcome) {
 		a.report = r
 	}
 	r.freed, r.failed, r.gone, r.elapsed = out.Freed, out.Failed, out.Gone, out.Elapsed
+	// The rescan starts after this line, so a path written later than it can
+	// only have been created by something other than the removal.
+	if rc := r.receipt; rc != nil {
+		rc.end = time.Now()
+	}
 	for _, run := range out.Runs {
 		if run.Err != nil {
 			r.lines = append(r.lines, fmt.Sprintf("未能删除 %s：%v", run.Path, run.Err))
+			if rc := r.receipt; rc != nil {
+				rc.failed[run.Path] = true
+			}
 		}
 	}
 	a.msg = ""
@@ -323,6 +331,10 @@ func (a *app) receiptBlock(c *ui.Context, r *report) {
 		}
 		if rc.regenerated > 0 {
 			ui.Text(c, fmt.Sprintf("已重新生成 %d 项 · %s", rc.regenerated, core.Bytes(rc.regenBytes))).
+				FontSize(12).TextColor(p.Ink2)
+		}
+		if rc.still > 0 {
+			ui.Text(c, fmt.Sprintf("仍在 %d 项 · %s", rc.still, core.Bytes(rc.stillBytes))).
 				FontSize(12).TextColor(p.Ink2)
 		}
 	})

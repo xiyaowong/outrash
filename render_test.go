@@ -290,24 +290,24 @@ func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
 }
 
 // A receipt is only honest when it measures: the rescan after a clean must
-// show the same cache smaller, and name anything the tool wrote back.
+// show the same cache smaller, and only a path written after the removal
+// counts as regenerated.
 func TestReceiptComparesBeforeAndAfter(t *testing.T) {
 	a := testAppWith(t, options{})
 	a.now = fixedTime(0)
-	pl := &core.Plan{
-		Title: "t",
-		Steps: []core.Step{{Path: `C:\Users\tester\.nuget\packages\serilog\serilog.1.1`, Bytes: 50}},
-	}
+	const serilog = `C:\Users\tester\.nuget\packages\serilog\serilog.1.1`
+	pl := &core.Plan{Title: "t", Steps: []core.Step{{Path: serilog, Bytes: 50}}}
 	a.report = &report{receipt: a.openReceipt(pl)}
 	a.report.freed = 50
+	a.report.receipt.end = fixedTime(1) // the removal returned a day before "now"
 	a.modal = modalReport
 
-	// The removal is over; the next scan brings back a smaller .NET family
-	// and a regenerated serilog version.
+	// The next scan finds a smaller .NET family whose serilog version was
+	// written after the removal: the tool really did re-download it.
 	after := core.Result{GroupID: "dotnet", ItemID: "nuget-packages", Unit: core.UnitVersioned}
 	root := core.Root{Path: `C:\Users\tester\.nuget\packages`}
 	e := core.Entry{Name: "serilog", Path: root.Path + `\serilog`, Package: "serilog"}
-	e.Versions = []core.Version{{Name: "serilog.1.1", Path: `C:\Users\tester\.nuget\packages\serilog\serilog.1.1`, Size: 50}}
+	e.Versions = []core.Version{{Name: "serilog.1.1", Path: serilog, Size: 50, ModTime: fixedTime(0)}}
 	e.Size = 50
 	root.Entries = []core.Entry{e}
 	root.Size, root.Count = 50, 1
@@ -329,8 +329,8 @@ func TestReceiptComparesBeforeAndAfter(t *testing.T) {
 	if rc.after >= rc.before {
 		t.Fatalf("after %d must be below before %d", rc.after, rc.before)
 	}
-	if rc.regenerated != 1 || rc.regenBytes != 50 {
-		t.Fatalf("regenerated = %d (%d bytes), want the one serilog version", rc.regenerated, rc.regenBytes)
+	if rc.regenerated != 1 || rc.regenBytes != 50 || rc.still != 0 {
+		t.Fatalf("regenerated = %d (%d bytes), still = %d", rc.regenerated, rc.regenBytes, rc.still)
 	}
 
 	tt := ui.NewTester(a.view, 940, 660)
@@ -342,6 +342,76 @@ func TestReceiptComparesBeforeAndAfter(t *testing.T) {
 		t.Fatalf("regenerated line missing; texts %v", tt.Texts())
 	}
 	write(t, "report.png", tt.Image())
+}
+
+// A path the removal could not delete is a failure, never a rebuild; one
+// that is back with its old mtime was simply never gone.
+func TestReceiptDoesNotCallFailuresRegenerated(t *testing.T) {
+	a := testAppWith(t, options{})
+	a.now = fixedTime(0)
+	const stuck = `C:\Users\tester\.nuget\packages\serilog\serilog.1.1`
+	pl := &core.Plan{Title: "t", Steps: []core.Step{{Path: stuck, Bytes: 50}}}
+	rc := a.openReceipt(pl)
+	a.report = &report{receipt: rc}
+	// finish() rescans; keep that off the fixture this test edits.
+	a.cfg = &core.Config{}
+	a.post = func(func()) {}
+
+	// finish() records the failure and the moment the removal returned.
+	a.finish(core.Outcome{
+		Failed: 1,
+		Runs:   []core.Removal{{Path: stuck, Bytes: 50, Err: os.ErrPermission}},
+	})
+	if !rc.failed[stuck] {
+		t.Fatal("the failed step was not recorded")
+	}
+
+	after := core.Result{GroupID: "dotnet", ItemID: "nuget-packages", Unit: core.UnitVersioned}
+	root := core.Root{Path: `C:\Users\tester\.nuget\packages`}
+	e := core.Entry{Name: "serilog", Path: root.Path + `\serilog`, Package: "serilog"}
+	// Older than the removal: the folder was never deleted.
+	e.Versions = []core.Version{{Name: "serilog.1.1", Path: stuck, Size: 50, ModTime: fixedTime(5)}}
+	e.Size = 50
+	root.Entries = []core.Entry{e}
+	root.Size, root.Count = 50, 1
+	after.Roots = []core.Root{root}
+	after.Size, after.Count = 50, 1
+	a.cache.Results["dotnet/nuget-packages"] = after
+	a.regroup()
+	a.closeReceipt(a.cache)
+
+	if rc.regenerated != 0 || rc.still != 0 {
+		t.Fatalf("regenerated %d, still %d; a failed step is neither", rc.regenerated, rc.still)
+	}
+}
+
+// An old path that survives a successful removal was not written back; it is
+// "still there", not "regenerated".
+func TestReceiptCallsOldSurvivorsStill(t *testing.T) {
+	a := testAppWith(t, options{})
+	a.now = fixedTime(0)
+	const path = `C:\Users\tester\.nuget\packages\serilog\serilog.1.1`
+	pl := &core.Plan{Title: "t", Steps: []core.Step{{Path: path, Bytes: 50}}}
+	rc := a.openReceipt(pl)
+	a.report = &report{receipt: rc}
+	rc.end = fixedTime(0)
+
+	after := core.Result{GroupID: "dotnet", ItemID: "nuget-packages", Unit: core.UnitVersioned}
+	root := core.Root{Path: `C:\Users\tester\.nuget\packages`}
+	e := core.Entry{Name: "serilog", Path: root.Path + `\serilog`, Package: "serilog"}
+	e.Versions = []core.Version{{Name: "serilog.1.1", Path: path, Size: 50, ModTime: fixedTime(9)}}
+	e.Size = 50
+	root.Entries = []core.Entry{e}
+	root.Size, root.Count = 50, 1
+	after.Roots = []core.Root{root}
+	after.Size, after.Count = 50, 1
+	a.cache.Results["dotnet/nuget-packages"] = after
+	a.regroup()
+	a.closeReceipt(a.cache)
+
+	if rc.regenerated != 0 || rc.still != 1 || rc.stillBytes != 50 {
+		t.Fatalf("regenerated %d, still %d (%d bytes)", rc.regenerated, rc.still, rc.stillBytes)
+	}
 }
 
 // The sheet must say why each path goes and which version stays — the two
