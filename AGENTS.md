@@ -15,11 +15,7 @@ Windows-first dev-cache cleaner. Go + mygo native UI. Cross-platform logic, no w
 | file | role |
 |---|---|
 | `rules.json` | groups → items: env vars, per-OS path templates, unit |
-| `internal/rules` | parse + env override + path expansion |
-| `internal/scan` | walk dirs concurrently, per-entry size/mtime, classify versions |
-| `internal/plan` | policy → ordered list of `Step` (path, bytes, reason) |
-| `internal/clean` | guarded `os.RemoveAll`; the only package that deletes |
-| `internal/theme` | palette + type scale (ledger: paper, ink, one accent) |
+| `internal/core` | rules: parse + env override + path expansion · scan: walk dirs concurrently, per-entry size/mtime, classify versions · plan: policy → ordered list of `Step` (path, bytes, reason) · clean: guarded `os.RemoveAll`, the only code that deletes · theme: palette + type scale (ledger: paper, ink, one accent) |
 | `main.go` | flags, window wiring, `Window.Update` |
 | `ui.go` | title bar, rail, header, list, action bar |
 | `cards.go` | item and version rows, tri-state check, presets |

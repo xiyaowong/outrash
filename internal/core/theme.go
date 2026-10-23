@@ -1,10 +1,10 @@
-// Package theme holds outrash's colors and type scale.
+// theme.go holds outrash's colors and type scale.
 //
 // The look is a ledger: warm paper, ink, hairlines, one saturated accent for
 // the single action that matters. No radius, no gradients, no shadows except
 // the plan sheet, because the product's honesty comes from looking like a
 // printed manifest rather than a dashboard.
-package theme
+package core
 
 import "github.com/egoist/mygo/ui"
 
@@ -66,9 +66,9 @@ func Mono() string { return "Consolas" }
 // Display is the family for the screen title.
 func Display() string { return "Segoe UI Variable Display" }
 
-// Apply sets the mygo theme for this frame and returns the palette that goes
-// with it.
-func Apply(c *ui.Context) *Palette {
+// ApplyTheme sets the mygo theme for this frame and returns the palette that
+// goes with it.
+func ApplyTheme(c *ui.Context) *Palette {
 	t := *c.Theme()
 	p := Light
 	if t.Dark {

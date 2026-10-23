@@ -1,13 +1,12 @@
-// Package plan turns scan results and the user's choices into an ordered
-// list of removals. Nothing in this package deletes anything: a Plan is
-// what the window shows before anyone acts.
-package plan
+// plan.go turns scan results and the user's choices into an ordered list of
+// removals. Nothing in this file deletes anything: a Plan is what the window
+// shows before anyone acts.
+package core
 
 import (
 	"cmp"
 	"fmt"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -339,10 +338,4 @@ func Bytes(n int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTP"[exp])
-}
-
-// ByAge orders picks oldest first, so a listing reads like use.
-func ByAge(picks []Pick) []Pick {
-	sort.SliceStable(picks, func(i, j int) bool { return picks[i].ModTime.Before(picks[j].ModTime) })
-	return picks
 }

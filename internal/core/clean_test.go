@@ -1,12 +1,10 @@
-package clean
+package core
 
 import (
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"outrash/internal/plan"
 )
 
 func TestCheckRefusesUnsafePaths(t *testing.T) {
@@ -62,10 +60,10 @@ func TestCheckRefusesSymlink(t *testing.T) {
 	}
 }
 
-func TestRunRefusesBeforeTouchingDisk(t *testing.T) {
+func TestRemoveRefusesBeforeTouchingDisk(t *testing.T) {
 	tmp := t.TempDir()
-	p := &plan.Plan{Steps: []plan.Step{{Path: filepath.Join(tmp, "outside", "x"), Bytes: 10}}}
-	out := Run(p, []string{filepath.Join(tmp, "cache")})
+	p := &Plan{Steps: []Step{{Path: filepath.Join(tmp, "outside", "x"), Bytes: 10}}}
+	out := Remove(p, []string{filepath.Join(tmp, "cache")})
 	if out.Failed != 1 || !errors.Is(out.Runs[0].Err, ErrUnsafe) {
 		t.Fatalf("outcome %+v", out)
 	}

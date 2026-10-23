@@ -1,4 +1,4 @@
-package scan
+package core
 
 import (
 	"bytes"
@@ -7,8 +7,6 @@ import (
 	"runtime"
 	"testing"
 	"time"
-
-	"outrash/internal/rules"
 )
 
 func write(t *testing.T, path string, n int) {
@@ -179,15 +177,15 @@ func TestScanItemTotals(t *testing.T) {
 	}
 	write(t, filepath.Join(b, "three.bin"), 45)
 
-	it := rules.Item{
+	it := Item{
 		ID:   "cache",
 		Name: "cache",
-		Unit: rules.UnitEntries,
+		Unit: UnitEntries,
 		Paths: map[string][]string{
 			runtime.GOOS: {a, b},
 		},
 	}
-	o := rules.Options{GOOS: runtime.GOOS, Getenv: func(string) string { return "" }}
+	o := Options{GOOS: runtime.GOOS, Getenv: func(string) string { return "" }}
 
 	r := scanItem("grp", it, o, nil)
 	if r.Err != nil {

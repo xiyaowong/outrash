@@ -7,14 +7,12 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"outrash/internal/plan"
-	"outrash/internal/scan"
-	"outrash/internal/theme"
+	"outrash/internal/core"
 )
 
 // groupPicks is every leaf of every scanned item in a group.
-func (a *app) groupPicks(g groupState) []plan.Pick {
-	var picks []plan.Pick
+func (a *app) groupPicks(g groupState) []core.Pick {
+	var picks []core.Pick
 	for _, it := range g.items {
 		picks = append(picks, allPicks(it.res)...)
 	}
@@ -22,27 +20,27 @@ func (a *app) groupPicks(g groupState) []plan.Pick {
 }
 
 // allPicks is every leaf of a scanned item.
-func allPicks(res scan.Result) []plan.Pick {
-	var picks []plan.Pick
+func allPicks(res core.Result) []core.Pick {
+	var picks []core.Pick
 	for _, root := range res.Roots {
 		for _, e := range root.Entries {
 			if len(e.Versions) > 0 {
 				for _, v := range e.Versions {
-					picks = append(picks, plan.Pick{
+					picks = append(picks, core.Pick{
 						Path: v.Path, Name: e.Name + " " + v.Name, Bytes: v.Size,
 						ModTime: v.ModTime, Package: e.Name,
 					})
 				}
 				continue
 			}
-			picks = append(picks, plan.Pick{Path: e.Path, Name: e.Name, Bytes: e.Size, ModTime: e.ModTime})
+			picks = append(picks, core.Pick{Path: e.Path, Name: e.Name, Bytes: e.Size, ModTime: e.ModTime})
 		}
 	}
 	return picks
 }
 
 // setChecks replaces the selection inside picks with the chosen paths.
-func (a *app) setChecks(picks []plan.Pick, chosen []plan.Step) {
+func (a *app) setChecks(picks []core.Pick, chosen []core.Step) {
 	for _, p := range picks {
 		delete(a.checked, p.Path)
 	}
@@ -51,7 +49,7 @@ func (a *app) setChecks(picks []plan.Pick, chosen []plan.Step) {
 	}
 }
 
-func (a *app) checkState(picks []plan.Pick) (on, total int) {
+func (a *app) checkState(picks []core.Pick) (on, total int) {
 	for _, p := range picks {
 		if a.checked[p.Path] {
 			on++
@@ -60,7 +58,7 @@ func (a *app) checkState(picks []plan.Pick) (on, total int) {
 	return on, len(picks)
 }
 
-func (a *app) toggleChecks(picks []plan.Pick) {
+func (a *app) toggleChecks(picks []core.Pick) {
 	on, total := a.checkState(picks)
 	for _, p := range picks {
 		if on == total {
@@ -73,27 +71,27 @@ func (a *app) toggleChecks(picks []plan.Pick) {
 
 type preset struct {
 	label string
-	pol   plan.Policy
-	picks []plan.Pick
+	pol   core.Policy
+	picks []core.Pick
 }
 
 // presets are the one-click selections a family offers: two at most, so the
 // header keeps its air.
-func (a *app) presets(picks []plan.Pick) []preset {
+func (a *app) presets(picks []core.Pick) []preset {
 	if len(picks) == 0 {
 		return nil
 	}
-	all := preset{"全部选中", plan.Policy{Now: a.now}, picks}
-	versioned := slices.ContainsFunc(picks, func(p plan.Pick) bool { return p.Package != "" })
+	all := preset{"全部选中", core.Policy{Now: a.now}, picks}
+	versioned := slices.ContainsFunc(picks, func(p core.Pick) bool { return p.Package != "" })
 	if versioned {
-		return []preset{{"保留最新", plan.Policy{KeepNewest: true, Now: a.now}, picks}, all}
+		return []preset{{"保留最新", core.Policy{KeepNewest: true, Now: a.now}, picks}, all}
 	}
-	return []preset{{fmt.Sprintf("%d 天未用", a.cfg.StaleDays), plan.Policy{StaleDays: a.cfg.StaleDays, Now: a.now}, picks}, all}
+	return []preset{{fmt.Sprintf("%d 天未用", a.cfg.StaleDays), core.Policy{StaleDays: a.cfg.StaleDays, Now: a.now}, picks}, all}
 }
 
 func (a *app) chip(c *ui.Context, act preset) {
 	p := a.pal
-	n := len(plan.Select(act.picks, act.pol).Steps)
+	n := len(core.Select(act.picks, act.pol).Steps)
 	fg := p.Ink2
 	if n == 0 {
 		fg = p.Ink3
@@ -104,7 +102,7 @@ func (a *app) chip(c *ui.Context, act preset) {
 	})
 	if n > 0 {
 		row.Cursor(ui.CursorPointer).OnClick(func() {
-			a.setChecks(act.picks, plan.Select(act.picks, act.pol).Steps)
+			a.setChecks(act.picks, core.Select(act.picks, act.pol).Steps)
 		})
 	}
 }
@@ -124,10 +122,10 @@ func (a *app) itemRow(c *ui.Context, it itemState) {
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
 		ui.Column(c).Grow(1).Gap(2).Children(func() {
 			ui.Text(c, it.item.Name).FontSize(14).FontWeight(600).TextColor(p.Ink).SingleLine()
-			ui.Text(c, rootPath(it.res)).Font(theme.Mono()).FontSize(11).TextColor(p.Ink2).SingleLine()
+			ui.Text(c, rootPath(it.res)).Font(core.Mono()).FontSize(11).TextColor(p.Ink2).SingleLine()
 		})
 		ui.Column(c).Gap(2).AlignItems(ui.End).Shrink(0).Children(func() {
-			ui.Text(c, plan.Bytes(it.res.Size)).Font(theme.Mono()).FontSize(14).TextColor(p.Ink).SingleLine()
+			ui.Text(c, core.Bytes(it.res.Size)).Font(core.Mono()).FontSize(14).TextColor(p.Ink).SingleLine()
 			ui.Text(c, a.itemMeta(it.res)).FontSize(12).TextColor(p.Ink2).SingleLine()
 		})
 		a.expander(c, open)
@@ -140,14 +138,14 @@ func (a *app) itemRow(c *ui.Context, it itemState) {
 	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 }
 
-func rootPath(res scan.Result) string {
+func rootPath(res core.Result) string {
 	if len(res.Roots) == 0 {
 		return ""
 	}
 	return res.Roots[0].Path
 }
 
-func (a *app) itemMeta(res scan.Result) string {
+func (a *app) itemMeta(res core.Result) string {
 	versions, entries, newest := 0, 0, time.Time{}
 	for _, root := range res.Roots {
 		for _, e := range root.Entries {
@@ -193,11 +191,11 @@ func (a *app) entries(c *ui.Context, it itemState) {
 	}
 }
 
-func (a *app) versioned(c *ui.Context, ent scan.Entry) {
+func (a *app) versioned(c *ui.Context, ent core.Entry) {
 	p := a.pal
-	picks := make([]plan.Pick, 0, len(ent.Versions))
+	picks := make([]core.Pick, 0, len(ent.Versions))
 	for _, v := range ent.Versions {
-		picks = append(picks, plan.Pick{
+		picks = append(picks, core.Pick{
 			Path: v.Path, Name: ent.Name + " " + v.Name, Bytes: v.Size,
 			ModTime: v.ModTime, Package: ent.Name,
 		})
@@ -209,9 +207,9 @@ func (a *app) versioned(c *ui.Context, ent scan.Entry) {
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open })
 	row.Children(func() {
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
-		ui.Text(c, ent.Name).Font(theme.Mono()).FontSize(12).TextColor(p.Ink).SingleLine().Grow(1)
+		ui.Text(c, ent.Name).Font(core.Mono()).FontSize(12).TextColor(p.Ink).SingleLine().Grow(1)
 		ui.Text(c, fmt.Sprintf("%d 个版本", len(ent.Versions))).FontSize(12).TextColor(p.Ink3).Shrink(0)
-		ui.Text(c, plan.Bytes(ent.Size)).Font(theme.Mono()).FontSize(12).TextColor(p.Ink2).Shrink(0).Width(96).TextAlign(ui.End)
+		ui.Text(c, core.Bytes(ent.Size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).Shrink(0).Width(96).TextAlign(ui.End)
 	})
 	if open {
 		ui.Column(c).Children(func() {
@@ -233,11 +231,11 @@ func (a *app) leaf(c *ui.Context, name, path string, size int64, mod time.Time) 
 		Cursor(ui.CursorPointer).OnClick(func() { a.checked[path] = !on })
 	row.Children(func() {
 		a.check(c, m, nil)
-		ui.Text(c, name).Font(theme.Mono()).FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
+		ui.Text(c, name).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
 		if age := ageText(a.now, mod); age != "" {
 			ui.Text(c, age).FontSize(12).TextColor(p.Ink3).Shrink(0)
 		}
-		ui.Text(c, plan.Bytes(size)).Font(theme.Mono()).FontSize(12).TextColor(p.Ink3).Shrink(0).Width(96).TextAlign(ui.End)
+		ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink3).Shrink(0).Width(96).TextAlign(ui.End)
 	})
 }
 
@@ -298,7 +296,6 @@ func (a *app) expander(c *ui.Context, open bool) {
 	})
 }
 
-
 func ageText(now, mod time.Time) string {
 	if mod.IsZero() {
 		return ""
@@ -315,11 +312,11 @@ func ageText(now, mod time.Time) string {
 	return fmt.Sprintf("%d 年前", int(d.Hours()/(24*365)))
 }
 
-func (a *app) selectedPlan() *plan.Plan {
-	p := &plan.Plan{}
+func (a *app) selectedPlan() *core.Plan {
+	p := &core.Plan{}
 	for _, g := range a.groups {
 		for _, it := range g.items {
-			var picks []plan.Pick
+			var picks []core.Pick
 			for _, pk := range allPicks(it.res) {
 				if a.checked[pk.Path] {
 					picks = append(picks, pk)
@@ -328,7 +325,7 @@ func (a *app) selectedPlan() *plan.Plan {
 			if len(picks) == 0 {
 				continue
 			}
-			p.Add(g.group.Name, it.item.Name, plan.Select(picks, plan.Policy{Now: a.now}))
+			p.Add(g.group.Name, it.item.Name, core.Select(picks, core.Policy{Now: a.now}))
 		}
 	}
 	p.Title = fmt.Sprintf("清理已选 %d 项", len(p.Steps))
@@ -354,6 +351,3 @@ func (a *app) clearChecks() {
 		delete(a.checked, k)
 	}
 }
-
-
-

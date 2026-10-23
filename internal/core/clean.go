@@ -1,9 +1,9 @@
-// Package clean removes the paths a plan lists, and nothing else.
+// clean.go removes the paths a plan lists, and nothing else.
 //
 // The guards here exist because a cache cleaner that is wrong once is worse
 // than none: it only removes paths measured under a catalog root, refuses
 // anything that looks like a root itself, and never follows a link.
-package clean
+package core
 
 import (
 	"errors"
@@ -12,12 +12,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"outrash/internal/plan"
 )
 
-// Result is what one removal did.
-type Result struct {
+// Removal is what one removal did.
+type Removal struct {
 	Path  string
 	Bytes int64
 	Err   error
@@ -25,7 +23,7 @@ type Result struct {
 
 // Outcome totals a run.
 type Outcome struct {
-	Runs    []Result
+	Runs    []Removal
 	Freed   int64
 	Failed  int
 	Elapsed time.Duration
@@ -34,14 +32,14 @@ type Outcome struct {
 // ErrUnsafe marks a path the cleaner refuses to touch.
 var ErrUnsafe = errors.New("拒绝删除：不在扫描范围内，或路径过于靠近根目录")
 
-// Run removes every step in order. roots are the directories the scan
+// Remove removes every step in order. roots are the directories the scan
 // measured; a step outside all of them is refused, so a catalog change
 // between scan and clean cannot widen the blast radius.
-func Run(p *plan.Plan, roots []string) Outcome {
+func Remove(p *Plan, roots []string) Outcome {
 	start := time.Now()
 	var out Outcome
 	for _, s := range p.Steps {
-		r := Result{Path: s.Path, Bytes: s.Bytes}
+		r := Removal{Path: s.Path, Bytes: s.Bytes}
 		if err := check(s.Path, roots); err != nil {
 			r.Err = err
 		} else if err := os.RemoveAll(s.Path); err != nil {

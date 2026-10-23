@@ -7,14 +7,12 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"outrash/internal/clean"
-	"outrash/internal/plan"
-	"outrash/internal/theme"
+	"outrash/internal/core"
 )
 
 func uiView(a *app) *ui.Content { return ui.View(a.view) }
 
-func (a *app) openPlan(p *plan.Plan) {
+func (a *app) openPlan(p *core.Plan) {
 	if p.Empty() {
 		a.msg = "没有需要清理的内容"
 		return
@@ -28,12 +26,12 @@ func (a *app) openPlan(p *plan.Plan) {
 
 // printPlan writes the plan to stdout in the order it would run, which is
 // what a -debug build is for.
-func (a *app) printPlan(p *plan.Plan) {
+func (a *app) printPlan(p *core.Plan) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n== %s ==\n", p.Title)
-	fmt.Fprintf(&b, "共 %d 项，%s\n", len(p.Steps), plan.Bytes(p.Bytes))
+	fmt.Fprintf(&b, "共 %d 项，%s\n", len(p.Steps), core.Bytes(p.Bytes))
 	for i, s := range p.Steps {
-		fmt.Fprintf(&b, "%3d. %10s  %s  %s\n", i+1, plan.Bytes(s.Bytes), s.Reason, s.Path)
+		fmt.Fprintf(&b, "%3d. %10s  %s  %s\n", i+1, core.Bytes(s.Bytes), s.Reason, s.Path)
 	}
 	fmt.Print(b.String())
 }
@@ -72,8 +70,8 @@ func (a *app) planSheet(c *ui.Context) {
 			ui.Column(c).Children(func() {
 				ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, pl.Title).FontSize(20).FontWeight(600).TextColor(p.Ink).Grow(1).SingleLine()
-					ui.Text(c, fmt.Sprintf("%d 个路径 · %s", len(pl.Steps), plan.Bytes(pl.Bytes))).
-						Font(theme.Mono()).FontSize(12).TextColor(p.Ink2).Shrink(0)
+					ui.Text(c, fmt.Sprintf("%d 个路径 · %s", len(pl.Steps), core.Bytes(pl.Bytes))).
+						Font(core.Mono()).FontSize(12).TextColor(p.Ink2).Shrink(0)
 				})
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 
@@ -83,17 +81,17 @@ func (a *app) planSheet(c *ui.Context) {
 						for _, g := range pl.Groups() {
 							ui.Row(c).Height(32).Gap(8).AlignItems(ui.Center).Children(func() {
 								ui.Text(c, g.Name).FontSize(12).FontWeight(600).TextColor(p.Ink3).Grow(1)
-								ui.Text(c, plan.Bytes(g.Bytes)).Font(theme.Mono()).FontSize(12).TextColor(p.Ink3)
+								ui.Text(c, core.Bytes(g.Bytes)).Font(core.Mono()).FontSize(12).TextColor(p.Ink3)
 							})
 							for _, s := range g.Steps {
 								n++
 								order := n
 								ui.Row(c).Height(32).Gap(12).AlignItems(ui.Center).Children(func() {
-									ui.Text(c, fmt.Sprintf("%03d", order)).Font(theme.Mono()).
+									ui.Text(c, fmt.Sprintf("%03d", order)).Font(core.Mono()).
 										FontSize(11).TextColor(p.Ink3).Width(32).Shrink(0)
-									ui.Text(c, abbrevPath(s.Path, 72)).Font(theme.Mono()).FontSize(12).TextColor(p.Ink).
+									ui.Text(c, abbrevPath(s.Path, 72)).Font(core.Mono()).FontSize(12).TextColor(p.Ink).
 										SingleLine().Grow(1).Tooltip(s.Path)
-									ui.Text(c, plan.Bytes(s.Bytes)).Font(theme.Mono()).FontSize(12).
+									ui.Text(c, core.Bytes(s.Bytes)).Font(core.Mono()).FontSize(12).
 										TextColor(p.Ink2).Width(88).TextAlign(ui.End).Shrink(0)
 								})
 							}
@@ -150,7 +148,7 @@ func (a *app) run() {
 	a.win.Invalidate()
 	roots := a.roots()
 	go func() {
-		out := clean.Run(pl, roots)
+		out := core.Remove(pl, roots)
 		a.win.Update(func() {
 			a.report = &report{freed: out.Freed, failed: out.Failed, elapsed: out.Elapsed}
 			for _, r := range out.Runs {
@@ -158,7 +156,7 @@ func (a *app) run() {
 					a.report.lines = append(a.report.lines, fmt.Sprintf("未能删除 %s：%v", r.Path, r.Err))
 				}
 			}
-			a.msg = fmt.Sprintf("已清理 %s", plan.Bytes(out.Freed))
+			a.msg = fmt.Sprintf("已清理 %s", core.Bytes(out.Freed))
 			a.clearChecks()
 			a.modal = modalReport
 			a.shown = nil
@@ -187,7 +185,7 @@ func (a *app) reportSheet(c *ui.Context) {
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 				ui.Column(c).Padding(24).Gap(16).Children(func() {
 					ui.Row(c).Gap(32).Children(func() {
-						a.stat(c, "释放", plan.Bytes(r.freed))
+						a.stat(c, "释放", core.Bytes(r.freed))
 						a.stat(c, "耗时", r.elapsed.Round(time.Millisecond).String())
 						if r.failed > 0 {
 							a.stat(c, "跳过", fmt.Sprint(r.failed))
@@ -198,7 +196,7 @@ func (a *app) reportSheet(c *ui.Context) {
 							ui.Scroll(c).MaxHeight(160).Children(func() {
 								ui.Column(c).Gap(4).Children(func() {
 									for _, l := range r.lines {
-										ui.Text(c, l).Font(theme.Mono()).FontSize(11).TextColor(p.Danger).SingleLine()
+										ui.Text(c, l).Font(core.Mono()).FontSize(11).TextColor(p.Danger).SingleLine()
 									}
 								})
 							})
@@ -220,8 +218,7 @@ func (a *app) reportSheet(c *ui.Context) {
 func (a *app) stat(c *ui.Context, label, value string) {
 	p := a.pal
 	ui.Column(c).Gap(2).Children(func() {
-		ui.Text(c, value).Font(theme.Mono()).FontSize(20).FontWeight(600).TextColor(p.Ink)
+		ui.Text(c, value).Font(core.Mono()).FontSize(20).FontWeight(600).TextColor(p.Ink)
 		ui.Text(c, label).FontSize(12).TextColor(p.Ink3)
 	})
 }
-
