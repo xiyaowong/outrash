@@ -19,7 +19,7 @@ Windows-first dev-cache cleaner. Go + mygo native UI. Cross-platform logic, no w
 |---|---|
 | `main.go` | flags, window wiring; nothing else lives at the root |
 | `internal/core` | rules: parse + env override + path expansion · scan: walk dirs concurrently, per-entry size/mtime, classify versions · plan: policy → ordered list of `Step` (path, bytes, reason) · clean: guarded `os.RemoveAll`, the only code that deletes · theme: palette + type scale (ledger: paper, ink, one accent) · `rules.json` catalog |
-| `internal/app` | `app.go` title bar, header, list, right panel, action bar, recommendation, clean estimate · `cards.go` item and version rows, tri-state check, tags, presets · `sheet.go` plan sheet (no-delete builds only), report sheet, clean run |
+| `internal/app` | `app.go` window frame: title strip, nav rail, page header, action bar, right info panel, scan/recommend, clean estimate · `pages.go` 概览 intro + 扫描结果 table · 清理记录 (session, memory only) · 规则 (read-only catalog) · `cards.go` family/item/version rows, tri-state check, sort, tags, presets · `sheet.go` plan sheet (no-delete builds only), report sheet, clean run |
 
 ## Commands
 
@@ -27,7 +27,7 @@ Windows-first dev-cache cleaner. Go + mygo native UI. Cross-platform logic, no w
 just ci                  # build + vet + test, the CI pair
 just debug               # no deletion: the list is printed to stdout, 查看清理计划 opens the sheet
 just safe                # same refusal, keeps the normal UI
-just shots               # regenerate testdata/shots/*.png from internal/app
+just shots               # regenerate docs/screenshot.png and testdata/shots/*.png from internal/app
 go tool mygo vet .
 ```
 
@@ -39,3 +39,5 @@ go tool mygo vet .
 - `Window.Update(fn)` for goroutine → UI state.
 - A click reaches only the innermost interactive element; put `.OnClick` on the row you mean.
 - Title bar: `mygo.WindowOptions{TitleBarStyle: mygo.TitleBarHidden}` + `c.TitleBar()` + `.DragWindow()`.
+- Anything the user navigates or activates is a `ButtonBase` with `.Label(...)`, never a row
+  with `.OnClick`: only a control gets keyboard focus and an accessibility action.

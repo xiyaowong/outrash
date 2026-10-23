@@ -15,6 +15,27 @@ import (
 	"outrash/internal/core"
 )
 
+// page is the nav rail's selection. Every page reads the same scan; none of
+// them is a setting.
+type page int
+
+const (
+	pageOverview page = iota
+	pageResults
+	pageLog
+	pageRules
+)
+
+// sortMode orders the results table. Size is the default because it answers
+// "what do I gain" fastest.
+type sortMode int
+
+const (
+	sortSize sortMode = iota
+	sortName
+	sortStatus
+)
+
 // App is everything the window shows. The view rebuilds it from this state
 // on the main thread; the scan fills it in through Window.Update.
 type App struct {
@@ -23,11 +44,13 @@ type App struct {
 	opts   core.Options
 	so     Options
 
-	cache    *core.Cache
-	groups   []groupState
-	phase    phase
-	selected string // "" is the overview
-	pal      *core.Palette
+	cache  *core.Cache
+	groups []groupState
+	phase  phase
+	pal    *core.Palette
+	page   page
+	sortBy sortMode
+	sizeUp bool
 	// seq and stop keep a rescan from racing the scan it replaced.
 	seq  int
 	stop context.CancelFunc
@@ -35,6 +58,13 @@ type App struct {
 	open    map[string]bool
 	checked map[string]bool
 	now     time.Time
+	// expandedOnce keeps the scan's one automatic expansion from fighting
+	// the user on later rescans.
+	expandedOnce bool
+
+	// log is this session's clean history. Nothing is written to disk: the
+	// record dies with the window, which is what "no persistence" means.
+	log []runRecord
 
 	// busy is set while a removal runs; no plan may be opened over one.
 	busy bool
@@ -53,6 +83,19 @@ type App struct {
 	shown  *core.Plan
 	report *report
 	msg    string
+}
+
+// runRecord is one clean as the log page shows it: what it freed, what it
+// could not, and when.
+type runRecord struct {
+	at      time.Time
+	freed   int64
+	planned int64
+	items   int
+	failed  int
+	gone    int
+	elapsed time.Duration
+	lines   []string
 }
 
 // progress is what a running clean can say about itself: the plan's total,
@@ -106,6 +149,7 @@ type report struct {
 	freed   int64
 	failed  int
 	gone    int
+	items   int
 	elapsed time.Duration
 	// receipt compares the families before the clean with the rescan that
 	// followed it; nil until a clean starts.
@@ -170,6 +214,7 @@ func New(cfg *core.Config, o core.Options, so Options) *App {
 		cfg:      cfg,
 		opts:     o,
 		so:       so,
+		page:     pageResults,
 		open:     map[string]bool{},
 		checked:  map[string]bool{},
 		now:      time.Now(),
@@ -243,7 +288,15 @@ func (a *App) recommend() {
 				a.checked[s.Path] = true
 			}
 		}
+		// A family opens on a scan so the first screen shows the paths and
+		// risk tags the table promises, not a column of blank rows. Only the
+		// first scan does it: a rescan must not undo a collapse the user just
+		// made.
+		if g.size > 0 && !a.expandedOnce {
+			a.open["g:"+g.group.ID] = true
+		}
 	}
+	a.expandedOnce = true
 }
 
 func anyVersioned(picks []core.Pick) bool {
@@ -398,22 +451,6 @@ func (a *App) regroup() {
 		a.groups = append(a.groups, gs)
 	}
 	slices.SortStableFunc(a.groups, func(x, y groupState) int { return cmp.Compare(y.size, x.size) })
-	// A rescan can empty the family on screen; falling back to the overview
-	// beats showing an empty list.
-	if a.phase == phaseReady && a.selected != "" {
-		if g, ok := a.group(a.selected); !ok || !g.visible() {
-			a.selected = ""
-		}
-	}
-}
-
-func (a *App) group(id string) (groupState, bool) {
-	for _, g := range a.groups {
-		if g.group.ID == id {
-			return g, true
-		}
-	}
-	return groupState{}, false
 }
 
 func (a *App) roots() []string {
@@ -440,12 +477,13 @@ func (a *App) view(c *ui.Context) {
 	ui.Column(c).Fill().Background(a.pal.Canvas).Children(func() {
 		a.titleBar(c)
 		ui.Row(c).Grow(1).Children(func() {
-			ui.Column(c).Grow(1).FillHeight().Background(a.pal.Raised).Children(func() {
-				a.header(c)
-				a.list(c)
+			a.nav(c)
+			ui.Column(c).Grow(1).FillHeight().Background(a.pal.Surface).Children(func() {
+				a.pageHeader(c)
+				a.pageBody(c)
 				a.actionBar(c)
 			})
-			if a.panelVisible(c) {
+			if a.panelVisible(c) && (a.page == pageOverview || a.page == pageResults) {
 				a.panel(c)
 			}
 		})
@@ -454,10 +492,10 @@ func (a *App) view(c *ui.Context) {
 }
 
 // panelVisible keeps the list readable on a narrow window: the totals column
-// is the first thing to go.
+// is the first thing to go, never the list.
 func (a *App) panelVisible(c *ui.Context) bool {
 	w, _ := c.Size()
-	return w >= 1040
+	return w >= 1160
 }
 
 // startClean is the one action: the checked rows are the plan, so the list
@@ -480,33 +518,27 @@ func (a *App) startClean() {
 	a.run()
 }
 
-// selectAllVisible selects every leaf of the family on screen, or all of
-// them from the overview.
+// selectAllVisible selects every leaf of the results table. The bar's 全选 is
+// the whole list, not the family the pointer happens to be over.
 func (a *App) selectAllVisible() {
 	var picks []core.Pick
-	if g, ok := a.group(a.selected); ok {
-		picks = a.groupPicks(g)
-	} else {
-		for _, g := range a.groups {
-			picks = append(picks, a.groupPicks(g)...)
-		}
+	for _, g := range a.groups {
+		picks = append(picks, a.groupPicks(g)...)
 	}
 	a.toggleChecks(picks)
 }
 
+// titleBar is the window's own strip: mark, name, and the one line of scan
+// state that matters wherever the user is.
 func (a *App) titleBar(c *ui.Context) {
 	p := a.pal
 	bar := c.TitleBar()
-	h := max(bar.Height, 32)
-	ui.Row(c).Height(h).DragWindow().Background(p.Raised).
-		Padding(0, bar.Right+12, 0, bar.Left+16).AlignItems(ui.Center).Gap(8).Children(func() {
-		ui.Box(c).Size(8, 8).Shrink(0).Background(p.Accent)
-		ui.Row(c).Shrink(0).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "OUT").FontSize(12).FontWeight(600).TextColor(p.Ink3)
-			ui.Box(c).Width(4).Shrink(0)
-			ui.Text(c, "TRASH").FontSize(12).FontWeight(700).TextColor(p.Ink)
-		})
-		ui.Box(c).Width(1).Height(12).Shrink(0).Background(p.Rule)
+	h := max(bar.Height, 34)
+	ui.Row(c).Height(h).DragWindow().Background(p.Canvas).
+		Padding(0, bar.Right+12, 0, bar.Left+14).AlignItems(ui.Center).Gap(10).Children(func() {
+		ui.Box(c).Size(10, 10).Shrink(0).Radius(2).Background(p.Accent)
+		ui.Text(c, "Outrash").FontSize(12).FontWeight(600).TextColor(p.Ink).Shrink(0)
+		ui.Box(c).Width(1).Height(14).Shrink(0).Background(p.RuleStrong)
 		ui.Text(c, a.summary()).FontSize(12).TextColor(p.Ink3).SingleLine().Grow(1)
 		if a.busy {
 			a.cleanProgress(c)
@@ -516,12 +548,6 @@ func (a *App) titleBar(c *ui.Context) {
 		}
 		if a.phase == phaseScanning {
 			ui.Spinner(c).Width(12).Shrink(0)
-		}
-		rescan := ui.ButtonBase(c).Padding(4, 8).Cursor(ui.CursorPointer)
-		rescan.Children(func() { ui.Text(c, "重新扫描").FontSize(12).TextColor(p.Ink2) })
-		rescan.Tooltip("Ctrl+R")
-		if rescan.Clicked() {
-			a.Scan()
 		}
 	})
 	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
@@ -539,7 +565,7 @@ func (a *App) cleanProgress(c *ui.Context) {
 	done, total, elapsed := pr.read()
 	ui.Text(c, estimate(done, total, elapsed)).Font(core.Mono()).
 		FontSize(11).TextColor(p.Ink2).Shrink(0)
-	bar := ui.Box(c).Width(120).Height(4).Shrink(0).Background(p.Hover)
+	bar := ui.Box(c).Width(120).Height(4).Shrink(0).Background(p.RuleStrong)
 	frac := 0.0
 	if total > 0 {
 		frac = min(float64(done)/float64(total), 1)
@@ -586,52 +612,516 @@ func (a *App) modeNote() string {
 func (a *App) summary() string {
 	switch {
 	case a.phase == phaseScanning:
-		return "正在扫描"
+		return "正在扫描缓存目录"
 	case a.cache == nil:
 		return ""
 	case a.msg != "":
 		return a.msg
 	}
-	return fmt.Sprintf("扫描于 %s · 用时 %s", a.cache.At.Format("15:04"), a.cache.Elapsed.Round(time.Millisecond))
+	return fmt.Sprintf("上次扫描 %s · 用时 %s", a.cache.At.Format("15:04"), a.cache.Elapsed.Round(time.Millisecond))
 }
 
-// panel is the right column: totals, where the bytes sit, and the three
-// promises the product makes. It is read-only; every choice is on the list.
-func (a *App) panel(c *ui.Context) {
+// nav is the rail: four pages, no settings. The active one is marked by a
+// quiet fill and a 2px accent bar, not by colour.
+func (a *App) nav(c *ui.Context) {
 	p := a.pal
-	ui.Column(c).Width(268).FillHeight().Background(p.Canvas).
+	ui.Column(c).Width(168).FillHeight().Background(p.Canvas).
 		BorderWidth(0, 0, 0, 1).BorderColor(p.Rule).
 		Children(func() {
-			ui.Column(c).Padding(20, 20).Gap(16).Children(func() {
-				a.panelBlock(c, "总览", func() {
-					ui.Row(c).Gap(20).Children(func() {
-						a.stat(c, "缓存", fmt.Sprint(a.totalCount()))
-						a.stat(c, "全部", core.Bytes(a.totalSize()))
-						a.stat(c, "耗时", a.elapsed())
+			ui.Column(c).Padding(10, 8).Gap(2).Children(func() {
+				for _, it := range []struct {
+					page  page
+					label string
+					icon  navIcon
+				}{
+					{pageOverview, "概览", iconOverview},
+					{pageResults, "扫描结果", iconResults},
+					{pageLog, "清理记录", iconLog},
+					{pageRules, "规则", iconRules},
+				} {
+					a.navItem(c, it.page, it.label, it.icon)
+				}
+			})
+			ui.Spacer(c)
+			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+			a.navFooter(c)
+		})
+}
+
+type navIcon int
+
+const (
+	iconOverview navIcon = iota
+	iconResults
+	iconLog
+	iconRules
+)
+
+func (a *App) navItem(c *ui.Context, pg page, label string, icon navIcon) {
+	p := a.pal
+	active := a.page == pg
+	// A button, not a row with a click: the rail is the window's primary
+	// navigation, so it has to be reachable from the keyboard and visible to
+	// assistive technology like any other control.
+	// A button centres its children by default, which would put each icon at
+	// a different x for each label length. The rail is a column of rows, so
+	// they start at the same edge.
+	row := ui.ButtonBase(c).Height(34).Padding(0, 10).Gap(9).AlignItems(ui.Center).
+		Justify(ui.Start).Label(label).OnClick(func() { a.page = pg })
+	bg := ui.Transparent
+	switch {
+	case active:
+		bg = p.Selected
+	case row.Hovered():
+		bg = p.Hover
+	}
+	row.Background(bg).Radius(3)
+	// The marker is painted on the row rather than laid out in it: a child
+	// would shift the icon of whichever item is active.
+	row.Draw(func(pt *ui.Painter, r ui.Rect) {
+		if !active {
+			return
+		}
+		pt.Fill(ui.Rect{X: r.X, Y: r.Y + 8, W: 2, H: r.H - 16}, p.Accent, 0)
+	})
+	row.Children(func() {
+		fg := p.Ink2
+		if active {
+			fg = p.Ink
+		}
+		a.icon(c, icon, fg)
+		ui.Text(c, label).FontSize(13).TextColor(fg).
+			FontWeight(map[bool]int{true: 600, false: 400}[active]).SingleLine()
+	})
+}
+
+// icon draws the rail's line marks. They are geometry, not glyphs: a 16px
+// box shared by every item keeps the column aligned.
+func (a *App) icon(c *ui.Context, kind navIcon, fg ui.Color) {
+	ui.Box(c).Size(16, 16).Shrink(0).Draw(func(pt *ui.Painter, r ui.Rect) {
+		x, y := r.X, r.Y
+		switch kind {
+		case iconOverview:
+			pt.Stroke(ui.Rect{X: x + 1.5, Y: y + 1.5, W: 5, H: 5}, fg, 0, 1)
+			pt.Stroke(ui.Rect{X: x + 9.5, Y: y + 1.5, W: 5, H: 5}, fg, 0, 1)
+			pt.Stroke(ui.Rect{X: x + 1.5, Y: y + 9.5, W: 5, H: 5}, fg, 0, 1)
+			pt.Stroke(ui.Rect{X: x + 9.5, Y: y + 9.5, W: 5, H: 5}, fg, 0, 1)
+		case iconResults:
+			for i := range 3 {
+				pt.Fill(ui.Rect{X: x + 1, Y: y + 3 + float32(i)*4.5, W: 14, H: 1}, fg, 0)
+			}
+		case iconLog:
+			pt.Stroke(ui.Rect{X: x + 2, Y: y + 2, W: 12, H: 12}, fg, 8, 1)
+			pt.Line(x+8, y+5, x+8, y+8.5, 1, fg)
+			pt.Line(x+8, y+8.5, x+10.5, y+9.5, 1, fg)
+		case iconRules:
+			for i := range 3 {
+				yy := y + 3 + float32(i)*4.5
+				pt.Fill(ui.Rect{X: x + 1, Y: yy, W: 14, H: 1}, fg, 0)
+				pt.Fill(ui.Rect{X: x + 4 + float32(i)*3, Y: yy - 2, W: 2, H: 5}, fg, 0)
+			}
+		}
+	})
+}
+
+func (a *App) navFooter(c *ui.Context) {
+	p := a.pal
+	ui.Column(c).Padding(10, 14, 10, 12).Gap(4).Children(func() {
+		ui.Text(c, "只清除可重新下载").FontSize(11).TextColor(p.Ink3).SingleLine()
+		ui.Text(c, "或重新编译的缓存").FontSize(11).TextColor(p.Ink3).SingleLine()
+	})
+}
+
+func (a *App) pageHeader(c *ui.Context) {
+	p := a.pal
+	title, sub := a.pageTitle()
+	ui.Column(c).Shrink(0).Children(func() {
+		ui.Row(c).Padding(20, 24, 14, 24).Gap(12).AlignItems(ui.End).Children(func() {
+			ui.Column(c).Grow(1).Gap(3).Children(func() {
+				ui.Text(c, title).FontSize(18).FontWeight(600).TextColor(p.Ink).SingleLine()
+				ui.Text(c, sub).FontSize(12).TextColor(p.Ink3).SingleLine()
+			})
+			if a.page == pageResults || a.page == pageOverview {
+				ui.Column(c).AlignItems(ui.End).Shrink(0).Children(func() {
+					ui.Text(c, core.Bytes(a.totalSize())).Font(core.Mono()).FontSize(18).
+						FontWeight(600).TextColor(p.Ink)
+					ui.Text(c, "缓存总量").FontSize(11).TextColor(p.Ink3)
+				})
+			}
+		})
+		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+	})
+}
+
+func (a *App) pageTitle() (title, sub string) {
+	switch a.page {
+	case pageOverview:
+		return "概览", "扫描本机开发工具的缓存目录，只列出能重新下载或重新编译的内容"
+	case pageResults:
+		if a.phase == phaseScanning {
+			return "开发工具缓存", "正在扫描环境变量与各工具的默认位置"
+		}
+		n, failed := a.itemStats()
+		sub = fmt.Sprintf("%d 个缓存 · 已推荐 %d 项 · 可清理 %s", n, a.recommendedCount(), core.Bytes(a.recommendedBytes()))
+		if failed > 0 {
+			sub += fmt.Sprintf(" · %d 个读取失败", failed)
+		}
+		return "开发工具缓存", sub
+	case pageLog:
+		return "清理记录", "本次会话的清理结果；记录只存在内存里，退出即消失"
+	}
+	return "规则", "内置目录：每个工具缓存的位置、单位与安全约定"
+}
+
+// pageBody is the scrollable work area under the header.
+func (a *App) pageBody(c *ui.Context) {
+	ui.Scroll(c).Grow(1).Children(func() {
+		switch a.page {
+		case pageOverview:
+			a.overviewPage(c)
+		case pageResults:
+			a.resultsPage(c)
+		case pageLog:
+			a.logPage(c)
+		case pageRules:
+			a.rulesPage(c)
+		}
+	})
+}
+
+// overviewPage is the front door: what the tool does, what the last scan
+// found, and the one button that starts one.
+func (a *App) overviewPage(c *ui.Context) {
+	p := a.pal
+	ui.Column(c).Padding(24).Gap(24).Children(func() {
+		ui.Column(c).Gap(6).Children(func() {
+			ui.Text(c, "清理开发工具缓存").FontSize(16).FontWeight(600).TextColor(p.Ink)
+			ui.Text(c, "扫描 NuGet、npm、Go、Cargo 等工具留下的依赖与构建缓存，勾选后一次清理。").
+				FontSize(12).TextColor(p.Ink2)
+			ui.Text(c, "清理后各工具会在下次使用时自行重新下载或重新编译。").
+				FontSize(12).TextColor(p.Ink2)
+		})
+		ui.Row(c).Height(1).Background(p.Rule)
+		ui.Column(c).Gap(10).Children(func() {
+			ui.Text(c, "本次状态").FontSize(11).FontWeight(600).TextColor(p.Ink3)
+			ui.Row(c).Gap(40).Children(func() {
+				a.stat(c, "缓存", fmt.Sprint(a.totalCount()))
+				a.stat(c, "总量", core.Bytes(a.totalSize()))
+				a.stat(c, "推荐清理", core.Bytes(a.recommendedBytes()))
+				a.stat(c, "耗时", a.elapsed())
+			})
+		})
+		ui.Row(c).Gap(8).Children(func() {
+			label := "重新扫描"
+			if a.cache == nil {
+				label = "开始扫描"
+			}
+			a.actionButton(c, label, true, a.phase != phaseScanning, a.Scan)
+			if a.phase == phaseReady {
+				a.actionButton(c, "查看扫描结果", false, true, func() { a.page = pageResults })
+			}
+		})
+		ui.Row(c).Height(1).Background(p.Rule)
+		ui.Column(c).Gap(8).Children(func() {
+			ui.Text(c, "占用最多").FontSize(11).FontWeight(600).TextColor(p.Ink3)
+			for _, it := range a.biggest(5) {
+				row := ui.Row(c).Height(26).Gap(12).AlignItems(ui.Center).
+					Cursor(ui.CursorPointer).OnClick(func() {
+					a.page = pageResults
+					a.open["g:"+it.gid] = true
+				})
+				row.Background(hoverFill(row, ui.Transparent, p.Hover))
+				row.Children(func() {
+					ui.Text(c, it.name).FontSize(12).TextColor(p.Ink).SingleLine().Grow(1)
+					ui.Text(c, core.Bytes(it.size)).Font(core.Mono()).FontSize(12).
+						TextColor(p.Ink2).Width(88).TextAlign(ui.End).Shrink(0)
+				})
+			}
+			if len(a.biggest(1)) == 0 {
+				ui.Text(c, "还没有扫描结果").FontSize(12).TextColor(p.Ink3)
+			}
+		})
+	})
+}
+
+// resultsPage is the work surface: a table of tools, expandable to items and
+// to individual versions, every row checkable.
+func (a *App) resultsPage(c *ui.Context) {
+	ui.Column(c).Children(func() {
+		a.tableHead(c)
+		if a.phase == phaseScanning && len(a.groups) == 0 {
+			a.scanning(c)
+			return
+		}
+		n := 0
+		for _, g := range a.sortedGroups() {
+			if !g.visible() {
+				continue
+			}
+			n++
+			a.familyRow(c, g)
+		}
+		if n == 0 {
+			a.emptyResults(c)
+		}
+	})
+}
+
+func (a *App) scanning(c *ui.Context) {
+	p := a.pal
+	ui.Column(c).Padding(40, 24).Gap(10).Children(func() {
+		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+			ui.Spinner(c).Width(14).Shrink(0)
+			ui.Text(c, "正在扫描缓存目录").FontSize(14).FontWeight(600).TextColor(p.Ink)
+		})
+		ui.Text(c, "按环境变量优先、默认位置兜底逐个目录统计；读不到的位置会在结果里标出来。").
+			FontSize(12).TextColor(p.Ink3)
+	})
+}
+
+func (a *App) emptyResults(c *ui.Context) {
+	p := a.pal
+	ui.Column(c).Padding(40, 24).Gap(6).Children(func() {
+		ui.Text(c, "没有找到可清理的缓存").FontSize(14).FontWeight(600).TextColor(p.Ink)
+		ui.Text(c, "已检查环境变量与各工具的默认位置。安装工具并运行一次后，它们的缓存会出现在这里。").
+			FontSize(12).TextColor(p.Ink3)
+		a.actionButton(c, "重新扫描", false, true, a.Scan)
+	})
+}
+
+// columns is the shared measure of the table: checkbox, name, path, count,
+// size, status. Every row uses it so the columns line up at every depth. The
+// path column takes what is left, so the names stay readable beside the
+// panel instead of squeezing it into an ellipsis.
+const (
+	colCheck  = 16
+	colName   = 152
+	colCount  = 84
+	colSize   = 96
+	colStatus = 104
+	colGap    = 12
+)
+
+// tableHead labels the columns once and doubles as the sort control.
+func (a *App) tableHead(c *ui.Context) {
+	p := a.pal
+	ui.Column(c).Shrink(0).Children(func() {
+		ui.Row(c).Height(30).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).Children(func() {
+			ui.Box(c).Size(colCheck, 1).Shrink(0)
+			a.sortLabel(c, "名称", sortName, colName, ui.Start)
+			ui.Text(c, "缓存路径").FontSize(11).FontWeight(600).TextColor(p.Ink3).Grow(1)
+			ui.Text(c, "文件数量").FontSize(11).FontWeight(600).TextColor(p.Ink3).
+				Width(colCount).TextAlign(ui.End).Shrink(0)
+			a.sortLabel(c, "缓存大小", sortSize, colSize, ui.End)
+			a.sortLabel(c, "风险状态", sortStatus, colStatus, ui.Start)
+			ui.Box(c).Width(24).Shrink(0)
+		})
+		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+	})
+}
+
+// sortLabel is a column heading that sorts when clicked. Only the active
+// column shows a direction, and only size has one worth flipping.
+func (a *App) sortLabel(c *ui.Context, label string, mode sortMode, width float32, align ui.Align) {
+	p := a.pal
+	active := a.sortBy == mode
+	fg := p.Ink3
+	if active {
+		fg = p.Ink2
+	}
+	row := ui.Row(c).Height(30).Width(width).Shrink(0).Justify(align).
+		AlignItems(ui.Center).Gap(4).Cursor(ui.CursorPointer).OnClick(func() {
+		if a.sortBy == mode && mode == sortSize {
+			a.sizeUp = !a.sizeUp
+			return
+		}
+		a.sortBy = mode
+		a.sizeUp = false
+	})
+	row.Children(func() {
+		ui.Text(c, label).FontSize(11).FontWeight(600).TextColor(fg)
+		if active && mode == sortSize {
+			arrow := "▾"
+			if a.sizeUp {
+				arrow = "▴"
+			}
+			ui.Text(c, arrow).FontSize(9).TextColor(fg)
+		}
+	})
+}
+
+// sortedGroups applies the table's current order.
+func (a *App) sortedGroups() []groupState {
+	out := slices.Clone(a.groups)
+	slices.SortStableFunc(out, func(x, y groupState) int {
+		switch a.sortBy {
+		case sortName:
+			return cmp.Compare(x.group.Name, y.group.Name)
+		case sortStatus:
+			if c := cmp.Compare(a.statusRank(x), a.statusRank(y)); c != 0 {
+				return c
+			}
+		}
+		if a.sizeUp {
+			return cmp.Compare(x.size, y.size)
+		}
+		return cmp.Compare(y.size, x.size)
+	})
+	return out
+}
+
+// statusRank orders families by how much attention they ask for: a failed
+// read first, then something used this week, then an idle cache.
+func (a *App) statusRank(g groupState) int {
+	for _, it := range g.items {
+		if it.res.Failed() {
+			return 0
+		}
+	}
+	if newest := newestPick(g); !newest.IsZero() && a.now.Sub(newest) < 7*24*time.Hour {
+		return 1
+	}
+	return 2
+}
+
+func (a *App) actionBar(c *ui.Context) {
+	p := a.pal
+	n, chosen := a.checkedTotal()
+	all := 0
+	for _, g := range a.groups {
+		all += len(a.groupPicks(g))
+	}
+	ui.Column(c).Shrink(0).Background(p.Surface).Children(func() {
+		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+		ui.Row(c).Height(52).Padding(0, 24).Gap(12).AlignItems(ui.Center).Children(func() {
+			if a.page == pageResults && all > 0 {
+				a.check(c, stateOf(n, all), a.selectAllVisible)
+				ui.Text(c, "全选").FontSize(12).TextColor(p.Ink2).Shrink(0)
+				ui.Box(c).Width(1).Height(16).Shrink(0).Background(p.Rule)
+			}
+			ui.Column(c).Grow(1).Gap(2).Children(func() {
+				ui.Text(c, a.barStatus(n, chosen)).FontSize(12).FontWeight(600).
+					TextColor(p.Ink).SingleLine()
+				ui.Text(c, a.barSub()).FontSize(11).TextColor(p.Ink3).SingleLine()
+			})
+			if n > 0 {
+				a.textButton(c, "清空", a.clearChecks)
+			}
+			a.actionButton(c, "重新扫描", false, a.phase != phaseScanning, a.Scan)
+			label := "开始清理"
+			if a.so.Debug || a.so.NoDelete {
+				label = "查看清理计划"
+			}
+			a.actionButton(c, label, true, n > 0, a.startClean)
+		})
+	})
+}
+
+// barStatus is the confirmation the brief asks for before the button does
+// anything: how many items, and how much space the plan would free.
+func (a *App) barStatus(n int, chosen int64) string {
+	switch {
+	case a.phase == phaseScanning:
+		return "正在扫描…"
+	case a.busy:
+		return "正在清理…"
+	case a.cache == nil:
+		return "尚未扫描"
+	case a.page == pageLog:
+		return fmt.Sprintf("本次会话已清理 %d 次", len(a.log))
+	case n == 0:
+		return "未选择任何项目"
+	}
+	return fmt.Sprintf("已选 %d 项 · 预计释放 %s", n, core.Bytes(chosen))
+}
+
+func (a *App) barSub() string {
+	switch {
+	case a.phase == phaseScanning:
+		return "结果会随扫描逐步出现"
+	case a.cache == nil:
+		return "按 Ctrl+R 或点「重新扫描」开始"
+	}
+	return fmt.Sprintf("共 %d 个缓存 · %s · 推荐 %s", a.totalCount(), core.Bytes(a.totalSize()),
+		core.Bytes(a.recommendedBytes()))
+}
+
+func (a *App) textButton(c *ui.Context, label string, fn func()) {
+	p := a.pal
+	b := ui.ButtonBase(c).Height(28).Padding(0, 8).Shrink(0).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).OnClick(fn)
+	if b.Hovered() {
+		b.Background(p.Hover)
+	}
+	b.Children(func() { ui.Text(c, label).FontSize(12).TextColor(p.Ink2) })
+}
+
+// actionButton is the one button shape: a quiet outline that fills under the
+// pointer, so it reads as a control, not a label. primary gets the accent and
+// the only solid fill on screen.
+func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, fn func()) {
+	p := a.pal
+	btn := ui.ButtonBase(c).Height(30).Radius(3).Padding(0, 14).
+		Shrink(0).AlignItems(ui.Center).Border(1, p.RuleStrong)
+	bg, fg := p.Surface, p.Ink
+	switch {
+	case !enabled:
+		fg = p.Ink3
+		bg = ui.Transparent
+	case primary:
+		bg, fg = p.Accent, p.OnAccent
+		btn.Border(0, ui.Transparent)
+	}
+	if enabled {
+		btn.Cursor(ui.CursorPointer).OnClick(fn)
+	} else {
+		btn.Disabled(true)
+	}
+	switch {
+	case !enabled:
+	case primary && btn.Pressed():
+		bg = tint(p.Ink, p.Accent, 0.18)
+	case primary && btn.Hovered():
+		bg = tint(p.Ink, p.Accent, 0.10)
+	case btn.Pressed():
+		bg = p.Selected
+		btn.Border(1, p.Ink3)
+	case btn.Hovered():
+		bg = p.Hover
+	}
+	btn.Background(bg)
+	btn.Children(func() { ui.Text(c, label).FontSize(12).FontWeight(600).TextColor(fg).SingleLine() })
+}
+
+// panel is the right column: what the scan found, what is selected, and the
+// three promises the product makes. It is read-only; every choice is on the
+// list.
+func (a *App) panel(c *ui.Context) {
+	p := a.pal
+	n, bytes := a.checkedTotal()
+	ui.Column(c).Width(268).FillHeight().Background(p.Surface).
+		BorderWidth(0, 0, 0, 1).BorderColor(p.Rule).
+		Children(func() {
+			ui.Column(c).Padding(20, 20).Gap(18).Children(func() {
+				a.panelBlock(c, "清理概览", func() {
+					ui.Column(c).Gap(8).Children(func() {
+						a.panelLine(c, "可清理缓存总量", core.Bytes(a.recommendedBytes()))
+						a.panelLine(c, "已选项目数量", fmt.Sprintf("%d 项", n))
+						a.panelLine(c, "已选清理空间", core.Bytes(bytes))
 					})
 				})
-				a.panelBlock(c, "占用最多", func() {
-					for _, it := range a.biggest(5) {
-						row := ui.Row(c).Height(28).Gap(8).AlignItems(ui.Center).
-							Cursor(ui.CursorPointer).OnClick(func() { a.selected = it.gid })
-						row.Background(hoverFill(row, ui.Transparent, p.Hover))
-						row.Children(func() {
-							ui.Text(c, it.name).FontSize(12).TextColor(p.Ink).SingleLine().Grow(1)
-							ui.Text(c, core.Bytes(it.size)).Font(core.Mono()).
-								FontSize(11).TextColor(p.Ink).Width(72).TextAlign(ui.End).Shrink(0)
-						})
+				a.panelBlock(c, "风险提示", func() {
+					for _, line := range a.riskNotes() {
+						a.bullet(c, line)
 					}
 				})
-				a.panelBlock(c, "注意", func() {
+				a.panelBlock(c, "清理说明", func() {
 					for _, line := range []string{
 						"只清理能重新下载或重新编译的内容，不碰源码与项目目录。",
 						"清理后各工具会在下次使用时自行恢复。",
 						"缓存根是链接时不扫描，链接也不会把删除带到根之外。",
 					} {
-						ui.Row(c).AlignItems(ui.Start).Gap(6).Children(func() {
-							ui.Box(c).Size(3, 3).Shrink(0).Margin(0, 6, 0, 0).Background(p.Ink3)
-							ui.Text(c, line).FontSize(11).TextColor(p.Ink2)
-						})
+						a.bullet(c, line)
 					}
 				})
 			})
@@ -644,6 +1134,40 @@ func (a *App) panel(c *ui.Context) {
 				}
 			})
 		})
+}
+
+func (a *App) panelLine(c *ui.Context, label, value string) {
+	p := a.pal
+	ui.Row(c).Gap(8).AlignItems(ui.Baseline).Children(func() {
+		ui.Text(c, label).FontSize(12).TextColor(p.Ink2).Grow(1)
+		ui.Text(c, value).Font(core.Mono()).FontSize(12).TextColor(p.Ink).Shrink(0)
+	})
+}
+
+func (a *App) bullet(c *ui.Context, line string) {
+	p := a.pal
+	ui.Row(c).AlignItems(ui.Start).Gap(6).Children(func() {
+		ui.Box(c).Size(3, 3).Shrink(0).Margin(0, 6, 0, 0).Background(p.Ink3)
+		ui.Text(c, line).FontSize(11).TextColor(p.Ink2)
+	})
+}
+
+// riskNotes names what on this machine deserves a second look before the
+// user presses the button.
+func (a *App) riskNotes() []string {
+	var out []string
+	if _, failed := a.itemStats(); failed > 0 {
+		out = append(out, fmt.Sprintf("%d 个缓存读取不完整，显示的大小可能偏小。", failed))
+	}
+	for _, g := range a.groups {
+		if newest := newestPick(g); !newest.IsZero() && a.now.Sub(newest) < 7*24*time.Hour {
+			out = append(out, g.group.Name+" 本周用过，清理后下次运行需要重建。")
+		}
+	}
+	if len(out) == 0 {
+		out = append(out, "没有发现风险项。")
+	}
+	return out
 }
 
 // bigItem is one cache item in the panel's ranking.
@@ -670,7 +1194,7 @@ func (a *App) biggest(n int) []bigItem {
 
 func (a *App) panelBlock(c *ui.Context, title string, body func()) {
 	p := a.pal
-	ui.Column(c).Gap(6).Children(func() {
+	ui.Column(c).Gap(8).Children(func() {
 		ui.Text(c, title).FontSize(11).FontWeight(600).TextColor(p.Ink3)
 		body()
 	})
@@ -695,11 +1219,11 @@ func (a *App) elapsed() string {
 	return a.cache.Elapsed.Round(time.Millisecond).String()
 }
 
-// tag is a small pill of fact: how a cache comes back, or why to be careful.
-// The fill is a tint of the text colour rather than a second palette.
+// tag is a small status mark: a quiet tint of the status colour, no border,
+// sized to the text it carries.
 func tag(c *ui.Context, text string, fg, ground ui.Color) {
-	ui.Box(c).Height(18).Radius(3).Padding(1, 6).Shrink(0).AlignItems(ui.Center).
-		Background(tint(fg, ground, 0.10)).Children(func() {
+	ui.Box(c).Height(18).Radius(2).Padding(1, 6).Shrink(0).AlignItems(ui.Center).
+		Background(tint(fg, ground, 0.09)).Children(func() {
 		ui.Text(c, text).FontSize(11).FontWeight(600).TextColor(fg).SingleLine()
 	})
 }
@@ -720,259 +1244,6 @@ func hoverFill(row ui.Element, resting, hover ui.Color) ui.Color {
 	return resting
 }
 
-// actionButton is the one button shape: a quiet outline that fills under the
-// pointer and compresses while pressed, so it reads as a control, not a
-// label. primary gets the accent and the only solid fill on screen.
-func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, fn func()) {
-	p := a.pal
-	btn := ui.ButtonBase(c).Height(30).Radius(3).Padding(0, 12).
-		Shrink(0).AlignItems(ui.Center).Border(1, p.RuleStrong)
-	bg, fg := ui.Transparent, p.Ink
-	switch {
-	case !enabled:
-		fg = p.Ink3
-	case primary:
-		bg, fg = p.Accent, p.OnAccent
-		btn.Border(0, ui.Transparent)
-	}
-	if enabled {
-		btn.Cursor(ui.CursorPointer).OnClick(fn)
-	} else {
-		btn.Disabled(true)
-	}
-	switch {
-	case !enabled:
-	case primary && btn.Pressed():
-		bg = tint(p.Ink, p.Accent, 0.18)
-	case primary && btn.Hovered():
-		bg = tint(p.Ink, p.Accent, 0.10)
-	case btn.Pressed():
-		bg = p.Selected
-		btn.Border(1, p.Ink3)
-	case btn.Hovered():
-		bg = p.Hover
-	}
-	btn.Background(bg)
-	btn.Children(func() { ui.Text(c, label).FontSize(12).FontWeight(600).TextColor(fg).SingleLine() })
-}
-
-func (a *App) header(c *ui.Context) {
-	p := a.pal
-	g, ok := a.group(a.selected)
-	title, total, sub := "清理开发工具缓存", a.totalSize(),
-		fmt.Sprintf("共 %d 个缓存，%s 可重新下载或重新编译", a.totalCount(), core.Bytes(a.totalSize()))
-	var picks []core.Pick
-	if ok {
-		title, total = g.group.Name, g.size
-		picks = a.groupPicks(g)
-		sub = fmt.Sprintf("%d 项可清理 · %s", sumCount(g), a.headerSource(g, ok))
-	}
-	ui.Column(c).Shrink(0).Children(func() {
-		ui.Row(c).Padding(18, 28, 12, 28).Gap(12).AlignItems(ui.End).Children(func() {
-			ui.Column(c).Grow(1).Gap(4).Children(func() {
-				ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-					if ok {
-						back := ui.ButtonBase(c).Padding(2, 6).Cursor(ui.CursorPointer)
-						back.Children(func() { ui.Text(c, "← 全部").FontSize(12).TextColor(p.Ink2) })
-						if back.Clicked() {
-							a.selected = ""
-						}
-					}
-					ui.Text(c, title).FontSize(20).FontWeight(600).TextColor(p.Ink).SingleLine()
-				})
-				ui.Text(c, sub).FontSize(12).TextColor(p.Ink3).SingleLine()
-			})
-			ui.Column(c).AlignItems(ui.End).Shrink(0).Children(func() {
-				ui.Text(c, core.Bytes(total)).Font(core.Mono()).FontSize(22).FontWeight(600).TextColor(p.Ink)
-				if n := a.warnCount(g, ok); n > 0 {
-					ui.Text(c, fmt.Sprintf("%d 个缓存读取失败", n)).
-						FontSize(11).FontWeight(600).TextColor(p.Danger)
-				}
-			})
-		})
-		if len(picks) > 0 {
-			ui.Row(c).Padding(0, 28, 8, 28).Gap(16).AlignItems(ui.Center).Children(func() {
-				for _, act := range a.presets(picks) {
-					a.chip(c, act)
-				}
-			})
-		}
-		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-	})
-}
-
-// headerSource says where this family's caches came from: a default, an
-// environment variable, or a tool's own probe. The exact path is on each
-// item, so repeating it here would only add noise.
-func (a *App) headerSource(g groupState, ok bool) string {
-	if !ok {
-		return ""
-	}
-	var sources []string
-	for _, it := range g.items {
-		for _, r := range it.res.Roots {
-			if r.Source != "" && !slices.Contains(sources, r.Source) {
-				sources = append(sources, r.Source)
-			}
-		}
-	}
-	if len(sources) == 1 {
-		return sources[0]
-	}
-	if len(sources) > 1 {
-		return fmt.Sprintf("%s 等 %d 个来源", sources[0], len(sources))
-	}
-	return ""
-}
-
-// warnCount is how many items on screen were scanned incompletely: the
-// family's when one is open, every family's otherwise.
-func (a *App) warnCount(g groupState, ok bool) int {
-	items := g.items
-	if !ok {
-		items = nil
-		for _, gg := range a.groups {
-			items = append(items, gg.items...)
-		}
-	}
-	n := 0
-	for _, it := range items {
-		if it.res.Failed() {
-			n++
-		}
-	}
-	return n
-}
-
-func (a *App) list(c *ui.Context) {
-	ui.Scroll(c).Grow(1).Children(func() {
-		ui.Column(c).Padding(0, 0, 16, 0).Children(func() {
-			if a.phase == phaseScanning && len(a.groups) == 0 {
-				a.skeleton(c)
-				return
-			}
-			if g, ok := a.group(a.selected); ok {
-				a.family(c, g)
-				return
-			}
-			a.overview(c)
-		})
-	})
-}
-
-// columns is the shared measure of the list: checkbox, name, count, size.
-// Every row on every screen uses it, so the columns line up across families.
-const (
-	colCheck = 16
-	colCount = 140
-	colSize  = 96
-	colGap   = 12
-)
-
-// tableHead labels the columns once, at the top of the overview.
-func (a *App) tableHead(c *ui.Context) {
-	p := a.pal
-	ui.Row(c).Height(28).Padding(0, 28).Gap(colGap).AlignItems(ui.Center).Children(func() {
-		ui.Box(c).Size(colCheck, 1).Shrink(0)
-		ui.Text(c, "工具").FontSize(11).FontWeight(600).TextColor(p.Ink3).Grow(1)
-		ui.Text(c, "数量").FontSize(11).FontWeight(600).TextColor(p.Ink3).
-			Width(colCount).TextAlign(ui.End).Shrink(0)
-		ui.Text(c, "缓存大小").FontSize(11).FontWeight(600).TextColor(p.Ink3).
-			Width(colSize).TextAlign(ui.End).Shrink(0)
-	})
-	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-}
-
-func (a *App) overview(c *ui.Context) {
-	p := a.pal
-	n := 0
-	a.tableHead(c)
-	for _, g := range a.groups {
-		if !g.visible() {
-			continue
-		}
-		n++
-		g := g
-		picks := a.groupPicks(g)
-		on, total := a.checkState(picks)
-		row := ui.Row(c).Height(56).Padding(0, 28).Gap(colGap).AlignItems(ui.Center).
-			Cursor(ui.CursorPointer).OnClick(func() { a.selected = g.group.ID })
-		row.Background(hoverFill(row, ui.Transparent, p.Hover))
-		row.Children(func() {
-			a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
-			ui.Column(c).Grow(1).Gap(2).Children(func() {
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, g.group.Name).FontSize(14).FontWeight(600).TextColor(p.Ink).SingleLine().Shrink(0)
-					a.advice(c, g)
-				})
-				if src := a.headerSource(g, true); src != "" {
-					ui.Text(c, src).Font(core.Mono()).FontSize(11).TextColor(p.Ink3).SingleLine()
-				}
-			})
-			ui.Text(c, fmt.Sprintf("%d 项", sumCount(g))).Font(core.Mono()).FontSize(12).
-				TextColor(p.Ink2).Width(colCount).TextAlign(ui.End).Shrink(0)
-			ui.Text(c, core.Bytes(g.size)).Font(core.Mono()).FontSize(13).TextColor(p.Ink).
-				Width(colSize).TextAlign(ui.End).Shrink(0)
-		})
-		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-	}
-	if n == 0 {
-		ui.Column(c).Padding(44, 28).Gap(6).Children(func() {
-			ui.Text(c, "没有找到可清理的缓存").FontSize(14).FontWeight(600).TextColor(p.Ink)
-			ui.Text(c, "已检查环境变量与各工具的默认位置").FontSize(12).TextColor(p.Ink3)
-		})
-	}
-}
-
-// advice is the one word that says whether clearing this family costs the
-// user anything: a cache touched this week will be rebuilt the moment the
-// tool runs again, an older one is sitting idle.
-func (a *App) advice(c *ui.Context, g groupState) {
-	p := a.pal
-	newest := time.Time{}
-	for _, it := range g.items {
-		for _, pk := range allPicks(it.res) {
-			if pk.ModTime.After(newest) {
-				newest = pk.ModTime
-			}
-		}
-	}
-	if newest.IsZero() {
-		return
-	}
-	if a.now.Sub(newest) < 7*24*time.Hour {
-		tag(c, "近期用过", p.Warning, p.Raised)
-		return
-	}
-	tag(c, "可清理", p.Success, p.Raised)
-}
-
-func sumCount(g groupState) int {
-	n := 0
-	for _, it := range g.items {
-		n += len(allPicks(it.res))
-	}
-	return n
-}
-
-func (a *App) family(c *ui.Context, g groupState) {
-	if len(g.items) == 0 {
-		return
-	}
-	for _, it := range g.items {
-		a.itemRow(c, it)
-	}
-}
-
-func (a *App) skeleton(c *ui.Context) {
-	p := a.pal
-	for range 3 {
-		ui.Column(c).Height(56).Padding(0, 28).Children(func() {
-			ui.Box(c).Size(160, 12).Shrink(0).Background(p.Hover)
-		})
-	}
-}
-
 func (a *App) totalSize() int64 {
 	var n int64
 	for _, g := range a.groups {
@@ -989,32 +1260,40 @@ func (a *App) totalCount() int {
 	return n
 }
 
-// actionBar is the strip that turns a selection into the one action that
-// matters. It is a bar, not a floating pill: native windows do not float.
-func (a *App) actionBar(c *ui.Context) {
-	p := a.pal
-	n, bytes := a.checkedTotal()
-	all := 0
+// itemStats counts the caches on screen and those the scan could not read
+// completely.
+func (a *App) itemStats() (items, failed int) {
 	for _, g := range a.groups {
-		all += len(a.groupPicks(g))
+		items += len(g.items)
+		for _, it := range g.items {
+			if it.res.Failed() {
+				failed++
+			}
+		}
 	}
-	ui.Column(c).Shrink(0).Children(func() {
-		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-		ui.Row(c).Height(56).Padding(0, 28).Gap(16).AlignItems(ui.Center).Children(func() {
-			if all > 0 {
-				a.check(c, stateOf(n, all), a.selectAllVisible)
-				ui.Text(c, "全选").FontSize(12).TextColor(p.Ink2).Shrink(0)
+	return items, failed
+}
+
+func (a *App) recommendedCount() int {
+	n := 0
+	for _, g := range a.groups {
+		for _, p := range a.groupPicks(g) {
+			if a.checked[p.Path] {
+				n++
 			}
-			ui.Text(c, fmt.Sprintf("已选 %d 项 · %s", n, core.Bytes(bytes))).
-				Font(core.Mono()).FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
-			if n > 0 {
-				a.actionButton(c, "清空", false, true, a.clearChecks)
+		}
+	}
+	return n
+}
+
+func (a *App) recommendedBytes() int64 {
+	var n int64
+	for _, g := range a.groups {
+		for _, p := range a.groupPicks(g) {
+			if a.checked[p.Path] {
+				n += p.Bytes
 			}
-			label := "开始清理"
-			if a.so.Debug || a.so.NoDelete {
-				label = "查看清理计划"
-			}
-			a.actionButton(c, label, true, n > 0, a.startClean)
-		})
-	})
+		}
+	}
+	return n
 }
