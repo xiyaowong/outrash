@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,6 +33,38 @@ func (a *app) printPlan(p *core.Plan) {
 	fmt.Fprintf(&b, "共 %d 项，%s\n", len(p.Steps), core.Bytes(p.Bytes))
 	for i, s := range p.Steps {
 		fmt.Fprintf(&b, "%3d. %10s  %s  %s\n", i+1, core.Bytes(s.Bytes), s.Reason, s.Path)
+	}
+	fmt.Print(b.String())
+}
+
+// printScanWarnings lists what a scan could not read. The window can only
+// say that a cache was incomplete; a -debug build names the paths.
+func (a *app) printScanWarnings(cache *core.Cache) {
+	keys := make([]string, 0, len(cache.Results))
+	for k, r := range cache.Results {
+		if r.Failed() {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) == 0 {
+		return
+	}
+	slices.Sort(keys)
+	var b strings.Builder
+	b.WriteString("\n== 扫描警告 ==\n")
+	for _, k := range keys {
+		r := cache.Results[k]
+		if r.Err != nil {
+			fmt.Fprintf(&b, "%s: %v\n", k, r.Err)
+		}
+		for _, root := range r.Roots {
+			switch {
+			case root.Err != nil:
+				fmt.Fprintf(&b, "%s  %s: %v\n", k, root.Path, root.Err)
+			case root.Skipped > 0:
+				fmt.Fprintf(&b, "%s  %s: %d 个路径无法读取\n", k, root.Path, root.Skipped)
+			}
+		}
 	}
 	fmt.Print(b.String())
 }

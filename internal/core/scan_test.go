@@ -46,7 +46,11 @@ func TestReadEntries(t *testing.T) {
 	write(t, filepath.Join(root, "top.bin"), 7)
 	setMtime(t, filepath.Join(root, "top.bin"), base)
 
-	entries, total, count := readEntries(root)
+	l := readEntries(root)
+	if l.err != nil {
+		t.Fatal(l.err)
+	}
+	entries, total, count := l.entries, l.size, l.count
 	if len(entries) != 3 || count != 3 {
 		t.Fatalf("entries = %d, count = %d, want 3, 3", len(entries), count)
 	}
@@ -92,7 +96,11 @@ func TestReadVersioned(t *testing.T) {
 	setMtime(t, filepath.Join(root, "pkg", "2.0.0", "f"), base.Add(2*time.Hour))
 	setMtime(t, filepath.Join(root, "other", "1.0.0", "f"), base.Add(time.Hour))
 
-	entries, total, count := readVersioned(root)
+	l := readVersioned(root)
+	if l.err != nil {
+		t.Fatal(l.err)
+	}
+	entries, total, count := l.entries, l.size, l.count
 	if len(entries) != 2 {
 		t.Fatalf("entries = %d, want one per package", len(entries))
 	}
@@ -141,7 +149,11 @@ func TestReadEntriesSymlink(t *testing.T) {
 		t.Skipf("symlink unavailable: %v", err)
 	}
 
-	entries, total, count := readEntries(root)
+	l := readEntries(root)
+	if l.err != nil {
+		t.Fatal(l.err)
+	}
+	entries, total, count := l.entries, l.size, l.count
 	if len(entries) != 2 || count != 2 {
 		t.Fatalf("entries = %d, count = %d, want 2, 2", len(entries), count)
 	}
@@ -206,5 +218,44 @@ func TestScanItemTotals(t *testing.T) {
 	}
 	if size != 60 || count != 3 {
 		t.Errorf("sum over roots = %d bytes, %d entries, want 60, 3", size, count)
+	}
+}
+
+// A root that exists but cannot be listed must say so instead of looking
+// like an empty cache.
+func TestReadEntriesReportsUnreadableRoot(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "not-a-dir")
+	write(t, file, 3)
+
+	l := readEntries(file)
+	if l.err == nil {
+		t.Fatal("listing a file as a root must report an error")
+	}
+	if len(l.entries) != 0 || l.size != 0 {
+		t.Fatalf("unreadable root still produced %d entries, %d bytes", len(l.entries), l.size)
+	}
+	if v := readVersioned(file); v.err == nil {
+		t.Fatal("readVersioned must report an unreadable root too")
+	}
+}
+
+func TestResultUnreadable(t *testing.T) {
+	if (Result{}).Failed() {
+		t.Fatal("a complete scan is not failed")
+	}
+	if (Result{Err: ErrStopped}).Failed() {
+		t.Fatal("a stopped scan is not an unreadable one")
+	}
+	r := Result{Roots: []Root{
+		{Path: "a", Skipped: 2},
+		{Path: "b", Err: os.ErrPermission},
+		{Path: "c"},
+	}}
+	if roots, paths := r.Unreadable(); roots != 1 || paths != 2 {
+		t.Fatalf("Unreadable() = %d roots, %d paths; want 1, 2", roots, paths)
+	}
+	if !r.Failed() {
+		t.Fatal("skipped paths must mark the result failed")
 	}
 }
