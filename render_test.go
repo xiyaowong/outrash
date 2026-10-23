@@ -339,6 +339,37 @@ func TestReceiptComparesBeforeAndAfter(t *testing.T) {
 	write(t, "report.png", tt.Image())
 }
 
+// The sheet must say why each path goes and which version stays — the two
+// things that make "保留最新" safe enough to press.
+func TestPlanShowsReasonsAndKept(t *testing.T) {
+	a := testAppWith(t, options{})
+	a.now = fixedTime(0)
+	tt := ui.NewTester(a.view, 940, 660)
+	if err := tt.Click(".NET"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("保留最新"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("查看清理计划"); err != nil {
+		t.Fatal(err)
+	}
+	texts := tt.Texts()
+	if !tt.HasText("旧版本") {
+		t.Fatalf("no reason column; texts %v", texts)
+	}
+	kept := ""
+	for _, s := range texts {
+		if strings.HasPrefix(s, "保留 · ") {
+			kept = s
+		}
+	}
+	if kept != "保留 · newtonsoft.json 1.2、serilog 1.2、xunit 1.2" {
+		t.Fatalf("kept line = %q; texts %v", kept, texts)
+	}
+	write(t, "plan-kept.png", tt.Image())
+}
+
 // 保留最新 promises to narrow the selection to old versions. A family that
 // also holds a plain download cache must not have that cache swept in.
 func TestKeepNewestSparesPlainCaches(t *testing.T) {

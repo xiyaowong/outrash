@@ -211,6 +211,34 @@ func TestAddAndGroups(t *testing.T) {
 	}
 }
 
+// A checked plan is built with a plain "remove these" policy, so Annotate is
+// the only thing that can tell a kept version from a removed one.
+func TestAnnotateExplainsKeptVersions(t *testing.T) {
+	all := []Pick{
+		{Name: "serilog serilog.1.0", Path: "s10", Bytes: 10, Package: "serilog", ModTime: ago(100)},
+		{Name: "serilog serilog.1.2", Path: "s12", Bytes: 20, Package: "serilog", ModTime: ago(100)},
+		{Name: "cache feed", Path: "feed", Bytes: 5, ModTime: ago(1)},
+	}
+	p := &Plan{Steps: []Step{{Path: "s10"}, {Path: "feed"}}}
+	p.Annotate(all, 30, day0)
+
+	if p.Steps[0].Mode != ModeOld || p.Steps[0].Reason != "旧版本，保留 serilog 1.2" {
+		t.Fatalf("versioned step = %+v", p.Steps[0])
+	}
+	if p.Steps[1].Mode != ModeStale || p.Steps[1].Reason == "" {
+		t.Fatalf("plain step = %+v", p.Steps[1])
+	}
+	g := (&Plan{Steps: p.Steps}).Groups()
+	if len(g) != 1 || len(g[0].Kept) != 0 {
+		// Groups is keyed by family, and these steps have none.
+		t.Fatalf("groups %+v", g)
+	}
+	p.Add("Rust", "cargo-registry", "构建时自动重新下载", &Plan{Steps: p.Steps[1:2]})
+	if k := p.Groups()[0].Kept; len(k) != 1 || k[0] != "serilog 1.2" {
+		t.Fatalf("kept = %v, want the version Annotate found", k)
+	}
+}
+
 func TestBytes(t *testing.T) {
 	cases := map[int64]string{
 		0:                         "0 B",
