@@ -19,3 +19,6 @@ Append-only until stale; delete entries that stop being true. One line each.
 - Files can be locked (indexers, AV). Any real delete must tolerate `ERROR_SHARING_VIOLATION` and report, never retry-loop.
 - `%LOCALAPPDATA%\go-build` is often multi-GB; a naive recursive `WalkDir` on it blocks seconds. Stream and cache sizes.
 - Path separators: always build with `filepath`, never concatenate `/`.
+
+## Product
+- An unreadable cache and an empty cache look identical unless the error is carried to the row. Keep `Root.Err`/`Skipped`, and show them.
