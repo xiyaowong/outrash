@@ -233,7 +233,11 @@ func (a *app) titleBar(c *ui.Context) {
 	ui.Row(c).Height(h).DragWindow().Background(p.Raised).
 		Padding(0, bar.Right+12, 0, bar.Left+16).AlignItems(ui.Center).Gap(8).Children(func() {
 		ui.Box(c).Size(8, 8).Shrink(0).Background(p.Accent)
-		ui.Text(c, "outrash").FontSize(12).FontWeight(600).TextColor(p.Ink)
+		ui.Row(c).Shrink(0).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "OUT").FontSize(12).FontWeight(600).TextColor(p.Ink3)
+			ui.Box(c).Width(4).Shrink(0)
+			ui.Text(c, "TRASH").FontSize(12).FontWeight(700).TextColor(p.Ink)
+		})
 		ui.Text(c, a.summary()).FontSize(12).TextColor(p.Ink3).SingleLine().Grow(1)
 		if a.phase == phaseScanning {
 			ui.Spinner(c).Width(12).Shrink(0)
