@@ -150,6 +150,14 @@ dispatch:
 	return cache
 }
 
+// isLink reports a reparse point: a symlink, or the junction the guard has
+// to treat the same way. Windows reports a junction as irregular rather than
+// as ModeSymlink, and EvalSymlinks does not resolve it either.
+func isLink(info fs.FileInfo) bool {
+	m := info.Mode()
+	return m&fs.ModeSymlink != 0 || m&fs.ModeIrregular != 0
+}
+
 func scanItem(groupID string, it Item, o Options, stop <-chan struct{}) Result {
 	dirs, source := it.Roots(o)
 	r := Result{GroupID: groupID, ItemID: it.ID, Unit: it.Unit}
@@ -160,11 +168,18 @@ func scanItem(groupID string, it Item, o Options, stop <-chan struct{}) Result {
 			return r
 		default:
 		}
-		info, err := os.Stat(d)
+		// Lstat, not Stat: a root that is itself a link measures the target's
+		// children while every entry claims to sit under this root, and no
+		// guard at removal can tell. Such a root is reported, not offered.
+		info, err := os.Lstat(d)
 		if err != nil {
 			if !errors.Is(err, fs.ErrNotExist) {
 				r.Err = errors.Join(r.Err, fmt.Errorf("%s: %w", d, err))
 			}
+			continue
+		}
+		if isLink(info) {
+			r.Err = errors.Join(r.Err, fmt.Errorf("%s: 缓存根是链接，不扫描", d))
 			continue
 		}
 		if !info.IsDir() {

@@ -17,6 +17,8 @@ Append-only until stale; delete entries that stop being true. One line each.
 - `ui.Scroll` inside fixed-height rows needs an explicit size or `Grow`, else it collapses.
 
 ## Windows
+- A junction is `ModeIrregular` to `os.Lstat`, not `ModeSymlink`, and `filepath.EvalSymlinks` leaves it unresolved — "no symlinks" is not "no links".
+- `mklink /J` needs no privilege where `os.Symlink` does, so link guards are testable without elevation.
 - Files can be locked (indexers, AV). Any real delete must tolerate `ERROR_SHARING_VIOLATION` and report, never retry-loop.
 - `%LOCALAPPDATA%\go-build` is often multi-GB; a naive recursive `WalkDir` on it blocks seconds. Stream and cache sizes.
 - Path separators: always build with `filepath`, never concatenate `/`.
