@@ -35,6 +35,13 @@ type app struct {
 	checked map[string]bool
 	now     time.Time
 
+	// busy is set while a removal runs; no plan may be opened over one.
+	busy bool
+	// remove runs a plan, and post lands an update on the UI thread. Tests
+	// replace them to observe the order.
+	remove func(*core.Plan, []string) core.Outcome
+	post   func(func())
+
 	modal  modal
 	shown  *core.Plan
 	report *report
@@ -105,13 +112,14 @@ func newApp(cfg *core.Config, o core.Options, so options) *app {
 		open:    map[string]bool{},
 		checked: map[string]bool{},
 		now:     time.Now(),
+		remove:  core.Remove,
 	}
 }
 
 func (a *app) scan() {
 	a.phase = phaseScanning
 	a.msg = ""
-	a.win.Invalidate()
+	a.repaint()
 	if a.stop != nil {
 		a.stop()
 	}
@@ -122,7 +130,7 @@ func (a *app) scan() {
 	go func() {
 		defer cancel()
 		cache := core.Run(a.cfg, a.opts, runtime.NumCPU()+2, func(r core.Result) {
-			a.win.Update(func() {
+			a.applyUpdate(func() {
 				if seq != a.seq {
 					return
 				}
@@ -133,7 +141,7 @@ func (a *app) scan() {
 				a.regroup()
 			})
 		}, ctx.Done())
-		a.win.Update(func() {
+		a.applyUpdate(func() {
 			if seq != a.seq {
 				return
 			}
@@ -146,6 +154,25 @@ func (a *app) scan() {
 			}
 		})
 	}()
+}
+
+func (a *app) repaint() {
+	if a.win != nil {
+		a.win.Invalidate()
+	}
+}
+
+// applyUpdate runs f on the UI thread, which a test replaces with the post
+// seam when there is no window.
+func (a *app) applyUpdate(f func()) {
+	switch {
+	case a.post != nil:
+		a.post(f)
+	case a.win != nil:
+		a.win.Update(f)
+	default:
+		f()
+	}
 }
 
 func (a *app) regroup() {
@@ -235,7 +262,7 @@ func (a *app) selectAllVisible() {
 }
 
 func (a *app) reviewSelected() {
-	if a.modal != modalNone {
+	if a.modal != modalNone || a.busy {
 		return
 	}
 	if n, _ := a.checkedTotal(); n > 0 {
