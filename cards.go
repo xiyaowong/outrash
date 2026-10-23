@@ -336,7 +336,8 @@ func (a *app) selectedPlan() *core.Plan {
 			if len(picks) == 0 {
 				continue
 			}
-			p.Add(g.group.Name, it.item.Name, it.item.Note, core.Select(picks, core.Policy{Now: a.now}))
+			p.Add(g.group.Name, it.item.Name, it.item.Note, core.Select(picks, core.Policy{Now: a.now}).
+				Annotate(allPicks(it.res), a.cfg.StaleDays, a.now))
 		}
 	}
 	p.Title = fmt.Sprintf("清理已选 %d 项", len(p.Steps))

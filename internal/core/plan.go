@@ -66,6 +66,12 @@ type Plan struct {
 	Title string
 	// notes carries each item's catalog note into Groups().
 	notes []noteEntry
+	// kept is what Annotate found left behind, reported per family.
+	kept []keptEntry
+}
+
+type keptEntry struct {
+	group, name string
 }
 
 type noteEntry struct {
@@ -110,6 +116,87 @@ func Select(picks []Pick, pol Policy) *Plan {
 		}
 	}
 	return (&Plan{Steps: steps, Title: describe(pol, len(picks))}).Total()
+}
+
+// Annotate explains a plan against everything the family's scan saw, not
+// against the policy that made it. A checked plan is built with a plain
+// "remove these" policy, so without this every row would say 全部 and the
+// versions the user left in place would be invisible.
+func (p *Plan) Annotate(all []Pick, staleDays int, now time.Time) *Plan {
+	if now.IsZero() {
+		now = time.Now()
+	}
+	removing := make(map[string]bool, len(p.Steps))
+	for _, s := range p.Steps {
+		removing[s.Path] = true
+	}
+	byPkg := map[string][]Pick{}
+	for _, pk := range all {
+		if pk.Package != "" {
+			byPkg[pk.Package] = append(byPkg[pk.Package], pk)
+		}
+	}
+	keptPkgs := map[string]bool{}
+	for i := range p.Steps {
+		s := &p.Steps[i]
+		pk, ok := pickAt(all, s.Path)
+		if !ok {
+			continue
+		}
+		if pk.Package == "" {
+			if now.Sub(pk.ModTime) < time.Duration(staleDays)*24*time.Hour {
+				s.Mode, s.Reason = ModeStale, "近期使用过，下次用时重新生成"
+			} else {
+				s.Mode, s.Reason = ModeStale, fmt.Sprintf("超过 %d 天未使用，用时自动重建", staleDays)
+			}
+			continue
+		}
+		var kept []string
+		for _, sib := range byPkg[pk.Package] {
+			if !removing[sib.Path] && newer(sib, pk) {
+				kept = append(kept, keepLabel(sib))
+			}
+		}
+		if len(kept) > 0 {
+			s.Mode, s.Reason = ModeOld, "旧版本，保留 "+strings.Join(kept, "、")
+			keptPkgs[pk.Package] = true
+			continue
+		}
+		s.Mode, s.Reason = ModeAll, "最新版本，下次构建时重新下载"
+	}
+	p.kept = p.kept[:0]
+	seen := map[string]bool{}
+	for _, pk := range all {
+		if removing[pk.Path] || pk.Package == "" || !keptPkgs[pk.Package] {
+			continue
+		}
+		name := keepLabel(pk)
+		if !seen[name] {
+			seen[name] = true
+			p.kept = append(p.kept, keptEntry{name: name})
+		}
+	}
+	return p
+}
+
+func pickAt(all []Pick, path string) (Pick, bool) {
+	for _, pk := range all {
+		if pk.Path == path {
+			return pk, true
+		}
+	}
+	return Pick{}, false
+}
+
+// keepLabel names a kept version as "<package> <version>". A pick's Name is
+// "<package> <version folder>", so the folder's package prefix is dropped.
+func keepLabel(p Pick) string {
+	v := p.Name
+	if i := strings.LastIndexByte(v, ' '); i >= 0 {
+		v = v[i+1:]
+	}
+	v = strings.TrimLeft(strings.TrimPrefix(v, p.Package), " .-_")
+	return p.Package + " " + v
 }
 
 // newer reports whether a is a later version than b. It reads the version
@@ -276,6 +363,9 @@ type PlanGroup struct {
 	// Items names each cache the steps came from, with the catalog's note on
 	// how that cache comes back.
 	Items []PlanItem
+	// Kept names the versions this family keeps, for a package that is only
+	// partly pruned.
+	Kept []string
 }
 
 // PlanItem is one cache inside a group.
@@ -291,6 +381,9 @@ func (p *Plan) Add(group, item, note string, other *Plan) {
 		p.Steps = append(p.Steps, s)
 	}
 	p.notes = append(p.notes, noteEntry{group: group, item: item, note: note})
+	for _, k := range other.kept {
+		p.kept = append(p.kept, keptEntry{group: group, name: k.name})
+	}
 	p.Total()
 }
 
@@ -327,6 +420,13 @@ func (p *Plan) Groups() []PlanGroup {
 		if !slices.ContainsFunc(out[i].Items, func(it PlanItem) bool { return it.Name == n.item }) {
 			out[i].Items = append(out[i].Items, PlanItem{Name: n.item, Note: n.note})
 		}
+	}
+	for _, k := range p.kept {
+		i, ok := at[k.group]
+		if !ok || slices.Contains(out[i].Kept, k.name) {
+			continue
+		}
+		out[i].Kept = append(out[i].Kept, k.name)
 	}
 	return out
 }

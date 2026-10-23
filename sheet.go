@@ -134,9 +134,17 @@ func (a *app) planSheet(c *ui.Context) {
 										FontSize(11).TextColor(p.Ink3).Width(32).Shrink(0)
 									ui.Text(c, abbrevPath(s.Path, 72)).Font(core.Mono()).FontSize(12).TextColor(p.Ink).
 										SingleLine().Grow(1).Tooltip(s.Path)
+									// Why this path is on the list; the long form
+									// waits on the tooltip and in -debug.
+									ui.Text(c, string(s.Mode)).FontSize(11).TextColor(p.Ink3).
+										Width(64).TextAlign(ui.End).Shrink(0).Tooltip(s.Reason)
 									ui.Text(c, core.Bytes(s.Bytes)).Font(core.Mono()).FontSize(12).
 										TextColor(p.Ink2).Width(88).TextAlign(ui.End).Shrink(0)
 								})
+							}
+							if len(g.Kept) > 0 {
+								ui.Text(c, "保留 · "+strings.Join(g.Kept, "、")).FontSize(11).
+									TextColor(p.Success).SingleLine().Padding(0, 0, 0, 0)
 							}
 						}
 					})
