@@ -3,6 +3,7 @@ package rules
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -38,17 +39,24 @@ func env(vars map[string]string) func(string) string {
 	return func(k string) string { return vars[k] }
 }
 
+// Paths are built with the host's separator: the package runs its tests on
+// Linux too, where a literal `D:\packages` is a relative name.
+func sep() string { return string(filepath.Separator) }
+
 func TestRootsPrefersEnvironment(t *testing.T) {
+	tmp := t.TempDir()
+	packages := filepath.Join(tmp, "packages")
+	localAppData := filepath.Join(tmp, "Local")
 	it := Item{
 		Env:   []string{"NUGET_PACKAGES"},
-		Paths: map[string][]string{"windows": {`%LOCALAPPDATA%\NuGet\Cache`}},
+		Paths: map[string][]string{"windows": {strings.Join([]string{"%LOCALAPPDATA%", "NuGet", "Cache"}, sep())}},
 	}
-	o := Options{GOOS: "windows", Home: `C:\Users\t`, Getenv: env(map[string]string{
-		"NUGET_PACKAGES": `D:\packages`,
-		"LOCALAPPDATA":   `C:\Users\t\AppData\Local`,
+	o := Options{GOOS: "windows", Home: tmp, Getenv: env(map[string]string{
+		"NUGET_PACKAGES": packages,
+		"LOCALAPPDATA":   localAppData,
 	})}
 	dirs, source := it.Roots(o)
-	if len(dirs) != 1 || dirs[0] != `D:\packages` {
+	if len(dirs) != 1 || dirs[0] != packages {
 		t.Fatalf("dirs %v", dirs)
 	}
 	if source != "环境变量 NUGET_PACKAGES" {
@@ -57,12 +65,13 @@ func TestRootsPrefersEnvironment(t *testing.T) {
 }
 
 func TestRootsSkipsTemplateWithoutVariable(t *testing.T) {
+	home := t.TempDir()
 	it := Item{Paths: map[string][]string{
-		"windows": {`%UNSET%\cache`, `~\fallback`},
+		"windows": {strings.Join([]string{"%UNSET%", "cache"}, sep()), "~" + sep() + "fallback"},
 	}}
-	o := Options{GOOS: "windows", Home: `C:\Users\t`, Getenv: env(nil)}
+	o := Options{GOOS: "windows", Home: home, Getenv: env(nil)}
 	dirs, source := it.Roots(o)
-	if len(dirs) != 1 || dirs[0] != filepath.Join(`C:\Users\t`, "fallback") {
+	if len(dirs) != 1 || dirs[0] != filepath.Join(home, "fallback") {
 		t.Fatalf("dirs %v", dirs)
 	}
 	if source != "默认位置" {
@@ -107,9 +116,11 @@ func TestRootsNeverProbesWhenDefaultExists(t *testing.T) {
 }
 
 func TestExpandTrimsQuotes(t *testing.T) {
-	o := Options{Home: `C:\Users\t`, Getenv: env(map[string]string{"APPDATA": `C:\Users\t\AppData\Roaming`})}
-	got, ok := expand(`"%APPDATA%\npm-cache"`, o)
-	if !ok || got != filepath.Join(`C:\Users\t\AppData\Roaming`, "npm-cache") {
+	tmp := t.TempDir()
+	roaming := filepath.Join(tmp, "Roaming")
+	o := Options{Home: tmp, Getenv: env(map[string]string{"APPDATA": roaming})}
+	got, ok := expand(`"%APPDATA%`+sep()+`npm-cache"`, o)
+	if !ok || got != filepath.Join(roaming, "npm-cache") {
 		t.Fatalf("got %q %v", got, ok)
 	}
 }
