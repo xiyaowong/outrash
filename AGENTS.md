@@ -25,6 +25,12 @@ Windows-first dev-cache cleaner. Go + mygo native UI. Cross-platform logic, no w
 
 ```
 just ci                  # build + vet + test, the CI pair
+just lint                # go vet + go tool mygo vet (native UI build lifetimes)
+just test | just race    # tests, then again under the race detector
+just cover               # coverage per package
+just build               # stripped (9.9 MB), into gitignored build/
+just build-full          # the same without -s -w (14.2 MB), to compare
+just release             # `mygo build`, the only build with a version in its about box
 just debug               # no deletion: the list is printed to stdout, 查看清理计划 opens the sheet
 just safe                # same refusal, keeps the normal UI
 just shots               # regenerate docs/screenshot.png and testdata/shots/*.png from internal/app

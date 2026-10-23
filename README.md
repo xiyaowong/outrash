@@ -18,12 +18,14 @@
 ## 构建与运行
 
 ```sh
+just build       # 精简构建（-s -w -trimpath），约 9.9 MB，输出到 build/
+just release     # mygo 打包构建，带版本号与应用标识
 just debug       # 不删除：按“查看清理计划”列出路径、大小和顺序，同时打印到 stdout
 just safe        # 正常界面，但拒绝执行任何删除
 go run .         # 打开窗口，扫描后按工具分组显示
 ```
 
-`-debug` 隐含 `-no-delete`。`just ci` 跑 build、vet 和测试。
+`-debug` 隐含 `-no-delete`。`just ci` 跑 build、vet 和测试；`just lint`、`just race`、`just cover` 分别跑 mygo 的 UI 生命周期检查、竞态检测和覆盖率。`just build` 与 `just build-full` 的差别就是 `-s -w -trimpath` 省下的体积（14.2 MB → 9.9 MB）。
 
 ## 添加一个缓存
 
