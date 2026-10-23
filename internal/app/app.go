@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"cmp"
@@ -14,13 +14,13 @@ import (
 	"outrash/internal/core"
 )
 
-// app is everything the window shows. The view rebuilds it from this state
+// App is everything the window shows. The view rebuilds it from this state
 // on the main thread; the scan fills it in through Window.Update.
-type app struct {
-	win  *mygo.Window
-	cfg  *core.Config
-	opts core.Options
-	so   options
+type App struct {
+	Window *mygo.Window
+	cfg    *core.Config
+	opts   core.Options
+	so     Options
 
 	cache    *core.Cache
 	groups   []groupState
@@ -48,14 +48,13 @@ type app struct {
 	modal  modal
 	shown  *core.Plan
 	report *report
-	debug  bool
 	msg    string
 }
 
-type options struct {
-	debug bool
-	// noDelete refuses every run, for a build that only lists plans.
-	noDelete bool
+type Options struct {
+	Debug bool
+	// NoDelete refuses every run, for a build that only lists plans.
+	NoDelete bool
 }
 
 type phase int
@@ -137,12 +136,11 @@ type itemState struct {
 	res  core.Result
 }
 
-func newApp(cfg *core.Config, o core.Options, so options) *app {
-	return &app{
+func New(cfg *core.Config, o core.Options, so Options) *App {
+	return &App{
 		cfg:     cfg,
 		opts:    o,
 		so:      so,
-		debug:   so.debug,
 		open:    map[string]bool{},
 		checked: map[string]bool{},
 		now:     time.Now(),
@@ -150,7 +148,7 @@ func newApp(cfg *core.Config, o core.Options, so options) *app {
 	}
 }
 
-func (a *app) scan() {
+func (a *App) Scan() {
 	a.phase = phaseScanning
 	a.msg = ""
 	a.busyBar(true)
@@ -186,7 +184,7 @@ func (a *app) scan() {
 			a.regroup()
 			a.busyBar(false)
 			a.closeReceipt(cache)
-			if a.debug {
+			if a.so.Debug {
 				a.printScanWarnings(cache)
 			}
 		})
@@ -195,7 +193,7 @@ func (a *app) scan() {
 
 // openReceipt snapshots what the families hold before a clean, and which
 // paths the plan will remove, so the rescan can prove both numbers.
-func (a *app) openReceipt(pl *core.Plan) *receipt {
+func (a *App) openReceipt(pl *core.Plan) *receipt {
 	r := &receipt{planned: map[string]bool{}, failed: map[string]bool{}, after: -1}
 	for _, g := range a.groups {
 		r.groups = append(r.groups, delta{name: g.group.Name, before: g.size})
@@ -211,7 +209,7 @@ func (a *app) openReceipt(pl *core.Plan) *receipt {
 // that is back counts as regenerated only if it was written after the
 // removal returned; anything else was never removed, which is a failure and
 // is already listed as one.
-func (a *app) closeReceipt(cache *core.Cache) {
+func (a *App) closeReceipt(cache *core.Cache) {
 	if a.report == nil || a.report.receipt == nil || a.report.receipt.measured {
 		return
 	}
@@ -283,41 +281,41 @@ func sizeOf(root core.Root, p string) (int64, time.Time) {
 // busyBar is the scan/clean indicator: a busy progress bar in the taskbar
 // button on Windows, the dock on macOS, the launcher on Linux. Progress is
 // not measurable per step, so it spins rather than lies with a percentage.
-func (a *app) busyBar(on bool) {
+func (a *App) busyBar(on bool) {
 	if a.bar == on {
 		return
 	}
 	a.bar = on
-	if a.win == nil {
+	if a.Window == nil {
 		return
 	}
 	p := mygo.ProgressBar{}
 	if on {
 		p.State = mygo.ProgressIndeterminate
 	}
-	a.win.SetProgressBar(p)
+	a.Window.SetProgressBar(p)
 }
 
-func (a *app) repaint() {
-	if a.win != nil {
-		a.win.Invalidate()
+func (a *App) repaint() {
+	if a.Window != nil {
+		a.Window.Invalidate()
 	}
 }
 
 // applyUpdate runs f on the UI thread, which a test replaces with the post
 // seam when there is no window.
-func (a *app) applyUpdate(f func()) {
+func (a *App) applyUpdate(f func()) {
 	switch {
 	case a.post != nil:
 		a.post(f)
-	case a.win != nil:
-		a.win.Update(f)
+	case a.Window != nil:
+		a.Window.Update(f)
 	default:
 		f()
 	}
 }
 
-func (a *app) regroup() {
+func (a *App) regroup() {
 	a.groups = a.groups[:0]
 	if a.cache == nil {
 		return
@@ -345,7 +343,7 @@ func (a *app) regroup() {
 	}
 }
 
-func (a *app) group(id string) (groupState, bool) {
+func (a *App) group(id string) (groupState, bool) {
 	for _, g := range a.groups {
 		if g.group.ID == id {
 			return g, true
@@ -354,7 +352,7 @@ func (a *app) group(id string) (groupState, bool) {
 	return groupState{}, false
 }
 
-func (a *app) roots() []string {
+func (a *App) roots() []string {
 	var out []string
 	if a.cache == nil {
 		return out
@@ -367,10 +365,10 @@ func (a *app) roots() []string {
 	return out
 }
 
-func (a *app) view(c *ui.Context) {
+func (a *App) view(c *ui.Context) {
 	a.pal = core.ApplyTheme(c)
 	a.now = time.Now()
-	c.OnShortcut(ui.Cmd, ui.KeyR, a.scan)
+	c.OnShortcut(ui.Cmd, ui.KeyR, a.Scan)
 	c.OnShortcut(ui.Cmd, ui.KeyA, a.selectAllVisible)
 	c.OnShortcut(0, ui.KeyEnter, a.reviewSelected)
 	c.OnShortcut(0, ui.KeyEscape, a.dismiss)
@@ -391,7 +389,7 @@ func (a *app) view(c *ui.Context) {
 
 // selectAllVisible selects every leaf of the family on screen, or all of
 // them from the overview.
-func (a *app) selectAllVisible() {
+func (a *App) selectAllVisible() {
 	var picks []core.Pick
 	if g, ok := a.group(a.selected); ok {
 		picks = a.groupPicks(g)
@@ -403,7 +401,7 @@ func (a *app) selectAllVisible() {
 	a.toggleChecks(picks)
 }
 
-func (a *app) reviewSelected() {
+func (a *App) reviewSelected() {
 	if a.modal != modalNone || a.busy {
 		return
 	}
@@ -412,7 +410,7 @@ func (a *app) reviewSelected() {
 	}
 }
 
-func (a *app) titleBar(c *ui.Context) {
+func (a *App) titleBar(c *ui.Context) {
 	p := a.pal
 	bar := c.TitleBar()
 	h := max(bar.Height, 32)
@@ -433,13 +431,13 @@ func (a *app) titleBar(c *ui.Context) {
 		rescan.Children(func() { ui.Text(c, "重新扫描").FontSize(12).TextColor(p.Ink2) })
 		rescan.Tooltip("Ctrl+R")
 		if rescan.Clicked() {
-			a.scan()
+			a.Scan()
 		}
 	})
 	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 }
 
-func (a *app) summary() string {
+func (a *App) summary() string {
 	switch {
 	case a.phase == phaseScanning:
 		return "正在扫描"
@@ -451,7 +449,7 @@ func (a *app) summary() string {
 	return fmt.Sprintf("扫描于 %s · 用时 %s", a.cache.At.Format("15:04"), a.cache.Elapsed.Round(time.Millisecond))
 }
 
-func (a *app) rail(c *ui.Context) {
+func (a *App) rail(c *ui.Context) {
 	p := a.pal
 	ui.Column(c).Width(200).FillHeight().BorderWidth(0, 1, 0, 0).BorderColor(p.Rule).
 		Children(func() {
@@ -476,16 +474,16 @@ func (a *app) rail(c *ui.Context) {
 		})
 }
 
-func (a *app) section(c *ui.Context, label string) {
+func (a *App) section(c *ui.Context, label string) {
 	p := a.pal
 	ui.Text(c, label).FontSize(11).FontWeight(600).TextColor(p.Ink3).Padding(7, 0, 3, 14)
 }
 
-func (a *app) railNote() string {
+func (a *App) railNote() string {
 	switch {
 	case a.phase == phaseScanning:
 		return "扫描中"
-	case a.debug:
+	case a.so.Debug:
 		return "调试：只列计划"
 	case a.cache == nil:
 		return ""
@@ -493,7 +491,7 @@ func (a *app) railNote() string {
 	return fmt.Sprintf("%d 个缓存 · %s", a.totalCount(), core.Bytes(a.totalSize()))
 }
 
-func (a *app) railRow(c *ui.Context, id, label string, size int64) {
+func (a *App) railRow(c *ui.Context, id, label string, size int64) {
 	p := a.pal
 	on := a.selected == id
 	resting := ui.Transparent
@@ -536,7 +534,7 @@ func weight(on bool) int {
 	return 400
 }
 
-func (a *app) header(c *ui.Context) {
+func (a *App) header(c *ui.Context) {
 	p := a.pal
 	g, ok := a.group(a.selected)
 	title, total, sub := "可清理", a.totalSize(), fmt.Sprintf("%d 个缓存 · %d 项", a.totalCount(), a.totalLeaves())
@@ -574,7 +572,7 @@ func (a *app) header(c *ui.Context) {
 
 // contentWidth keeps lines readable when the window grows; the rail stays
 // put and the measure does not balloon.
-func (a *app) contentWidth(c *ui.Context) float32 {
+func (a *App) contentWidth(c *ui.Context) float32 {
 	w, _ := c.Size()
 	return min(w-200, 900)
 }
@@ -582,7 +580,7 @@ func (a *app) contentWidth(c *ui.Context) float32 {
 // headerSource says where this family's caches came from: a default, an
 // environment variable, or a tool's own probe. The exact path is on each
 // item, so repeating it here would only add noise.
-func (a *app) headerSource(g groupState, ok bool) string {
+func (a *App) headerSource(g groupState, ok bool) string {
 	if !ok {
 		return ""
 	}
@@ -605,7 +603,7 @@ func (a *app) headerSource(g groupState, ok bool) string {
 
 // warnCount is how many items on screen were scanned incompletely: the
 // family's when one is open, every family's otherwise.
-func (a *app) warnCount(g groupState, ok bool) int {
+func (a *App) warnCount(g groupState, ok bool) int {
 	items := g.items
 	if !ok {
 		items = nil
@@ -622,7 +620,7 @@ func (a *app) warnCount(g groupState, ok bool) int {
 	return n
 }
 
-func (a *app) list(c *ui.Context) {
+func (a *App) list(c *ui.Context) {
 	ui.Scroll(c).Grow(1).Children(func() {
 		ui.Row(c).Children(func() {
 			ui.Spacer(c)
@@ -642,7 +640,7 @@ func (a *app) list(c *ui.Context) {
 	})
 }
 
-func (a *app) overview(c *ui.Context) {
+func (a *App) overview(c *ui.Context) {
 	p := a.pal
 	n := 0
 	for _, g := range a.groups {
@@ -681,7 +679,7 @@ func sumCount(g groupState) int {
 	return n
 }
 
-func (a *app) family(c *ui.Context, g groupState) {
+func (a *App) family(c *ui.Context, g groupState) {
 	if len(g.items) == 0 {
 		return
 	}
@@ -690,7 +688,7 @@ func (a *app) family(c *ui.Context, g groupState) {
 	}
 }
 
-func (a *app) skeleton(c *ui.Context) {
+func (a *App) skeleton(c *ui.Context) {
 	p := a.pal
 	for range 3 {
 		ui.Column(c).Height(56).Padding(0, 32).Children(func() {
@@ -699,7 +697,7 @@ func (a *app) skeleton(c *ui.Context) {
 	}
 }
 
-func (a *app) totalSize() int64 {
+func (a *App) totalSize() int64 {
 	var n int64
 	for _, g := range a.groups {
 		n += g.size
@@ -707,7 +705,7 @@ func (a *app) totalSize() int64 {
 	return n
 }
 
-func (a *app) totalCount() int {
+func (a *App) totalCount() int {
 	n := 0
 	for _, g := range a.groups {
 		n += len(g.items)
@@ -715,7 +713,7 @@ func (a *app) totalCount() int {
 	return n
 }
 
-func (a *app) totalLeaves() int {
+func (a *App) totalLeaves() int {
 	n := 0
 	for _, g := range a.groups {
 		n += sumCount(g)
@@ -725,7 +723,7 @@ func (a *app) totalLeaves() int {
 
 // actionBar is the strip that turns a selection into the one action that
 // matters. It is a bar, not a floating pill: native windows do not float.
-func (a *app) actionBar(c *ui.Context) {
+func (a *App) actionBar(c *ui.Context) {
 	p := a.pal
 	n, bytes := a.checkedTotal()
 	total := a.totalSize()
@@ -757,7 +755,7 @@ func (a *app) actionBar(c *ui.Context) {
 	})
 }
 
-func (a *app) primaryButton(c *ui.Context, label string, enabled bool, fn func()) {
+func (a *App) primaryButton(c *ui.Context, label string, enabled bool, fn func()) {
 	p := a.pal
 	bg, fg := p.Accent, p.OnAccent
 	if !enabled {

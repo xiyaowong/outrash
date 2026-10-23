@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"image"
@@ -15,18 +15,18 @@ import (
 	"outrash/internal/core"
 )
 
-func testApp(t *testing.T, debug bool) *app {
+func testApp(t *testing.T, debug bool) *App {
 	t.Helper()
-	return testAppWith(t, options{debug: debug, noDelete: true})
+	return testAppWith(t, Options{Debug: debug, NoDelete: true})
 }
 
-func testAppWith(t *testing.T, so options) *app {
+func testAppWith(t *testing.T, so Options) *App {
 	t.Helper()
-	cfg, err := core.Parse(rulesJSON)
+	cfg, err := core.Parse(core.Rules)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := newApp(cfg, core.Options{
+	a := New(cfg, core.Options{
 		GOOS:   "windows",
 		Home:   `C:\Users\tester`,
 		Getenv: func(string) string { return "" },
@@ -173,7 +173,7 @@ func TestWidths(t *testing.T) {
 }
 
 func TestPlanExecuteVisibleOnlyOutsideDebug(t *testing.T) {
-	a := testAppWith(t, options{})
+	a := testAppWith(t, Options{})
 	a.now = fixedTime(0)
 	a.checked[`C:\Users\tester\AppData\Local\go-build\00`] = true
 	a.openPlan(a.selectedPlan())
@@ -211,7 +211,7 @@ func TestDarkSystemKeepsLightPalette(t *testing.T) {
 
 // A cache the scan could not read must not pass for an empty one.
 func TestUnreadableScanIsVisible(t *testing.T) {
-	a := testAppWith(t, options{})
+	a := testAppWith(t, Options{})
 	a.now = fixedTime(0)
 	res, ok := a.cache.Get("node", "npm")
 	if !ok {
@@ -243,7 +243,7 @@ func TestUnreadableScanIsVisible(t *testing.T) {
 // A removal must finish before the list is rebuilt: a scan racing the
 // deletion would show paths that are already gone.
 func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
-	a := testAppWith(t, options{})
+	a := testAppWith(t, Options{})
 	a.cfg = &core.Config{} // keeps the tests' rescan off the disk
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -293,7 +293,7 @@ func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
 // show the same cache smaller, and only a path written after the removal
 // counts as regenerated.
 func TestReceiptComparesBeforeAndAfter(t *testing.T) {
-	a := testAppWith(t, options{})
+	a := testAppWith(t, Options{})
 	a.now = fixedTime(0)
 	const serilog = `C:\Users\tester\.nuget\packages\serilog\serilog.1.1`
 	pl := &core.Plan{Title: "t", Steps: []core.Step{{Path: serilog, Bytes: 50}}}
@@ -347,7 +347,7 @@ func TestReceiptComparesBeforeAndAfter(t *testing.T) {
 // A path the removal could not delete is a failure, never a rebuild; one
 // that is back with its old mtime was simply never gone.
 func TestReceiptDoesNotCallFailuresRegenerated(t *testing.T) {
-	a := testAppWith(t, options{})
+	a := testAppWith(t, Options{})
 	a.now = fixedTime(0)
 	const stuck = `C:\Users\tester\.nuget\packages\serilog\serilog.1.1`
 	pl := &core.Plan{Title: "t", Steps: []core.Step{{Path: stuck, Bytes: 50}}}
@@ -388,7 +388,7 @@ func TestReceiptDoesNotCallFailuresRegenerated(t *testing.T) {
 // An old path that survives a successful removal was not written back; it is
 // "still there", not "regenerated".
 func TestReceiptCallsOldSurvivorsStill(t *testing.T) {
-	a := testAppWith(t, options{})
+	a := testAppWith(t, Options{})
 	a.now = fixedTime(0)
 	const path = `C:\Users\tester\.nuget\packages\serilog\serilog.1.1`
 	pl := &core.Plan{Title: "t", Steps: []core.Step{{Path: path, Bytes: 50}}}
@@ -417,7 +417,7 @@ func TestReceiptCallsOldSurvivorsStill(t *testing.T) {
 // The sheet must say why each path goes and which version stays — the two
 // things that make "保留最新" safe enough to press.
 func TestPlanShowsReasonsAndKept(t *testing.T) {
-	a := testAppWith(t, options{})
+	a := testAppWith(t, Options{})
 	a.now = fixedTime(0)
 	tt := ui.NewTester(a.view, 940, 660)
 	if err := tt.Click(".NET"); err != nil {
@@ -494,7 +494,7 @@ func TestAbbrevPath(t *testing.T) {
 // A plan of nearly identical tails: the sheet must still show which version
 // each row deletes.
 func TestPlanSheetLongPaths(t *testing.T) {
-	a := testAppWith(t, options{})
+	a := testAppWith(t, Options{})
 	a.now = fixedTime(0)
 	root := core.Root{Path: `C:\Users\tester\.nuget\packages`, Source: "环境变量 NUGET_PACKAGES"}
 	e := core.Entry{
@@ -526,9 +526,11 @@ func fixedTime(daysAgo int) (t time.Time) {
 	return time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC).AddDate(0, 0, -daysAgo)
 }
 
+// write saves a frame for the README; shots stay at the repo root, not
+// beside this package.
 func write(t *testing.T, name string, img *image.RGBA) {
 	t.Helper()
-	dir := filepath.Join("testdata", "shots")
+	dir := filepath.Join("..", "..", "testdata", "shots")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

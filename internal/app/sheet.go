@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -11,9 +11,9 @@ import (
 	"outrash/internal/core"
 )
 
-func uiView(a *app) *ui.Content { return ui.View(a.view) }
+func View(a *App) *ui.Content { return ui.View(a.view) }
 
-func (a *app) openPlan(p *core.Plan) {
+func (a *App) openPlan(p *core.Plan) {
 	if a.busy {
 		return
 	}
@@ -21,7 +21,7 @@ func (a *app) openPlan(p *core.Plan) {
 		a.msg = "没有需要清理的内容"
 		return
 	}
-	if a.debug {
+	if a.so.Debug {
 		a.printPlan(p)
 	}
 	a.shown = p
@@ -30,7 +30,7 @@ func (a *app) openPlan(p *core.Plan) {
 
 // printPlan writes the plan to stdout in the order it would run, which is
 // what a -debug build is for.
-func (a *app) printPlan(p *core.Plan) {
+func (a *App) printPlan(p *core.Plan) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n== %s ==\n", p.Title)
 	fmt.Fprintf(&b, "共 %d 项，%s\n", len(p.Steps), core.Bytes(p.Bytes))
@@ -42,7 +42,7 @@ func (a *app) printPlan(p *core.Plan) {
 
 // printScanWarnings lists what a scan could not read. The window can only
 // say that a cache was incomplete; a -debug build names the paths.
-func (a *app) printScanWarnings(cache *core.Cache) {
+func (a *App) printScanWarnings(cache *core.Cache) {
 	keys := make([]string, 0, len(cache.Results))
 	for k, r := range cache.Results {
 		if r.Failed() {
@@ -72,14 +72,14 @@ func (a *app) printScanWarnings(cache *core.Cache) {
 	fmt.Print(b.String())
 }
 
-func (a *app) dismiss() {
+func (a *App) dismiss() {
 	if a.modal != modalNone {
 		a.modal = modalNone
 		a.shown = nil
 	}
 }
 
-func (a *app) sheet(c *ui.Context) {
+func (a *App) sheet(c *ui.Context) {
 	switch a.modal {
 	case modalPlan:
 		a.planSheet(c)
@@ -90,7 +90,7 @@ func (a *app) sheet(c *ui.Context) {
 
 // planSheet is the review step: every path, its size, the order, and the one
 // action that acts.
-func (a *app) planSheet(c *ui.Context) {
+func (a *App) planSheet(c *ui.Context) {
 	p := a.pal
 	pl := a.shown
 	if pl == nil || pl.Empty() {
@@ -153,7 +153,7 @@ func (a *app) planSheet(c *ui.Context) {
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 				ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
 					note := "下次使用时由各工具自行下载或重新编译。"
-					if a.debug || a.so.noDelete {
+					if a.so.Debug || a.so.NoDelete {
 						note = "调试模式：只列出，不删除。"
 					}
 					ui.Text(c, note).FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
@@ -162,7 +162,7 @@ func (a *app) planSheet(c *ui.Context) {
 					if cancel.Clicked() {
 						a.dismiss()
 					}
-					if a.debug || a.so.noDelete {
+					if a.so.Debug || a.so.NoDelete {
 						return
 					}
 					a.primaryButton(c, "执行清理", true, a.run)
@@ -189,7 +189,7 @@ func abbrevPath(p string, max int) string {
 }
 
 // run deletes the shown plan in the background, then rescans.
-func (a *app) run() {
+func (a *App) run() {
 	pl := a.shown
 	if pl == nil || a.busy {
 		return
@@ -212,7 +212,7 @@ func (a *app) run() {
 
 // finish applies a completed removal and only now rescans: a scan racing
 // the deletion would list paths that no longer exist.
-func (a *app) finish(out core.Outcome) {
+func (a *App) finish(out core.Outcome) {
 	a.busy = false
 	r := a.report
 	if r == nil {
@@ -235,10 +235,10 @@ func (a *app) finish(out core.Outcome) {
 	}
 	a.msg = ""
 	a.modal = modalReport
-	a.scan()
+	a.Scan()
 }
 
-func (a *app) reportSheet(c *ui.Context) {
+func (a *App) reportSheet(c *ui.Context) {
 	p := a.pal
 	r := a.report
 	if r == nil {
@@ -294,7 +294,7 @@ func (a *app) reportSheet(c *ui.Context) {
 
 // receiptBlock proves the clean with numbers: what the families held
 // before, what they hold now, and anything the tools wrote straight back.
-func (a *app) receiptBlock(c *ui.Context, r *report) {
+func (a *App) receiptBlock(c *ui.Context, r *report) {
 	p := a.pal
 	rc := r.receipt
 	if rc == nil {
@@ -340,7 +340,7 @@ func (a *app) receiptBlock(c *ui.Context, r *report) {
 	})
 }
 
-func (a *app) stat(c *ui.Context, label, value string) {
+func (a *App) stat(c *ui.Context, label, value string) {
 	p := a.pal
 	ui.Column(c).Gap(2).Children(func() {
 		ui.Text(c, value).Font(core.Mono()).FontSize(20).FontWeight(600).TextColor(p.Ink)

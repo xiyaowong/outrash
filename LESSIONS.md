@@ -8,7 +8,8 @@ Append-only until stale; delete entries that stop being true. One line each.
 - A click goes to the **innermost interactive** element in the hit chain; nothing bubbles to ancestors.
 - `tt.Click(text)` finds the *first* label whose text matches exactly — a duplicate label (header note, sidebar) silently steals the click. Keep labels unique.
 - A clickable row is a plain `Row` with `.OnClick`; make chevrons/expanders non-interactive so they fall through to it.
-- `Hovered()` is paint-time only; there is no public per-state style hook. Skip hover fills rather than fight it.
+- `Hovered()` is paint-time only, but reading it on the row while building the row is enough: it also makes mygo request a frame when the pointer enters or leaves.
+- Render tests write `testdata/shots` relative to the working directory, and `go test` runs a package from its own directory — resolve the root with `..`.
 - `Tester.Find` matches shown text *or* `Label`. `tt.Click("x")` fails if the text sits off-window.
 - Native UI has no CSS; every look is fluent calls + `Draw` painter. Theme copies are cheap.
 - Windows hidden title bar: `mygo.TitleBarHidden` keeps real caption buttons over the view.
