@@ -5,7 +5,6 @@
     {
       "id": "node",
       "name": "Node.js",
-      "color": "#5FA04E",
       "items": [
         {
           "id": "npm",
@@ -108,7 +107,6 @@
     {
       "id": "dotnet",
       "name": ".NET",
-      "color": "#6C3AC8",
       "items": [
         {
           "id": "nuget-packages",
@@ -139,7 +137,6 @@
     {
       "id": "go",
       "name": "Go",
-      "color": "#0093B0",
       "items": [
         {
           "id": "go-build",
@@ -170,7 +167,6 @@
     {
       "id": "rust",
       "name": "Rust",
-      "color": "#C4602C",
       "items": [
         {
           "id": "cargo-registry",
@@ -199,7 +195,6 @@
     {
       "id": "python",
       "name": "Python",
-      "color": "#3776AB",
       "items": [
         {
           "id": "pip",
@@ -254,7 +249,6 @@
     {
       "id": "ai",
       "name": "AI 模型",
-      "color": "#9A6A2F",
       "items": [
         {
           "id": "huggingface",
@@ -274,7 +268,6 @@
     {
       "id": "jvm",
       "name": "JVM",
-      "color": "#E07020",
       "items": [
         {
           "id": "gradle",
@@ -292,7 +285,6 @@
     {
       "id": "other",
       "name": "其他",
-      "color": "#6E6E73",
       "items": [
         {
           "id": "pub",

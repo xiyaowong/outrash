@@ -11,6 +11,9 @@ import (
 // The catalog is the product: if one of these tools falls out of it, the
 // window silently stops being able to clean it.
 func TestCatalogCoversCommonTools(t *testing.T) {
+	if strings.Contains(string(Rules), `"color"`) {
+		t.Error("group colors are not read anywhere; a field that changes nothing is a trap for the next entry")
+	}
 	cfg, err := Parse(Rules)
 	if err != nil {
 		t.Fatal(err)

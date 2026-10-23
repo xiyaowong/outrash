@@ -33,7 +33,6 @@ type Config struct {
 type Group struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
-	Color string `json:"color"`
 	Items []Item `json:"items"`
 }
 
