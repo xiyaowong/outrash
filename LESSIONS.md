@@ -12,7 +12,7 @@ Append-only until stale; delete entries that stop being true. One line each.
 - Render tests write `testdata/shots` relative to the working directory, and `go test` runs a package from its own directory — resolve the root with `..`.
 - `Tester.Find` matches shown text *or* `Label`. `tt.Click("x")` fails if the text sits off-window.
 - Native UI has no CSS; every look is fluent calls + `Draw` painter. Theme copies are cheap.
-- Windows hidden title bar: `mygo.TitleBarHidden` keeps real caption buttons over the view.
+- Windows hidden title bar: `mygo.TitleBarHidden` keeps real caption buttons over the view; their glyphs come from `Backend.isDark()`, so a light app on a dark desktop needs `Theme.SetSource(mygo.ThemeLight)`, not just a light palette.
 - A `Column` inside a `Row` needs `FillHeight()`, or `Grow` children never fill and the bottom bar rides up.
 - `ui.Scroll` inside fixed-height rows needs an explicit size or `Grow`, else it collapses.
 
@@ -23,3 +23,5 @@ Append-only until stale; delete entries that stop being true. One line each.
 
 ## Product
 - An unreadable cache and an empty cache look identical unless the error is carried to the row. Keep `Root.Err`/`Skipped`, and show them.
+- A scan that lands on an empty list makes the user do the first decision; landing on a safe recommendation makes the first screen an answer.
+- The summary screen and the cleanup screen are the same decision at two scales: checkboxes on rows, a tri-state box on a family.

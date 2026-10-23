@@ -4,8 +4,11 @@ Windows-first dev-cache cleaner. Go + mygo native UI. Cross-platform logic, no w
 
 ## Hard rules
 
-- **Never delete anything.** Not in code paths, not in tests, not by running the app.
-  Every action is a *plan*: list the paths, sizes, and order. The user reads it and decides.
+- **The user's click is the only delete.** Never remove anything yourself — not from a script,
+  not to clean up after a test, not by running the app. Everything the product offers is a
+  selection of catalog paths the user can read first.
+  The list *is* the plan: a scan lands on a recommendation, the user narrows it, 开始清理 acts on it.
+  A build that refuses to delete (`-debug`, `-no-delete`) shows the written plan instead.
 - No persistence. No config files, no registry, no logs. Temp dir only, and only if unavoidable.
 - Rules live in one place: `internal/core/rules.json`, embedded with `go:embed` as `core.Rules`.
 - Only removable-by-redownload content. Never sources, never project dirs, never consoles.
@@ -16,13 +19,13 @@ Windows-first dev-cache cleaner. Go + mygo native UI. Cross-platform logic, no w
 |---|---|
 | `main.go` | flags, window wiring; nothing else lives at the root |
 | `internal/core` | rules: parse + env override + path expansion · scan: walk dirs concurrently, per-entry size/mtime, classify versions · plan: policy → ordered list of `Step` (path, bytes, reason) · clean: guarded `os.RemoveAll`, the only code that deletes · theme: palette + type scale (ledger: paper, ink, one accent) · `rules.json` catalog |
-| `internal/app` | `app.go` title bar, rail, header, list, action bar · `cards.go` item and version rows, tri-state check, presets · `sheet.go` plan sheet, report sheet, clean run |
+| `internal/app` | `app.go` title bar, header, list, right panel, action bar, recommendation, clean estimate · `cards.go` item and version rows, tri-state check, tags, presets · `sheet.go` plan sheet (no-delete builds only), report sheet, clean run |
 
 ## Commands
 
 ```
 just ci                  # build + vet + test, the CI pair
-just debug               # every plan printed to stdout, execute button hidden
+just debug               # no deletion: the list is printed to stdout, 查看清理计划 opens the sheet
 just safe                # same refusal, keeps the normal UI
 just shots               # regenerate testdata/shots/*.png from internal/app
 go tool mygo vet .
