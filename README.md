@@ -25,7 +25,7 @@ just safe        # 正常界面，但拒绝执行任何删除
 go run .         # 打开窗口，扫描后按工具分组显示
 ```
 
-`-debug` 隐含 `-no-delete`。`just ci` 跑 build、vet 和测试；`just lint`、`just race`、`just cover` 分别跑 mygo 的 UI 生命周期检查、竞态检测和覆盖率。`just build` 与 `just build-full` 的差别就是 `-s -w -trimpath` 省下的体积（14.2 MB → 9.9 MB）。
+`-debug` 隐含 `-no-delete`。`just ci` 跑 build、vet 和测试；`just lint`、`just race`、`just cover` 分别跑 mygo 的 UI 生命周期检查、竞态检测和覆盖率。`just build` 与 `just build-full` 的差别就是 `-s -w -trimpath` 省下的体积（14.2 MB → 9.9 MB）。Windows 上三个可运行产物都是 GUI 子系统——`build`、`build-full` 自己传 `-H=windowsgui`，`release` 由 mygo 传——双击都不会弹出控制台窗口。
 
 ## 添加一个缓存
 
