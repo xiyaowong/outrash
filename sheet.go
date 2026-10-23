@@ -119,6 +119,13 @@ func (a *app) planSheet(c *ui.Context) {
 								ui.Text(c, g.Name).FontSize(12).FontWeight(600).TextColor(p.Ink3).Grow(1)
 								ui.Text(c, core.Bytes(g.Bytes)).Font(core.Mono()).FontSize(12).TextColor(p.Ink3)
 							})
+							// How each cache comes back is the promise the plan
+							// asks the user to believe, so it sits next to the
+							// paths rather than in a footer.
+							for _, it := range g.Items {
+								ui.Text(c, it.Name+" · "+it.Note).FontSize(11).TextColor(p.Ink3).
+									SingleLine().Padding(0, 0, 2, 0)
+							}
 							for _, s := range g.Steps {
 								n++
 								order := n

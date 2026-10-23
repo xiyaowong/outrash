@@ -117,6 +117,11 @@ func TestPlanSheetRenders(t *testing.T) {
 	if !tt.HasText("清理已选 9 项") {
 		t.Fatalf("plan sheet missing; texts %v", tt.Texts())
 	}
+	// The sheet has to say how this cache comes back; that is the whole
+	// promise behind asking for the deletion.
+	if !tt.HasText("NuGet 全局包 · 还原项目时自动重新下载") {
+		t.Fatalf("item note missing from the sheet; texts %v", tt.Texts())
+	}
 }
 
 func TestSelectionAndDebug(t *testing.T) {

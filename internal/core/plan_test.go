@@ -189,9 +189,9 @@ func TestSelectKeepsNewestByVersion(t *testing.T) {
 
 func TestAddAndGroups(t *testing.T) {
 	p := &Plan{}
-	p.Add("Node", "npm", Select([]Pick{{Name: "n1", Bytes: 5, ModTime: ago(1)}}, Policy{Now: day0}))
-	p.Add("Go", "go-build", Select([]Pick{{Name: "g1", Bytes: 50, ModTime: ago(1)}}, Policy{Now: day0}))
-	p.Add("Node", "pnpm", Select([]Pick{{Name: "n2", Bytes: 20, ModTime: ago(1)}}, Policy{Now: day0}))
+	p.Add("Node", "npm", "下次安装依赖时自动重新下载", Select([]Pick{{Name: "n1", Bytes: 5, ModTime: ago(1)}}, Policy{Now: day0}))
+	p.Add("Go", "go-build", "go build 时自动重新编译", Select([]Pick{{Name: "g1", Bytes: 50, ModTime: ago(1)}}, Policy{Now: day0}))
+	p.Add("Node", "pnpm", "下次安装依赖时自动重新下载", Select([]Pick{{Name: "n2", Bytes: 20, ModTime: ago(1)}}, Policy{Now: day0}))
 
 	if !equal(names(p), []string{"g1", "n2", "n1"}) {
 		t.Fatalf("order %v", names(p))
@@ -199,6 +199,12 @@ func TestAddAndGroups(t *testing.T) {
 	g := p.Groups()
 	if len(g) != 2 || g[0].Name != "Go" || g[1].Name != "Node" || g[1].Bytes != 25 || len(g[1].Steps) != 2 {
 		t.Fatalf("groups %+v", g)
+	}
+	if len(g[1].Items) != 2 || g[1].Items[0].Note != "下次安装依赖时自动重新下载" {
+		t.Fatalf("Node items %+v, want both caches with their notes", g[1].Items)
+	}
+	if len(g[0].Items) != 1 || g[0].Items[0].Name != "go-build" {
+		t.Fatalf("Go items %+v", g[0].Items)
 	}
 	if p.Bytes != 75 {
 		t.Fatalf("bytes %d", p.Bytes)
