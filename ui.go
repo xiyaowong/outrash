@@ -78,6 +78,28 @@ type report struct {
 	freed   int64
 	failed  int
 	elapsed time.Duration
+	// receipt compares the families before the clean with the rescan that
+	// followed it; nil until a clean starts.
+	receipt *receipt
+}
+
+// receipt answers the only question a report cannot: did the disk actually
+// shrink, or did the tool write it straight back?
+type receipt struct {
+	before  int64
+	groups  []delta
+	planned map[string]bool
+	// after is filled by the rescan; until then the sheet says it is
+	// measuring.
+	after       int64
+	regenerated int
+	regenBytes  int64
+	measured    bool
+}
+
+type delta struct {
+	name          string
+	before, after int64
 }
 
 type groupState struct {
@@ -154,11 +176,89 @@ func (a *app) scan() {
 			a.now = time.Now()
 			a.regroup()
 			a.busyBar(false)
+			a.closeReceipt(cache)
 			if a.debug {
 				a.printScanWarnings(cache)
 			}
 		})
 	}()
+}
+
+// openReceipt snapshots what the families hold before a clean, and which
+// paths the plan will remove, so the rescan can prove both numbers.
+func (a *app) openReceipt(pl *core.Plan) *receipt {
+	r := &receipt{planned: map[string]bool{}, after: -1}
+	for _, g := range a.groups {
+		r.groups = append(r.groups, delta{name: g.group.Name, before: g.size})
+		r.before += g.size
+	}
+	for _, s := range pl.Steps {
+		r.planned[s.Path] = true
+	}
+	return r
+}
+
+// closeReceipt compares a finished rescan with the snapshot. It only fills
+// in a receipt that was opened by a clean and not yet measured.
+func (a *app) closeReceipt(cache *core.Cache) {
+	if a.report == nil || a.report.receipt == nil || a.report.receipt.measured {
+		return
+	}
+	r := a.report.receipt
+	r.measured = true
+	r.after = 0
+	at := map[string]int{}
+	for i, d := range r.groups {
+		at[d.name] = i
+	}
+	for _, g := range a.groups {
+		i, ok := at[g.group.Name]
+		if !ok {
+			continue
+		}
+		r.groups[i].after += g.size
+		r.after += g.size
+	}
+	for _, res := range cache.Results {
+		for _, root := range res.Roots {
+			for _, p := range treePaths(root) {
+				if r.planned[p] {
+					r.regenerated++
+					r.regenBytes += sizeOf(root, p)
+				}
+			}
+		}
+	}
+}
+
+// treePaths lists every removable path a root holds, which is what a plan
+// names: entries, or versions of a package.
+func treePaths(root core.Root) []string {
+	var out []string
+	for _, e := range root.Entries {
+		if len(e.Versions) > 0 {
+			for _, v := range e.Versions {
+				out = append(out, v.Path)
+			}
+			continue
+		}
+		out = append(out, e.Path)
+	}
+	return out
+}
+
+func sizeOf(root core.Root, p string) int64 {
+	for _, e := range root.Entries {
+		if e.Path == p {
+			return e.Size
+		}
+		for _, v := range e.Versions {
+			if v.Path == p {
+				return v.Size
+			}
+		}
+	}
+	return 0
 }
 
 // busyBar is the scan/clean indicator: a busy progress bar in the taskbar

@@ -284,6 +284,61 @@ func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
 	}
 }
 
+// A receipt is only honest when it measures: the rescan after a clean must
+// show the same cache smaller, and name anything the tool wrote back.
+func TestReceiptComparesBeforeAndAfter(t *testing.T) {
+	a := testAppWith(t, options{})
+	a.now = fixedTime(0)
+	pl := &core.Plan{
+		Title: "t",
+		Steps: []core.Step{{Path: `C:\Users\tester\.nuget\packages\serilog\serilog.1.1`, Bytes: 50}},
+	}
+	a.report = &report{receipt: a.openReceipt(pl)}
+	a.report.freed = 50
+	a.modal = modalReport
+
+	// The removal is over; the next scan brings back a smaller .NET family
+	// and a regenerated serilog version.
+	after := core.Result{GroupID: "dotnet", ItemID: "nuget-packages", Unit: core.UnitVersioned}
+	root := core.Root{Path: `C:\Users\tester\.nuget\packages`}
+	e := core.Entry{Name: "serilog", Path: root.Path + `\serilog`, Package: "serilog"}
+	e.Versions = []core.Version{{Name: "serilog.1.1", Path: `C:\Users\tester\.nuget\packages\serilog\serilog.1.1`, Size: 50}}
+	e.Size = 50
+	root.Entries = []core.Entry{e}
+	root.Size, root.Count = 50, 1
+	after.Roots = []core.Root{root}
+	after.Size, after.Count = 50, 1
+	a.cache.Results["dotnet/nuget-packages"] = after
+	a.regroup()
+	a.closeReceipt(a.cache)
+
+	rc := a.report.receipt
+	if !rc.measured || len(rc.groups) == 0 {
+		t.Fatalf("receipt not measured: %+v", rc)
+	}
+	// The .NET family is the only one that changed: it now holds exactly the
+	// regenerated version.
+	if d := rc.groups[1]; d.name != ".NET" || d.after != 50 || d.before <= 50 {
+		t.Fatalf(".NET delta = %+v", d)
+	}
+	if rc.after >= rc.before {
+		t.Fatalf("after %d must be below before %d", rc.after, rc.before)
+	}
+	if rc.regenerated != 1 || rc.regenBytes != 50 {
+		t.Fatalf("regenerated = %d (%d bytes), want the one serilog version", rc.regenerated, rc.regenBytes)
+	}
+
+	tt := ui.NewTester(a.view, 940, 660)
+	tt.Frame()
+	if !tt.HasText("清理前 → 清理后") {
+		t.Fatalf("receipt missing; texts %v", tt.Texts())
+	}
+	if !tt.HasText("已重新生成 1 项 · 50 B") {
+		t.Fatalf("regenerated line missing; texts %v", tt.Texts())
+	}
+	write(t, "report.png", tt.Image())
+}
+
 // 保留最新 promises to narrow the selection to old versions. A family that
 // also holds a plain download cache must not have that cache swept in.
 func TestKeepNewestSparesPlainCaches(t *testing.T) {
