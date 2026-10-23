@@ -37,7 +37,7 @@ func main() {
 			Height:          820,
 			MinWidth:        1000,
 			MinHeight:       640,
-			BackgroundColor: "#F2F3F4",
+			BackgroundColor: "#F1F4F8",
 			TitleBarStyle:   mygo.TitleBarHidden,
 			Content:         app.View(a),
 		})

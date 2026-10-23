@@ -534,7 +534,7 @@ func (a *App) titleBar(c *ui.Context) {
 	p := a.pal
 	bar := c.TitleBar()
 	h := max(bar.Height, 34)
-	ui.Row(c).Height(h).DragWindow().Background(p.Canvas).
+	ui.Row(c).Height(h).DragWindow().Gradient(p.Wash(), p.Canvas, 180).
 		Padding(0, bar.Right+12, 0, bar.Left+14).AlignItems(ui.Center).Gap(10).Children(func() {
 		ui.Box(c).Size(10, 10).Shrink(0).Radius(2).Background(p.Accent)
 		ui.Text(c, "Outrash").FontSize(12).FontWeight(600).TextColor(p.Ink).Shrink(0)
@@ -625,7 +625,7 @@ func (a *App) summary() string {
 // quiet fill and a 2px accent bar, not by colour.
 func (a *App) nav(c *ui.Context) {
 	p := a.pal
-	ui.Column(c).Width(168).FillHeight().Background(p.Canvas).
+	ui.Column(c).Width(168).FillHeight().Gradient(p.Wash(), p.Canvas, 180).
 		BorderWidth(0, 0, 0, 1).BorderColor(p.Rule).
 		Children(func() {
 			ui.Column(c).Padding(10, 8).Gap(2).Children(func() {
@@ -675,14 +675,14 @@ func (a *App) navItem(c *ui.Context, pg page, label string, icon navIcon) {
 	case row.Hovered():
 		bg = p.Hover
 	}
-	row.Background(bg).Radius(3)
+	row.Background(bg).Radius(6)
 	// The marker is painted on the row rather than laid out in it: a child
 	// would shift the icon of whichever item is active.
 	row.Draw(func(pt *ui.Painter, r ui.Rect) {
 		if !active {
 			return
 		}
-		pt.Fill(ui.Rect{X: r.X, Y: r.Y + 8, W: 2, H: r.H - 16}, p.Accent, 0)
+		pt.Fill(ui.Rect{X: r.X, Y: r.Y + 7, W: 3, H: r.H - 14}, p.Accent, 2)
 	})
 	row.Children(func() {
 		fg := p.Ink2
@@ -738,7 +738,7 @@ func (a *App) pageHeader(c *ui.Context) {
 	ui.Column(c).Shrink(0).Children(func() {
 		ui.Row(c).Padding(20, 24, 14, 24).Gap(12).AlignItems(ui.End).Children(func() {
 			ui.Column(c).Grow(1).Gap(3).Children(func() {
-				ui.Text(c, title).FontSize(18).FontWeight(600).TextColor(p.Ink).SingleLine()
+				ui.Text(c, title).FontSize(19).FontWeight(650).TextColor(p.Ink).SingleLine()
 				ui.Text(c, sub).FontSize(12).TextColor(p.Ink3).SingleLine()
 			})
 			if a.page == pageResults || a.page == pageOverview {
@@ -991,9 +991,9 @@ func (a *App) actionBar(c *ui.Context) {
 	for _, g := range a.groups {
 		all += len(a.groupPicks(g))
 	}
-	ui.Column(c).Shrink(0).Background(p.Surface).Children(func() {
+	ui.Column(c).Shrink(0).Children(func() {
 		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-		ui.Row(c).Height(52).Padding(0, 24).Gap(12).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Height(52).Padding(8, 24).Gap(12).AlignItems(ui.Center).Children(func() {
 			if a.page == pageResults && all > 0 {
 				a.check(c, stateOf(n, all), a.selectAllVisible)
 				ui.Text(c, "全选").FontSize(12).TextColor(p.Ink2).Shrink(0)
@@ -1058,10 +1058,10 @@ func (a *App) textButton(c *ui.Context, label string, fn func()) {
 
 // actionButton is the one button shape: a quiet outline that fills under the
 // pointer, so it reads as a control, not a label. primary gets the accent and
-// the only solid fill on screen.
+// the only solid fill on screen, lifted by a shadow so it sits above the bar.
 func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, fn func()) {
 	p := a.pal
-	btn := ui.ButtonBase(c).Height(30).Radius(3).Padding(0, 14).
+	btn := ui.ButtonBase(c).Height(30).Radius(6).Padding(0, 14).
 		Shrink(0).AlignItems(ui.Center).Border(1, p.RuleStrong)
 	bg, fg := p.Surface, p.Ink
 	switch {
@@ -1080,16 +1080,20 @@ func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, f
 	switch {
 	case !enabled:
 	case primary && btn.Pressed():
-		bg = tint(p.Ink, p.Accent, 0.18)
+		bg = p.AccentHover
 	case primary && btn.Hovered():
-		bg = tint(p.Ink, p.Accent, 0.10)
+		bg = p.AccentHover
 	case btn.Pressed():
 		bg = p.Selected
-		btn.Border(1, p.Ink3)
+		btn.Border(1, p.Accent)
 	case btn.Hovered():
 		bg = p.Hover
+		btn.Border(1, p.RuleStrong)
 	}
 	btn.Background(bg)
+	if primary && enabled {
+		btn.Shadow(0, 2, 6, 0, tint(p.Accent, p.Surface, 0.24))
+	}
 	btn.Children(func() { ui.Text(c, label).FontSize(12).FontWeight(600).TextColor(fg).SingleLine() })
 }
 
@@ -1099,7 +1103,7 @@ func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, f
 func (a *App) panel(c *ui.Context) {
 	p := a.pal
 	n, bytes := a.checkedTotal()
-	ui.Column(c).Width(268).FillHeight().Background(p.Surface).
+	ui.Column(c).Width(268).FillHeight().Background(p.Panel).
 		BorderWidth(0, 0, 0, 1).BorderColor(p.Rule).
 		Children(func() {
 			ui.Column(c).Padding(20, 20).Gap(18).Children(func() {
@@ -1219,11 +1223,11 @@ func (a *App) elapsed() string {
 	return a.cache.Elapsed.Round(time.Millisecond).String()
 }
 
-// tag is a small status mark: a quiet tint of the status colour, no border,
-// sized to the text it carries.
+// tag is a small status pill: a pale wash of the status colour under its
+// darker word, sized to the text it carries.
 func tag(c *ui.Context, text string, fg, ground ui.Color) {
-	ui.Box(c).Height(18).Radius(2).Padding(1, 6).Shrink(0).AlignItems(ui.Center).
-		Background(tint(fg, ground, 0.09)).Children(func() {
+	ui.Box(c).Height(20).Radius(10).Padding(0, 8).Shrink(0).AlignItems(ui.Center).
+		Background(tint(fg, ground, 0.10)).Children(func() {
 		ui.Text(c, text).FontSize(11).FontWeight(600).TextColor(fg).SingleLine()
 	})
 }
