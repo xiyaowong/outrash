@@ -1,6 +1,6 @@
-// Package rules reads the cache catalog: which tools keep rebuildable
-// files, where they put them, and how their entries are shaped.
-package rules
+// rules.go reads the cache catalog: which tools keep rebuildable files,
+// where they put them, and how their entries are shaped.
+package core
 
 import (
 	"encoding/json"

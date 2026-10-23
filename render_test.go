@@ -12,8 +12,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"outrash/internal/rules"
-	"outrash/internal/scan"
+	"outrash/internal/core"
 )
 
 func testApp(t *testing.T, debug bool) *app {
@@ -23,11 +22,11 @@ func testApp(t *testing.T, debug bool) *app {
 
 func testAppWith(t *testing.T, so options) *app {
 	t.Helper()
-	cfg, err := rules.Parse(rulesJSON)
+	cfg, err := core.Parse(rulesJSON)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := newApp(cfg, rules.Options{
+	a := newApp(cfg, core.Options{
 		GOOS:   "windows",
 		Home:   `C:\Users\tester`,
 		Getenv: func(string) string { return "" },
@@ -40,9 +39,9 @@ func testAppWith(t *testing.T, so options) *app {
 
 // fixture is a scan result shaped like this machine's, without touching the
 // disk.
-func fixture() *scan.Cache {
-	c := &scan.Cache{Results: map[string]scan.Result{}}
-	add := func(r scan.Result) {
+func fixture() *core.Cache {
+	c := &core.Cache{Results: map[string]core.Result{}}
+	add := func(r core.Result) {
 		for _, root := range r.Roots {
 			r.Size += root.Size
 			r.Count += root.Count
@@ -50,13 +49,13 @@ func fixture() *scan.Cache {
 		c.Results[r.GroupID+"/"+r.ItemID] = r
 	}
 
-	var nuget scan.Result
-	nuget.GroupID, nuget.ItemID, nuget.Unit = "dotnet", "nuget-packages", rules.UnitVersioned
-	root := scan.Root{Path: `C:\Users\tester\.nuget\packages`, Source: "环境变量 NUGET_PACKAGES"}
+	var nuget core.Result
+	nuget.GroupID, nuget.ItemID, nuget.Unit = "dotnet", "nuget-packages", core.UnitVersioned
+	root := core.Root{Path: `C:\Users\tester\.nuget\packages`, Source: "环境变量 NUGET_PACKAGES"}
 	for i, name := range []string{"newtonsoft.json", "serilog", "xunit"} {
-		e := scan.Entry{Name: name, Package: name, Path: root.Path + `\` + name, IsDir: true}
+		e := core.Entry{Name: name, Package: name, Path: root.Path + `\` + name, IsDir: true}
 		for v := range 3 {
-			e.Versions = append(e.Versions, scan.Version{
+			e.Versions = append(e.Versions, core.Version{
 				Name:    name + ".1." + string(rune('0'+v)),
 				Path:    e.Path + `\` + name + ".1." + string(rune('0'+v)),
 				Size:    int64(40_000_000 + v*10_000_000 + i*5_000_000),
@@ -67,29 +66,29 @@ func fixture() *scan.Cache {
 		root.Entries = append(root.Entries, e)
 		root.Size += e.Size
 	}
-	nuget.Roots = []scan.Root{root}
+	nuget.Roots = []core.Root{root}
 
-	var npm scan.Result
-	npm.GroupID, npm.ItemID, npm.Unit = "node", "npm", rules.UnitEntries
-	npmRoot := scan.Root{Path: `C:\Users\tester\AppData\Local\npm-cache`, Source: "默认位置"}
+	var npm core.Result
+	npm.GroupID, npm.ItemID, npm.Unit = "node", "npm", core.UnitEntries
+	npmRoot := core.Root{Path: `C:\Users\tester\AppData\Local\npm-cache`, Source: "默认位置"}
 	for _, n := range []string{"_cacache", "_logs", "_npx"} {
-		npmRoot.Entries = append(npmRoot.Entries, scan.Entry{
+		npmRoot.Entries = append(npmRoot.Entries, core.Entry{
 			Name: n, Path: npmRoot.Path + `\` + n, Size: 21_000_000, ModTime: fixedTime(90),
 		})
 		npmRoot.Size += 21_000_000
 	}
-	npm.Roots = []scan.Root{npmRoot}
+	npm.Roots = []core.Root{npmRoot}
 
-	var gocache scan.Result
-	gocache.GroupID, gocache.ItemID, gocache.Unit = "go", "go-build", rules.UnitEntries
-	goRoot := scan.Root{Path: `C:\Users\tester\AppData\Local\go-build`, Source: "环境变量 GOCACHE"}
+	var gocache core.Result
+	gocache.GroupID, gocache.ItemID, gocache.Unit = "go", "go-build", core.UnitEntries
+	goRoot := core.Root{Path: `C:\Users\tester\AppData\Local\go-build`, Source: "环境变量 GOCACHE"}
 	for _, n := range []string{"00", "1a", "7f", "c3"} {
-		goRoot.Entries = append(goRoot.Entries, scan.Entry{
+		goRoot.Entries = append(goRoot.Entries, core.Entry{
 			Name: n, Path: goRoot.Path + `\` + n, Size: 310_000_000, ModTime: fixedTime(3),
 		})
 		goRoot.Size += 310_000_000
 	}
-	gocache.Roots = []scan.Root{goRoot}
+	gocache.Roots = []core.Root{goRoot}
 
 	add(nuget)
 	add(npm)
@@ -219,19 +218,19 @@ func TestAbbrevPath(t *testing.T) {
 func TestPlanSheetLongPaths(t *testing.T) {
 	a := testAppWith(t, options{})
 	a.now = fixedTime(0)
-	root := scan.Root{Path: `C:\Users\tester\.nuget\packages`, Source: "环境变量 NUGET_PACKAGES"}
-	e := scan.Entry{
+	root := core.Root{Path: `C:\Users\tester\.nuget\packages`, Source: "环境变量 NUGET_PACKAGES"}
+	e := core.Entry{
 		Name: "microsoft.extensions.logging.abstractions",
 		Path: root.Path + `\microsoft.extensions.logging.abstractions`,
 	}
 	for i, v := range []string{"8.0.0-preview.7.23375.6", "8.0.0-preview.6.23329.7", "7.0.0", "6.0.1"} {
-		e.Versions = append(e.Versions, scan.Version{
+		e.Versions = append(e.Versions, core.Version{
 			Name: v, Path: e.Path + `\` + v, Size: int64(40_000_000 - i*1_000_000), ModTime: fixedTime(20),
 		})
 	}
-	root.Entries = []scan.Entry{e}
-	res := scan.Result{GroupID: "dotnet", ItemID: "nuget-packages", Unit: rules.UnitVersioned,
-		Roots: []scan.Root{root}, Size: 154_000_000, Count: 4}
+	root.Entries = []core.Entry{e}
+	res := core.Result{GroupID: "dotnet", ItemID: "nuget-packages", Unit: core.UnitVersioned,
+		Roots: []core.Root{root}, Size: 154_000_000, Count: 4}
 	a.cache.Results["dotnet/nuget-packages"] = res
 	a.regroup()
 	for _, p := range allPicks(res) {
@@ -264,4 +263,3 @@ func write(t *testing.T, name string, img *image.RGBA) {
 		t.Fatal(err)
 	}
 }
-

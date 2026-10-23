@@ -1,6 +1,6 @@
-// Package scan walks the cache directories a catalog names and measures
-// what is inside them.
-package scan
+// scan.go walks the cache directories a catalog names and measures what is
+// inside them.
+package core
 
 import (
 	"io/fs"
@@ -10,8 +10,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"outrash/internal/rules"
 )
 
 // Entry is one removable thing at the top of a root: a package folder, a
@@ -79,7 +77,7 @@ type Progress func(r Result)
 
 // Run scans every item of cfg, up to workers at a time, calling onResult
 // as each finishes. It returns when every item is done or stop is closed.
-func Run(cfg *rules.Config, o rules.Options, workers int, onResult Progress, stop <-chan struct{}) *Cache {
+func Run(cfg *Config, o Options, workers int, onResult Progress, stop <-chan struct{}) *Cache {
 	if workers < 1 {
 		workers = 4
 	}
@@ -119,7 +117,7 @@ func Run(cfg *rules.Config, o rules.Options, workers int, onResult Progress, sto
 	return cache
 }
 
-func scanItem(groupID string, it rules.Item, o rules.Options, stop <-chan struct{}) Result {
+func scanItem(groupID string, it Item, o Options, stop <-chan struct{}) Result {
 	dirs, source := it.Roots(o)
 	r := Result{GroupID: groupID, ItemID: it.ID, Unit: it.Unit}
 	for _, d := range dirs {
@@ -134,7 +132,7 @@ func scanItem(groupID string, it rules.Item, o rules.Options, stop <-chan struct
 			continue
 		}
 		root := Root{Path: d, Source: source}
-		if it.Unit == rules.UnitVersioned {
+		if it.Unit == UnitVersioned {
 			root.Entries, root.Size, root.Count = readVersioned(d)
 		} else {
 			root.Entries, root.Size, root.Count = readEntries(d)

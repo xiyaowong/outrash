@@ -3,13 +3,13 @@ package main
 import (
 	"testing"
 
-	"outrash/internal/rules"
+	"outrash/internal/core"
 )
 
 // The catalog is the product: if one of these tools falls out of it, the
 // window silently stops being able to clean it.
 func TestCatalogCoversCommonTools(t *testing.T) {
-	cfg, err := rules.Parse(rulesJSON)
+	cfg, err := core.Parse(rulesJSON)
 	if err != nil {
 		t.Fatal(err)
 	}

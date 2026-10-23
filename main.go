@@ -11,7 +11,7 @@ import (
 
 	"github.com/egoist/mygo"
 
-	"outrash/internal/rules"
+	"outrash/internal/core"
 )
 
 //go:embed rules.json
@@ -22,11 +22,11 @@ func main() {
 	noDelete := flag.Bool("no-delete", false, "refuse every deletion, keeping the window's plan view")
 	flag.Parse()
 
-	cfg, err := rules.Parse(rulesJSON)
+	cfg, err := core.Parse(rulesJSON)
 	if err != nil {
 		log.Fatal(err)
 	}
-	a := newApp(cfg, rules.DefaultOptions(), options{debug: *debug, noDelete: *noDelete || *debug})
+	a := newApp(cfg, core.DefaultOptions(), options{debug: *debug, noDelete: *noDelete || *debug})
 
 	mygo.App.SetName("outrash")
 	mygo.App.WhenReady(func() {

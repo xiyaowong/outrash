@@ -11,25 +11,22 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"outrash/internal/plan"
-	"outrash/internal/rules"
-	"outrash/internal/scan"
-	"outrash/internal/theme"
+	"outrash/internal/core"
 )
 
 // app is everything the window shows. The view rebuilds it from this state
 // on the main thread; the scan fills it in through Window.Update.
 type app struct {
 	win  *mygo.Window
-	cfg  *rules.Config
-	opts rules.Options
+	cfg  *core.Config
+	opts core.Options
 	so   options
 
-	cache    *scan.Cache
+	cache    *core.Cache
 	groups   []groupState
 	phase    phase
 	selected string // "" is the overview
-	pal      *theme.Palette
+	pal      *core.Palette
 	// seq and stop keep a rescan from racing the scan it replaced.
 	seq  int
 	stop context.CancelFunc
@@ -39,7 +36,7 @@ type app struct {
 	now     time.Time
 
 	modal  modal
-	shown  *plan.Plan
+	shown  *core.Plan
 	report *report
 	debug  bool
 	msg    string
@@ -74,18 +71,18 @@ type report struct {
 }
 
 type groupState struct {
-	group rules.Group
+	group core.Group
 	items []itemState
 	size  int64
 	count int
 }
 
 type itemState struct {
-	item rules.Item
-	res  scan.Result
+	item core.Item
+	res  core.Result
 }
 
-func newApp(cfg *rules.Config, o rules.Options, so options) *app {
+func newApp(cfg *core.Config, o core.Options, so options) *app {
 	return &app{
 		cfg:     cfg,
 		opts:    o,
@@ -110,13 +107,13 @@ func (a *app) scan() {
 	a.stop = cancel
 	go func() {
 		defer cancel()
-		cache := scan.Run(a.cfg, a.opts, runtime.NumCPU()+2, func(r scan.Result) {
+		cache := core.Run(a.cfg, a.opts, runtime.NumCPU()+2, func(r core.Result) {
 			a.win.Update(func() {
 				if seq != a.seq {
 					return
 				}
 				if a.cache == nil {
-					a.cache = &scan.Cache{At: time.Now(), Results: map[string]scan.Result{}}
+					a.cache = &core.Cache{At: time.Now(), Results: map[string]core.Result{}}
 				}
 				a.cache.Results[r.GroupID+"/"+r.ItemID] = r
 				a.regroup()
@@ -185,7 +182,7 @@ func (a *app) roots() []string {
 }
 
 func (a *app) view(c *ui.Context) {
-	a.pal = theme.Apply(c)
+	a.pal = core.ApplyTheme(c)
 	a.now = time.Now()
 	c.OnShortcut(ui.Cmd, ui.KeyR, a.scan)
 	c.OnShortcut(ui.Cmd, ui.KeyA, a.selectAllVisible)
@@ -209,7 +206,7 @@ func (a *app) view(c *ui.Context) {
 // selectAllVisible selects every leaf of the family on screen, or all of
 // them from the overview.
 func (a *app) selectAllVisible() {
-	var picks []plan.Pick
+	var picks []core.Pick
 	if g, ok := a.group(a.selected); ok {
 		picks = a.groupPicks(g)
 	} else {
@@ -302,7 +299,7 @@ func (a *app) railNote() string {
 	case a.cache == nil:
 		return ""
 	}
-	return fmt.Sprintf("%d 个缓存 · %s", a.totalCount(), plan.Bytes(a.totalSize()))
+	return fmt.Sprintf("%d 个缓存 · %s", a.totalCount(), core.Bytes(a.totalSize()))
 }
 
 func (a *app) railRow(c *ui.Context, id, label string, size int64) {
@@ -318,7 +315,7 @@ func (a *app) railRow(c *ui.Context, id, label string, size int64) {
 		ui.Box(c).Size(2, 16).Shrink(0).Background(barColor(on, p.Ink))
 		ui.Text(c, label).FontSize(14).FontWeight(weight(on)).TextColor(p.Ink).SingleLine().Grow(1)
 		if size > 0 {
-			ui.Text(c, plan.Bytes(size)).Font(theme.Mono()).FontSize(11).TextColor(p.Ink3).Shrink(0)
+			ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(11).TextColor(p.Ink3).Shrink(0)
 		}
 	})
 }
@@ -341,7 +338,7 @@ func (a *app) header(c *ui.Context) {
 	p := a.pal
 	g, ok := a.group(a.selected)
 	title, total, sub := "可清理", a.totalSize(), fmt.Sprintf("%d 个缓存 · 用时 %s", a.totalCount(), a.elapsed())
-	var picks []plan.Pick
+	var picks []core.Pick
 	if ok {
 		title, total = g.group.Name, g.size
 		picks = a.groupPicks(g)
@@ -353,7 +350,7 @@ func (a *app) header(c *ui.Context) {
 			ui.Column(c).Width(a.contentWidth(c)).Padding(16, 32, 12, 32).Children(func() {
 				ui.Row(c).Gap(12).AlignItems(ui.Baseline).Children(func() {
 					ui.Text(c, title).FontSize(20).FontWeight(600).TextColor(p.Ink).Grow(1).SingleLine()
-					ui.Text(c, plan.Bytes(total)).Font(theme.Mono()).FontSize(24).FontWeight(600).TextColor(p.Ink).Shrink(0)
+					ui.Text(c, core.Bytes(total)).Font(core.Mono()).FontSize(24).FontWeight(600).TextColor(p.Ink).Shrink(0)
 				})
 				ui.Text(c, sub).FontSize(12).TextColor(p.Ink3).SingleLine()
 				ui.Spacer(c)
@@ -447,7 +444,7 @@ func (a *app) overview(c *ui.Context) {
 				ui.Text(c, fmt.Sprintf("%d 个缓存 · %d 项", len(g.items), sumCount(g))).
 					FontSize(12).TextColor(p.Ink2).SingleLine()
 			})
-			ui.Text(c, plan.Bytes(size)).Font(theme.Mono()).FontSize(14).TextColor(p.Ink).Shrink(0)
+			ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(14).TextColor(p.Ink).Shrink(0)
 		})
 		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 	}
@@ -516,9 +513,9 @@ func (a *app) actionBar(c *ui.Context) {
 			ui.Spacer(c)
 			ui.Row(c).Width(a.contentWidth(c)).Padding(0, 32).Gap(16).AlignItems(ui.Center).Children(func() {
 				ui.Column(c).Grow(1).Gap(2).Children(func() {
-					ui.Text(c, fmt.Sprintf("已选 %d 项 · %s", n, plan.Bytes(bytes))).
+					ui.Text(c, fmt.Sprintf("已选 %d 项 · %s", n, core.Bytes(bytes))).
 						FontSize(14).FontWeight(600).TextColor(p.Ink).SingleLine()
-					ui.Text(c, fmt.Sprintf("共 %s", plan.Bytes(total))).FontSize(12).TextColor(p.Ink3).SingleLine()
+					ui.Text(c, fmt.Sprintf("共 %s", core.Bytes(total))).FontSize(12).TextColor(p.Ink3).SingleLine()
 				})
 				if n > 0 {
 					clear := ui.ButtonBase(c).Padding(6, 10).Cursor(ui.CursorPointer)
@@ -551,5 +548,3 @@ func (a *app) primaryButton(c *ui.Context, label string, enabled bool, fn func()
 		fn()
 	}
 }
-
-
