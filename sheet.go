@@ -193,6 +193,8 @@ func (a *app) run() {
 	a.clearChecks()
 	a.busyBar(true)
 	a.repaint()
+	// Taken before the removal, so the report can compare it with the rescan.
+	a.report = &report{receipt: a.openReceipt(pl)}
 	roots := a.roots()
 	go func() {
 		out := a.remove(pl, roots)
@@ -204,10 +206,15 @@ func (a *app) run() {
 // the deletion would list paths that no longer exist.
 func (a *app) finish(out core.Outcome) {
 	a.busy = false
-	a.report = &report{freed: out.Freed, failed: out.Failed, elapsed: out.Elapsed}
-	for _, r := range out.Runs {
-		if r.Err != nil {
-			a.report.lines = append(a.report.lines, fmt.Sprintf("未能删除 %s：%v", r.Path, r.Err))
+	r := a.report
+	if r == nil {
+		r = &report{}
+		a.report = r
+	}
+	r.freed, r.failed, r.elapsed = out.Freed, out.Failed, out.Elapsed
+	for _, run := range out.Runs {
+		if run.Err != nil {
+			r.lines = append(r.lines, fmt.Sprintf("未能删除 %s：%v", run.Path, run.Err))
 		}
 	}
 	a.msg = ""
@@ -241,6 +248,7 @@ func (a *app) reportSheet(c *ui.Context) {
 							a.stat(c, "跳过", fmt.Sprint(r.failed))
 						}
 					})
+					a.receiptBlock(c, r)
 					if len(r.lines) > 0 {
 						ui.Column(c).MaxHeight(160).Children(func() {
 							ui.Scroll(c).MaxHeight(160).Children(func() {
@@ -263,6 +271,50 @@ func (a *app) reportSheet(c *ui.Context) {
 	if !open {
 		a.dismiss()
 	}
+}
+
+// receiptBlock proves the clean with numbers: what the families held
+// before, what they hold now, and anything the tools wrote straight back.
+func (a *app) receiptBlock(c *ui.Context, r *report) {
+	p := a.pal
+	rc := r.receipt
+	if rc == nil {
+		return
+	}
+	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+	if !rc.measured {
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Spinner(c).Width(12).Shrink(0)
+			ui.Text(c, "正在重新扫描，核对清理结果…").FontSize(12).TextColor(p.Ink2)
+		})
+		return
+	}
+	ui.Column(c).Gap(6).Children(func() {
+		ui.Row(c).Gap(8).AlignItems(ui.Baseline).Children(func() {
+			ui.Text(c, "清理前 → 清理后").FontSize(12).TextColor(p.Ink3).Grow(1)
+			ui.Text(c, fmt.Sprintf("%s → %s", core.Bytes(rc.before), core.Bytes(rc.after))).
+				Font(core.Mono()).FontSize(12).TextColor(p.Ink).Shrink(0)
+		})
+		if rc.before > rc.after {
+			ui.Text(c, fmt.Sprintf("实际减少 %s", core.Bytes(rc.before-rc.after))).
+				FontSize(12).FontWeight(600).TextColor(p.Success)
+		}
+		// Only the families that moved: a row that reads 0 → 0 is noise.
+		for _, d := range rc.groups {
+			if d.before == d.after {
+				continue
+			}
+			ui.Row(c).Gap(8).Children(func() {
+				ui.Text(c, d.name).FontSize(11).TextColor(p.Ink3).Grow(1)
+				ui.Text(c, fmt.Sprintf("%s → %s", core.Bytes(d.before), core.Bytes(d.after))).
+					Font(core.Mono()).FontSize(11).TextColor(p.Ink3).Shrink(0)
+			})
+		}
+		if rc.regenerated > 0 {
+			ui.Text(c, fmt.Sprintf("已重新生成 %d 项 · %s", rc.regenerated, core.Bytes(rc.regenBytes))).
+				FontSize(12).TextColor(p.Ink2)
+		}
+	})
 }
 
 func (a *app) stat(c *ui.Context, label, value string) {
