@@ -5,8 +5,10 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 
@@ -198,6 +200,51 @@ func TestDarkTheme(t *testing.T) {
 	write(t, "dark.png", tt.Image())
 }
 
+func TestAbbrevPath(t *testing.T) {
+	long := `C:\Users\tester\.nuget\packages\microsoft.extensions.logging.abstractions\8.0.0-preview.7.23375.6`
+	got := abbrevPath(long, 72)
+	if utf8.RuneCountInString(got) != 72 {
+		t.Fatalf("length %d: %q", utf8.RuneCountInString(got), got)
+	}
+	if !strings.HasSuffix(got, "8.0.0-preview.7.23375.6") || !strings.HasPrefix(got, `C:\Users`) {
+		t.Fatalf("kept the wrong ends: %q", got)
+	}
+	if abbrevPath("short", 72) != "short" {
+		t.Fatal("short paths must pass through")
+	}
+}
+
+// A plan of nearly identical tails: the sheet must still show which version
+// each row deletes.
+func TestPlanSheetLongPaths(t *testing.T) {
+	a := testAppWith(t, options{})
+	a.now = fixedTime(0)
+	root := scan.Root{Path: `C:\Users\tester\.nuget\packages`, Source: "环境变量 NUGET_PACKAGES"}
+	e := scan.Entry{
+		Name: "microsoft.extensions.logging.abstractions",
+		Path: root.Path + `\microsoft.extensions.logging.abstractions`,
+	}
+	for i, v := range []string{"8.0.0-preview.7.23375.6", "8.0.0-preview.6.23329.7", "7.0.0", "6.0.1"} {
+		e.Versions = append(e.Versions, scan.Version{
+			Name: v, Path: e.Path + `\` + v, Size: int64(40_000_000 - i*1_000_000), ModTime: fixedTime(20),
+		})
+	}
+	root.Entries = []scan.Entry{e}
+	res := scan.Result{GroupID: "dotnet", ItemID: "nuget-packages", Unit: rules.UnitVersioned,
+		Roots: []scan.Root{root}, Size: 154_000_000, Count: 4}
+	a.cache.Results["dotnet/nuget-packages"] = res
+	a.regroup()
+	for _, p := range allPicks(res) {
+		a.checked[p.Path] = true
+	}
+	a.openPlan(a.selectedPlan())
+	tt := ui.NewTester(a.view, 940, 660)
+	write(t, "plan-long.png", tt.Image())
+	if !tt.HasText("8.0.0-preview.7.23375.6") {
+		t.Fatalf("long path missing; texts %v", tt.Texts())
+	}
+}
+
 func fixedTime(daysAgo int) (t time.Time) {
 	return time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC).AddDate(0, 0, -daysAgo)
 }
@@ -217,3 +264,4 @@ func write(t *testing.T, name string, img *image.RGBA) {
 		t.Fatal(err)
 	}
 }
+
