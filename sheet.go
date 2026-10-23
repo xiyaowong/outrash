@@ -67,7 +67,7 @@ func (a *app) planSheet(c *ui.Context) {
 	w, _ := c.Size()
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
-		panel.Width(min(560, w-32)).Background(p.Raised).Border(1, p.RuleStrong).
+		panel.Width(min(720, w-32)).Background(p.Raised).Border(1, p.RuleStrong).
 			Shadow(0, 16, 40, 0, ui.RGBA(0, 0, 0, 0.22)).Children(func() {
 			ui.Column(c).Children(func() {
 				ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
@@ -91,8 +91,8 @@ func (a *app) planSheet(c *ui.Context) {
 								ui.Row(c).Height(32).Gap(12).AlignItems(ui.Center).Children(func() {
 									ui.Text(c, fmt.Sprintf("%03d", order)).Font(theme.Mono()).
 										FontSize(11).TextColor(p.Ink3).Width(32).Shrink(0)
-									ui.Text(c, s.Path).Font(theme.Mono()).FontSize(12).TextColor(p.Ink).
-										SingleLine().Grow(1)
+									ui.Text(c, abbrevPath(s.Path, 72)).Font(theme.Mono()).FontSize(12).TextColor(p.Ink).
+										SingleLine().Grow(1).Tooltip(s.Path)
 									ui.Text(c, plan.Bytes(s.Bytes)).Font(theme.Mono()).FontSize(12).
 										TextColor(p.Ink2).Width(88).TextAlign(ui.End).Shrink(0)
 								})
@@ -124,6 +124,19 @@ func (a *app) planSheet(c *ui.Context) {
 	if !open {
 		a.dismiss()
 	}
+}
+
+// abbrevPath keeps both ends of a long path. The tail carries the version
+// or shard that tells two rows apart, the head says which root it is; the
+// middle is the only part worth losing. The whole path stays on the
+// tooltip and in the -debug listing.
+func abbrevPath(p string, max int) string {
+	r := []rune(p)
+	if len(r) <= max {
+		return p
+	}
+	head, tail := max/3, max-max/3-1
+	return string(r[:head]) + "…" + string(r[len(r)-tail:])
 }
 
 // run deletes the shown plan in the background, then reports.
@@ -211,3 +224,4 @@ func (a *app) stat(c *ui.Context, label, value string) {
 		ui.Text(c, label).FontSize(12).TextColor(p.Ink3)
 	})
 }
+
