@@ -101,7 +101,7 @@ func (a *App) planSheet(c *ui.Context) {
 	w, _ := c.Size()
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
-		panel.Width(min(720, w-32)).Background(p.Raised).Border(1, p.RuleStrong).
+		panel.Width(min(720, w-32)).Background(p.Surface).Border(1, p.RuleStrong).
 			Shadow(0, 16, 40, 0, ui.RGBA(0, 0, 0, 0.22)).Children(func() {
 			ui.Column(c).Children(func() {
 				ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
@@ -201,7 +201,7 @@ func (a *App) run() {
 	a.busyBar(true)
 	a.repaint()
 	// Taken before the removal, so the report can compare it with the rescan.
-	a.report = &report{receipt: a.openReceipt(pl)}
+	a.report = &report{receipt: a.openReceipt(pl), items: len(pl.Steps)}
 	roots := a.roots()
 	a.progress = &progress{total: pl.Bytes, steps: len(pl.Steps), start: time.Now()}
 	pr := a.progress
@@ -239,6 +239,10 @@ func (a *App) finish(out core.Outcome) {
 			}
 		}
 	}
+	a.log = append(a.log, runRecord{
+		at: time.Now(), freed: out.Freed, items: r.items, failed: out.Failed,
+		gone: out.Gone, elapsed: out.Elapsed, lines: slices.Clone(r.lines),
+	})
 	a.msg = ""
 	a.modal = modalReport
 	a.Scan()
@@ -255,7 +259,7 @@ func (a *App) reportSheet(c *ui.Context) {
 	w, _ := c.Size()
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
-		panel.Width(min(420, w-32)).Background(p.Raised).Border(1, p.RuleStrong).
+		panel.Width(min(420, w-32)).Background(p.Surface).Border(1, p.RuleStrong).
 			Shadow(0, 16, 40, 0, ui.RGBA(0, 0, 0, 0.22)).Children(func() {
 			ui.Column(c).Children(func() {
 				ui.Row(c).Height(64).Padding(0, 24).AlignItems(ui.Center).Children(func() {

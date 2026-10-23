@@ -7,9 +7,10 @@ Append-only until stale; delete entries that stop being true. One line each.
 - Duplicate `c.Key()` among siblings panics in the Tester, so keys must be per-item stable strings.
 - A click goes to the **innermost interactive** element in the hit chain; nothing bubbles to ancestors.
 - `tt.Click(text)` finds the *first* label whose text matches exactly — a duplicate label (header note, sidebar) silently steals the click. Keep labels unique.
+- A `ButtonBase` centres its children; a rail of nav items needs `Justify(ui.Start)` or each icon drifts with its label's length.
 - A clickable row is a plain `Row` with `.OnClick`; make chevrons/expanders non-interactive so they fall through to it.
 - `Hovered()` is paint-time only, but reading it on the row while building the row is enough: it also makes mygo request a frame when the pointer enters or leaves.
-- Render tests write `testdata/shots` relative to the working directory, and `go test` runs a package from its own directory — resolve the root with `..`.
+- Render tests write `testdata/shots` relative to the working directory, and `go test` runs a package from its own directory — resolve the root with `..`. Shots are opt-in (`OUTRASH_SHOTS`, `just shots`) so a plain `go test` leaves the tree clean.
 - `Tester.Find` matches shown text *or* `Label`. `tt.Click("x")` fails if the text sits off-window.
 - Native UI has no CSS; every look is fluent calls + `Draw` painter. Theme copies are cheap.
 - Windows hidden title bar: `mygo.TitleBarHidden` keeps real caption buttons over the view; their glyphs come from `Backend.isDark()`, so a light app on a dark desktop needs `Theme.SetSource(mygo.ThemeLight)`, not just a light palette.

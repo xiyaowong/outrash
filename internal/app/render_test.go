@@ -5,7 +5,6 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -99,16 +98,32 @@ func fixture() *core.Cache {
 	return c
 }
 
+// onlyOpen collapses every family but one, so a click on a preset chip has a
+// single meaning.
+func onlyOpen(a *App, id string) {
+	for k := range a.open {
+		delete(a.open, k)
+	}
+	a.open["g:"+id] = true
+}
+
 func TestPlanSheetRenders(t *testing.T) {
 	a := testApp(t, false)
 	a.now = fixedTime(0)
 	tt := ui.NewTester(a.view, 1200, 780)
+	a.page = pageOverview
+	tt.Frame()
 	write(t, "overview.png", tt.Image())
+	a.page = pageResults
+	tt.Frame()
+	write(t, "results.png", tt.Image())
+	// The one shot the README shows, kept in the repo so the page renders on
+	// GitHub; everything else in testdata/shots is scratch.
+	writeAt(t, filepath.Join("..", "..", "docs"), "screenshot.png", tt.Image())
 
-	// Open .NET, select every removable item, then review the plan.
-	if err := tt.Click(".NET"); err != nil {
-		t.Fatal(err)
-	}
+	// Open .NET alone, so the preset chips have one meaning on screen.
+	onlyOpen(a, "dotnet")
+	tt.Frame()
 	write(t, "family.png", tt.Image())
 	a.clearChecks()
 	tt.Frame()
@@ -132,6 +147,7 @@ func TestPlanSheetRenders(t *testing.T) {
 func TestSelectionAndDebug(t *testing.T) {
 	a := testApp(t, true)
 	a.now = fixedTime(0)
+	onlyOpen(a, "")
 	tt := ui.NewTester(a.view, 1200, 780)
 	if err := tt.Click("Go"); err != nil {
 		t.Fatal(err)
@@ -151,10 +167,8 @@ func TestSelectionAndDebug(t *testing.T) {
 func TestPresetSelectsLeaves(t *testing.T) {
 	a := testApp(t, false)
 	a.now = fixedTime(0)
+	onlyOpen(a, "dotnet")
 	tt := ui.NewTester(a.view, 1200, 780)
-	if err := tt.Click(".NET"); err != nil {
-		t.Fatal(err)
-	}
 	a.clearChecks()
 	if err := tt.Click("保留最新"); err != nil {
 		t.Fatal(err)
@@ -166,16 +180,128 @@ func TestPresetSelectsLeaves(t *testing.T) {
 	write(t, "preset.png", tt.Image())
 }
 
+// The rail is navigation, so it has to be operable like a control: clicking a
+// label lands on its page, and the active page is the one shown.
+func TestNavRailSwitchesPages(t *testing.T) {
+	a := testApp(t, false)
+	a.now = fixedTime(0)
+	tt := ui.NewTester(a.view, 1200, 780)
+	for _, tc := range []struct {
+		label string
+		want  page
+		text  string
+	}{
+		{"概览", pageOverview, "清理开发工具缓存"},
+		{"清理记录", pageLog, "本次会话还没有清理记录"},
+		{"规则", pageRules, "清理方式"},
+		{"扫描结果", pageResults, "缓存路径"},
+	} {
+		if err := tt.Click(tc.label); err != nil {
+			t.Fatalf("rail item %q is not clickable: %v", tc.label, err)
+		}
+		if a.page != tc.want {
+			t.Fatalf("%q selected page %v, want %v", tc.label, a.page, tc.want)
+		}
+		if !tt.HasText(tc.text) {
+			t.Fatalf("%q did not open its page; texts %v", tc.label, tt.Texts())
+		}
+	}
+}
+
+// An empty scan says so in words. A blank table reads as a broken scan.
+func TestEmptyResultSaysSo(t *testing.T) {
+	a := testApp(t, false)
+	a.now = fixedTime(0)
+	a.cache = &core.Cache{Results: map[string]core.Result{}}
+	a.regroup()
+	tt := ui.NewTester(a.view, 1200, 780)
+	if !tt.HasText("没有找到可清理的缓存") {
+		t.Fatalf("empty state missing; texts %v", tt.Texts())
+	}
+	write(t, "empty.png", tt.Image())
+}
+
+// The table's headings sort, and the size column is the one whose direction
+// can be flipped.
+func TestSortChangesOrder(t *testing.T) {
+	a := testApp(t, false)
+	a.now = fixedTime(0)
+	tt := ui.NewTester(a.view, 1200, 780)
+	// Families the scan found nothing in are sorted too but never drawn, so
+	// the test asks for the first row the table would actually show.
+	top := func() string {
+		for _, g := range a.sortedGroups() {
+			if g.visible() {
+				return g.group.ID
+			}
+		}
+		return ""
+	}
+	first := top()
+	if first != "go" {
+		t.Fatalf("default order starts with %q, want the largest family", first)
+	}
+	if err := tt.Click("名称"); err != nil {
+		t.Fatal(err)
+	}
+	if got := top(); got == first {
+		t.Fatalf("sorting by name left %q first; texts %v", got, tt.Texts())
+	}
+	if err := tt.Click("缓存大小"); err != nil {
+		t.Fatal(err)
+	}
+	if got := top(); got != "go" {
+		t.Fatalf("size sort left %q first", got)
+	}
+	if err := tt.Click("缓存大小"); err != nil {
+		t.Fatal(err)
+	}
+	if got := top(); got != "node" {
+		t.Fatalf("a second click must flip the size order, got %q first", got)
+	}
+}
+
 func TestWidths(t *testing.T) {
 	for _, sz := range []struct {
 		name string
 		w, h int
-	}{{"narrow", 980, 620}, {"wide", 1440, 900}} {
+	}{{"narrow", 1000, 640}, {"wide", 1440, 900}} {
 		a := testApp(t, false)
 		a.now = fixedTime(0)
 		tt := ui.NewTester(a.view, sz.w, sz.h)
 		write(t, sz.name+".png", tt.Image())
+		if sz.name == "narrow" && tt.HasText("可清理缓存总量") {
+			t.Fatal("a narrow window must drop the panel, not squeeze the list")
+		}
 	}
+}
+
+// The log and the rules pages are the two read-only screens behind the rail;
+// they have to render from the same scan without a second data source.
+func TestLogAndRulesPages(t *testing.T) {
+	a := testApp(t, false)
+	a.now = fixedTime(0)
+	a.log = append(a.log, runRecord{
+		at: fixedTime(1), freed: 512 << 20, items: 6, elapsed: 2 * time.Second,
+	}, runRecord{
+		at: fixedTime(2), freed: 0, items: 2, failed: 1, elapsed: time.Second,
+		lines: []string{`未能删除 C:\x：拒绝访问`},
+	})
+	a.page = pageLog
+	tt := ui.NewTester(a.view, 1200, 780)
+	if !tt.HasText("释放 512.0 MB") || !tt.HasText("1 项失败") {
+		t.Fatalf("log missing a run; texts %v", tt.Texts())
+	}
+	write(t, "log.png", tt.Image())
+
+	a.page = pageRules
+	tt.Frame()
+	for _, want := range []string{"清理方式", "30 天", "不碰源码", "internal/core/rules.json"} {
+		if !tt.HasText(want) {
+			t.Fatalf("rules page missing %q; texts %v", want, tt.Texts())
+		}
+	}
+	write(t, "rules.png", tt.Image())
 }
 
 // A scan lands on a recommendation, not on an empty list: stale entries and
@@ -230,29 +356,37 @@ func TestPlanExecuteVisibleOnlyOutsideDebug(t *testing.T) {
 	}
 }
 
-// The right panel measures the caches, not the selection: a label that says
-// 可清理 next to the whole total contradicts the action bar's 已选 line. The
-// row tags that read 可清理 are advice about a family, which is a different
-// claim.
-func TestPanelTotalIsNotTheSelection(t *testing.T) {
+// The right panel's three numbers must each mean something and agree with
+// the header: the cleanable total is what the recommendation covers, not the
+// whole cache, and the chosen space is what the button would free.
+func TestPanelNumbersAgreeWithHeader(t *testing.T) {
 	a := testAppWith(t, Options{})
 	tt := ui.NewTester(a.view, 1200, 780)
 	texts := tt.Texts()
-	total := core.Bytes(a.totalSize())
+	cleanable := core.Bytes(a.recommendedBytes())
 	n, chosen := a.checkedTotal()
 	if n == 0 {
-		t.Fatal("no recommendation to contrast with")
+		t.Fatal("no recommendation to label")
 	}
-	if core.Bytes(chosen) == total {
+	if core.Bytes(chosen) == core.Bytes(a.totalSize()) {
 		t.Skip("fixture recommends every byte; the labels would agree")
 	}
-	for i, s := range texts {
-		if s == total && i+1 < len(texts) && texts[i+1] == "可清理" {
-			t.Fatalf("the total is labelled as cleanable; texts %v", texts)
+	label := func(want string) string {
+		for i, s := range texts {
+			if s == want && i+1 < len(texts) {
+				return texts[i+1]
+			}
 		}
+		return ""
 	}
-	if !slices.Contains(texts, "全部") {
-		t.Fatalf("panel missing the total's label; texts %v", texts)
+	if got := label("可清理缓存总量"); got != cleanable {
+		t.Fatalf("可清理缓存总量 shows %q, want the recommendation %q", got, cleanable)
+	}
+	if got := label("已选清理空间"); got != core.Bytes(chosen) {
+		t.Fatalf("已选清理空间 shows %q, want %q", got, core.Bytes(chosen))
+	}
+	if !tt.HasText("可清理 " + cleanable) {
+		t.Fatalf("header and panel disagree; texts %v", texts)
 	}
 }
 
@@ -302,20 +436,16 @@ func TestUnreadableScanIsVisible(t *testing.T) {
 	a.regroup()
 
 	tt := ui.NewTester(a.view, 1200, 780)
-	if !tt.HasText("1 个缓存读取失败") {
-		t.Fatalf("overview missing the warning; texts %v", tt.Texts())
+	if !tt.HasText("1 个读取失败") {
+		t.Fatalf("header missing the warning; texts %v", tt.Texts())
 	}
-	if err := tt.Click("Node.js"); err != nil {
-		t.Fatal(err)
+	if !tt.HasText("1 个缓存读取不完整") {
+		t.Fatalf("panel missing the warning; texts %v", tt.Texts())
 	}
-	meta := ""
-	for _, s := range tt.Texts() {
-		if strings.Contains(s, "3 项") && strings.Contains(s, "前") {
-			meta = s
-		}
-	}
-	if !strings.Contains(meta, "读取失败") {
-		t.Fatalf("item row missing the warning; texts %v", tt.Texts())
+	onlyOpen(a, "node")
+	tt.Frame()
+	if !tt.HasText("读取不全") {
+		t.Fatalf("item row missing its risk tag; texts %v", tt.Texts())
 	}
 	write(t, "unreadable.png", tt.Image())
 }
@@ -519,10 +649,8 @@ func TestReceiptCallsOldSurvivorsStill(t *testing.T) {
 func TestPlanShowsReasonsAndKept(t *testing.T) {
 	a := testAppWith(t, Options{NoDelete: true})
 	a.now = fixedTime(0)
+	onlyOpen(a, "dotnet")
 	tt := ui.NewTester(a.view, 1200, 780)
-	if err := tt.Click(".NET"); err != nil {
-		t.Fatal(err)
-	}
 	a.clearChecks()
 	if err := tt.Click("保留最新"); err != nil {
 		t.Fatal(err)
@@ -560,10 +688,8 @@ func TestKeepNewestSparesPlainCaches(t *testing.T) {
 	}
 	a.regroup()
 
+	onlyOpen(a, "dotnet")
 	tt := ui.NewTester(a.view, 1200, 780)
-	if err := tt.Click(".NET"); err != nil {
-		t.Fatal(err)
-	}
 	a.clearChecks()
 	if err := tt.Click("保留最新"); err != nil {
 		t.Fatal(err)
@@ -628,11 +754,20 @@ func fixedTime(daysAgo int) (t time.Time) {
 	return time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC).AddDate(0, 0, -daysAgo)
 }
 
-// write saves a frame for the README; shots stay at the repo root, not
-// beside this package.
+// write saves a frame for review, and only when asked: a plain `go test` must
+// not leave a megabyte of PNGs in the tree. `just shots` sets the variable.
 func write(t *testing.T, name string, img *image.RGBA) {
 	t.Helper()
-	dir := filepath.Join("..", "..", "testdata", "shots")
+	writeAt(t, filepath.Join("..", "..", "testdata", "shots"), name, img)
+}
+
+// writeAt saves one frame into dir. Only the README's screenshot is committed;
+// shots are scratch, so they stay out of the tree unless asked for.
+func writeAt(t *testing.T, dir, name string, img *image.RGBA) {
+	t.Helper()
+	if os.Getenv("OUTRASH_SHOTS") == "" {
+		return
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

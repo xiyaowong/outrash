@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -38,6 +37,20 @@ func allPicks(res core.Result) []core.Pick {
 		}
 	}
 	return picks
+}
+
+// newestPick is the last time anything in the family touched the disk. A
+// cache used this week is the one risk note worth raising.
+func newestPick(g groupState) time.Time {
+	var newest time.Time
+	for _, it := range g.items {
+		for _, p := range allPicks(it.res) {
+			if p.ModTime.After(newest) {
+				newest = p.ModTime
+			}
+		}
+	}
+	return newest
 }
 
 // setChecks replaces the selection inside picks with the chosen paths.
@@ -101,11 +114,11 @@ func (a *App) chip(c *ui.Context, act preset) {
 	p := a.pal
 	steps := core.Select(act.picks, act.pol).Steps
 	n := len(steps)
-	fg := p.Ink
+	fg := p.Ink2
 	if n == 0 {
 		fg = p.Ink3
 	}
-	row := ui.ButtonBase(c).Height(28).Radius(3).Padding(0, 10).Shrink(0).
+	row := ui.ButtonBase(c).Height(24).Radius(3).Padding(0, 9).Shrink(0).
 		AlignItems(ui.Center).Border(1, p.RuleStrong)
 	if n > 0 {
 		row.Cursor(ui.CursorPointer).OnClick(func() { a.setChecks(act.scope, steps) })
@@ -120,13 +133,60 @@ func (a *App) chip(c *ui.Context, act preset) {
 	}
 	row.Background(bg)
 	row.Children(func() {
-		ui.Text(c, act.label).FontSize(12).FontWeight(600).TextColor(fg).SingleLine()
+		ui.Text(c, act.label).FontSize(11).TextColor(fg).SingleLine()
 		if n > 0 {
 			ui.Text(c, fmt.Sprintf(" %d", n)).Font(core.Mono()).FontSize(11).TextColor(p.Ink3).SingleLine()
 		}
 	})
 }
 
+// familyRow is the tool family: a header that carries the family total, and
+// under it the items the scan found. The header's checkbox picks everything
+// the family holds.
+func (a *App) familyRow(c *ui.Context, g groupState) {
+	p := a.pal
+	key := "g:" + g.group.ID
+	open := a.open[key]
+	picks := a.groupPicks(g)
+	on, total := a.checkState(picks)
+	row := ui.Row(c).Height(36).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open })
+	row.Background(hoverFill(row, tint(p.Ink2, p.Surface, 0.035), p.Hover))
+	row.Children(func() {
+		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
+		ui.Text(c, g.group.Name).FontSize(13).FontWeight(600).TextColor(p.Ink).
+			SingleLine().Width(colName).Shrink(0)
+		ui.Spacer(c).Grow(1)
+		ui.Text(c, fmt.Sprintf("%d 项", len(picks))).Font(core.Mono()).FontSize(12).
+			TextColor(p.Ink3).Width(colCount).TextAlign(ui.End).Shrink(0)
+		ui.Text(c, core.Bytes(g.size)).Font(core.Mono()).FontSize(12).
+			TextColor(p.Ink).Width(colSize).TextAlign(ui.End).Shrink(0)
+		ui.Box(c).Width(colStatus).Shrink(0).AlignItems(ui.Center).Children(func() {
+			a.familyTag(c, g)
+		})
+		a.expander(c, open)
+	})
+	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+	if !open {
+		return
+	}
+	if acts := a.presets(picks); len(acts) > 0 {
+		ui.Row(c).Height(32).Padding(0, 24, 0, 24+colCheck+colGap+indentItem).Gap(8).
+			AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "选择方式").FontSize(11).TextColor(p.Ink3).Shrink(0)
+			for _, act := range acts {
+				a.chip(c, act)
+			}
+			ui.Spacer(c)
+		})
+	}
+	for _, it := range g.items {
+		a.itemRow(c, it)
+	}
+}
+
+// itemRow is one cache. It carries the five columns the table promises:
+// name, path, entry count, size, and what the scan can vouch for.
 func (a *App) itemRow(c *ui.Context, it itemState) {
 	p := a.pal
 	picks := allPicks(it.res)
@@ -136,71 +196,87 @@ func (a *App) itemRow(c *ui.Context, it itemState) {
 	key := "i:" + it.item.ID
 	open := a.open[key]
 	on, total := a.checkState(picks)
-	row := ui.Row(c).Height(56).Padding(0, 28).Gap(colGap).AlignItems(ui.Center).
+	row := ui.Row(c).Height(44).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open })
 	row.Background(hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
+		indent(c, indentItem)
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
-		ui.Column(c).Grow(1).Gap(2).Children(func() {
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, it.item.Name).FontSize(14).FontWeight(600).TextColor(p.Ink).SingleLine().Shrink(0)
-				if t := noteTag(it.item.Note); t != "" {
-					ui.Box(c).Tooltip(it.item.Note).Children(func() {
-						tag(c, t, p.Success, p.Raised)
-					})
-				}
-				if it.res.Failed() {
-					tag(c, "读取失败", p.Danger, p.Raised)
-				}
-			})
-			ui.Text(c, rootPath(it.res)).Font(core.Mono()).FontSize(11).TextColor(p.Ink3).SingleLine()
-		})
-		ui.Text(c, a.itemMeta(it.res)).FontSize(12).TextColor(p.Ink2).SingleLine().
-			Width(colCount).TextAlign(ui.End).Shrink(0)
-		ui.Text(c, core.Bytes(it.res.Size)).Font(core.Mono()).FontSize(13).TextColor(p.Ink).
+		ui.Text(c, it.item.Name).FontSize(13).TextColor(p.Ink).SingleLine().
+			Width(colName - indentItem).Shrink(0).Tooltip(it.item.Note)
+		ui.Text(c, rootPath(it.res)).Font(core.Mono()).FontSize(11).
+			TextColor(p.Ink3).SingleLine().Ellipsis("…").Grow(1).Tooltip(rootPath(it.res))
+		ui.Text(c, countText(it.res)).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).
+			SingleLine().Width(colCount).TextAlign(ui.End).Shrink(0)
+		ui.Text(c, core.Bytes(it.res.Size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink).
 			SingleLine().Width(colSize).TextAlign(ui.End).Shrink(0)
-		a.expander(c, open)
+		ui.Box(c).Width(colStatus).Shrink(0).AlignItems(ui.Center).Children(func() {
+			a.statusTag(c, it.res)
+		})
+		hasVersions := false
+		for _, root := range it.res.Roots {
+			for _, e := range root.Entries {
+				if len(e.Versions) > 0 {
+					hasVersions = true
+				}
+			}
+		}
+		if hasVersions {
+			a.expander(c, open)
+		} else {
+			ui.Box(c).Width(24).Shrink(0)
+		}
 	})
 	if open {
-		ui.Column(c).Children(func() {
-			a.entries(c, it)
-		})
+		a.entries(c, it)
 	}
 	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 }
 
-// noteTag shortens the catalog's sentence into the word that decides: the
-// full note is one hover away, and the list stays scannable.
-func noteTag(note string) string {
+// familyTag is the risk column for a whole family: it names the worst thing
+// under it, so a collapsed family never hides a failed scan behind a total.
+func (a *App) familyTag(c *ui.Context, g groupState) {
+	p := a.pal
+	failed, recent := false, false
+	for _, it := range g.items {
+		if it.res.Failed() {
+			failed = true
+		}
+		if a.recent(it.res) {
+			recent = true
+		}
+	}
 	switch {
-	case note == "":
-		return ""
-	case strings.Contains(note, "重新编译"):
-		return "重新编译"
-	case strings.Contains(note, "playwright"), strings.Contains(note, "cypress"):
-		return "需手动下载"
-	case strings.Contains(note, "自动重新下载"):
-		return "自动下载"
+	case failed:
+		tag(c, "读取不全", p.Danger, p.Surface)
+	case recent:
+		tag(c, "近期用过", p.Warning, p.Surface)
+	default:
+		tag(c, "可清理", p.Success, p.Surface)
 	}
-	return note
 }
 
-func rootPath(res core.Result) string {
-	if len(res.Roots) == 0 {
-		return ""
+// statusTag is the risk column for one cache: what the scan can vouch for
+// about removing it today. A cache it could not read says so instead of
+// passing for empty.
+func (a *App) statusTag(c *ui.Context, res core.Result) {
+	p := a.pal
+	switch {
+	case res.Failed():
+		tag(c, "读取不全", p.Danger, p.Surface)
+	case a.recent(res):
+		tag(c, "近期用过", p.Warning, p.Surface)
+	default:
+		tag(c, "可清理", p.Success, p.Surface)
 	}
-	return res.Roots[0].Path
 }
 
-func (a *App) itemMeta(res core.Result) string {
-	versions, entries, newest := 0, 0, time.Time{}
+// recent is "used this week", the point where rebuilding costs the user a
+// noticeable wait.
+func (a *App) recent(res core.Result) bool {
+	var newest time.Time
 	for _, root := range res.Roots {
 		for _, e := range root.Entries {
-			if len(e.Versions) > 0 {
-				versions += len(e.Versions)
-			} else {
-				entries++
-			}
 			if e.ModTime.After(newest) {
 				newest = e.ModTime
 			}
@@ -211,24 +287,38 @@ func (a *App) itemMeta(res core.Result) string {
 			}
 		}
 	}
-	var head string
+	return !newest.IsZero() && a.now.Sub(newest) < 7*24*time.Hour
+}
+
+func rootPath(res core.Result) string {
+	if len(res.Roots) == 0 {
+		return ""
+	}
+	return res.Roots[0].Path
+}
+
+// countText is the 文件数量 column: what one click would remove, in the unit
+// the cache itself uses.
+func countText(res core.Result) string {
+	versions, entries := 0, 0
+	for _, root := range res.Roots {
+		for _, e := range root.Entries {
+			if len(e.Versions) > 0 {
+				versions += len(e.Versions)
+			} else {
+				entries++
+			}
+		}
+	}
 	switch {
-	case versions == 0 && entries == 0 && res.Failed():
-		head = "读取失败"
 	case versions > 0 && entries > 0:
-		head = fmt.Sprintf("%d 个版本 · %d 项", versions, entries)
+		return fmt.Sprintf("%d+%d", versions, entries)
 	case versions > 0:
-		head = fmt.Sprintf("%d 个版本", versions)
-	default:
-		head = fmt.Sprintf("%d 项", entries)
+		return fmt.Sprintf("%d 版", versions)
+	case entries > 0:
+		return fmt.Sprintf("%d 项", entries)
 	}
-	if age := ageText(a.now, newest); age != "" {
-		head += " · " + age
-	}
-	if res.Failed() && versions+entries > 0 {
-		head += " · 读取失败"
-	}
-	return head
+	return "—"
 }
 
 func (a *App) entries(c *ui.Context, it itemState) {
@@ -238,9 +328,22 @@ func (a *App) entries(c *ui.Context, it itemState) {
 				a.versioned(c, e)
 				continue
 			}
-			a.leaf(c, e.Name, e.Path, e.Size, e.ModTime)
+			a.leaf(c, e.Name, e.Path, e.Size, e.ModTime, indentLeaf)
 		}
 	}
+}
+
+// The table's three depths. Items sit one step in from their family and
+// versions one step in from their item; the step is a spacer on the left, so
+// the check boxes nest while the size and status columns stay on the table's
+// right edge.
+const (
+	indentItem = 28
+	indentLeaf = 44
+)
+
+func indent(c *ui.Context, w float32) {
+	ui.Box(c).Width(w).Height(1).Shrink(0)
 }
 
 func (a *App) versioned(c *ui.Context, ent core.Entry) {
@@ -255,32 +358,35 @@ func (a *App) versioned(c *ui.Context, ent core.Entry) {
 	key := "p:" + ent.Path
 	open := a.open[key]
 	on, total := a.checkState(picks)
-	row := ui.Row(c).Height(32).Padding(0, 28, 0, 60).Gap(colGap).AlignItems(ui.Center).
+	row := ui.Row(c).Height(32).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open })
 	row.Background(hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
+		indent(c, indentLeaf)
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
 		ui.Text(c, ent.Name).Font(core.Mono()).FontSize(12).TextColor(p.Ink).SingleLine().Grow(1)
-		ui.Text(c, fmt.Sprintf("%d 个版本", len(ent.Versions))).FontSize(12).TextColor(p.Ink3).Width(colCount).TextAlign(ui.End).Shrink(0)
-		ui.Text(c, core.Bytes(ent.Size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).Shrink(0).Width(colSize).TextAlign(ui.End)
+		ui.Text(c, fmt.Sprintf("%d 版", len(ent.Versions))).Font(core.Mono()).FontSize(12).
+			TextColor(p.Ink3).Width(colCount).TextAlign(ui.End).Shrink(0)
+		ui.Text(c, core.Bytes(ent.Size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).
+			Width(colSize).TextAlign(ui.End).Shrink(0)
+		ui.Box(c).Width(colStatus).Shrink(0)
+		a.expander(c, open)
 	})
 	if open {
-		ui.Column(c).Children(func() {
-			for _, v := range ent.Versions {
-				a.leaf(c, v.Name, v.Path, v.Size, v.ModTime)
-			}
-		})
+		for _, v := range ent.Versions {
+			a.leaf(c, v.Name, v.Path, v.Size, v.ModTime, indentLeaf+16)
+		}
 	}
 }
 
-func (a *App) leaf(c *ui.Context, name, path string, size int64, mod time.Time) {
+func (a *App) leaf(c *ui.Context, name, path string, size int64, mod time.Time, ind float32) {
 	p := a.pal
 	on := a.checked[path]
 	m := markOff
 	if on {
 		m = markOn
 	}
-	row := ui.Row(c).Height(32).Padding(0, 28, 0, 60).Gap(colGap).AlignItems(ui.Center).
+	row := ui.Row(c).Height(30).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.checked[path] = !on })
 	resting := ui.Transparent
 	if on {
@@ -288,12 +394,20 @@ func (a *App) leaf(c *ui.Context, name, path string, size int64, mod time.Time) 
 	}
 	row.Background(hoverFill(row, resting, p.Hover))
 	row.Children(func() {
+		indent(c, ind)
 		a.check(c, m, nil)
-		ui.Text(c, name).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
+		// The age rides with the name: a leaf has no entry count, and an age
+		// under the 文件数量 heading would read as one.
+		ui.Text(c, name).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).SingleLine().
+			Ellipsis("…").Grow(1).Tooltip(path)
 		if age := ageText(a.now, mod); age != "" {
-			ui.Text(c, age).FontSize(12).TextColor(p.Ink3).Shrink(0)
+			ui.Text(c, age).FontSize(11).TextColor(p.Ink3).Shrink(0)
 		}
-		ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink3).Shrink(0).Width(colSize).TextAlign(ui.End)
+		ui.Box(c).Width(colCount).Shrink(0)
+		ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink3).
+			Shrink(0).Width(colSize).TextAlign(ui.End)
+		ui.Box(c).Width(colStatus).Shrink(0)
+		ui.Box(c).Width(24).Shrink(0)
 	})
 }
 

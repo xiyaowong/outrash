@@ -1,6 +1,6 @@
 // outrash finds the dependency caches of developer tools and shows what can
-// be rebuilt. It never deletes anything itself: every action opens a plan
-// of exact paths, sizes and order for the user to read and confirm.
+// be rebuilt. The checked rows are the plan; the window only deletes when the
+// user presses the button that confirms them.
 package main
 
 import (
@@ -33,11 +33,11 @@ func main() {
 		a := app.New(cfg, core.DefaultOptions(), app.Options{Debug: *debug, NoDelete: *noDelete || *debug})
 		a.Window = mygo.NewWindow(mygo.WindowOptions{
 			Title:           "outrash",
-			Width:           1200,
-			Height:          780,
-			MinWidth:        980,
-			MinHeight:       620,
-			BackgroundColor: "#F6F6F4",
+			Width:           1360,
+			Height:          820,
+			MinWidth:        1000,
+			MinHeight:       640,
+			BackgroundColor: "#F2F3F4",
 			TitleBarStyle:   mygo.TitleBarHidden,
 			Content:         app.View(a),
 		})

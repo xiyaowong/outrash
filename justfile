@@ -19,6 +19,6 @@ debug:
 safe:
     go run . -no-delete
 
-# Regenerate testdata/shots/*.png from the render tests.
+# Regenerate docs/screenshot.png (committed) and testdata/shots (scratch).
 shots:
-    go test ./internal/app -count=1
+    $env:OUTRASH_SHOTS = "1"; go test ./internal/app -count=1
