@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -174,6 +175,18 @@ func scanItem(groupID string, it Item, o Options, stop <-chan struct{}) Result {
 			l = readVersioned(d)
 		} else {
 			l = readEntries(d)
+		}
+		if len(it.Exclude) > 0 {
+			l.entries = without(l.entries, it.Exclude)
+			l.size, l.count = 0, 0
+			for _, e := range l.entries {
+				l.size += e.Size
+				if n := len(e.Versions); n > 0 {
+					l.count += n
+				} else {
+					l.count++
+				}
+			}
 		}
 		root := Root{
 			Path: d, Source: source,
@@ -345,6 +358,22 @@ func measure(p string, ch fs.DirEntry) (size int64, mod time.Time, bad int, ok b
 		newest = info.ModTime()
 	}
 	return size, newest, bad, true
+}
+
+// without drops entries named in exclude and takes their bytes out of the
+// root's total, so an excluded child can never reach a plan.
+func without(entries []Entry, exclude []string) []Entry {
+	if len(exclude) == 0 {
+		return entries
+	}
+	out := entries[:0]
+	for _, e := range entries {
+		if slices.Contains(exclude, e.Name) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 func sortEntries(in []Entry) {

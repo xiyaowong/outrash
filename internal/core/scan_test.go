@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -264,6 +265,42 @@ func TestRunReturnsWhenStopped(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run blocked after stop closed")
+	}
+}
+
+// An excluded child is not cache: Poetry keeps project virtualenvs inside
+// its cache directory, and those are not rebuilt by re-downloading.
+func TestScanItemSkipsExcludedChildren(t *testing.T) {
+	root := t.TempDir()
+	for _, d := range []string{"artifacts", "virtualenvs"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		write(t, filepath.Join(root, d, "f"), 10)
+	}
+	it := Item{
+		ID: "cache", Name: "cache", Unit: UnitEntries,
+		Paths:   map[string][]string{runtime.GOOS: {root}},
+		Exclude: []string{"virtualenvs"},
+	}
+	o := Options{GOOS: runtime.GOOS, Getenv: func(string) string { return "" }}
+
+	r := scanItem("grp", it, o, nil)
+	if len(r.Roots) != 1 {
+		t.Fatalf("roots %+v", r.Roots)
+	}
+	entries := r.Roots[0].Entries
+	if len(entries) != 1 || entries[0].Name != "artifacts" {
+		t.Fatalf("entries %+v, want only artifacts", entries)
+	}
+	// The venv's bytes must not inflate the family total either.
+	if r.Size != 10 || r.Count != 1 {
+		t.Fatalf("size %d count %d, want 10 and 1", r.Size, r.Count)
+	}
+	for _, e := range entries {
+		if strings.Contains(e.Path, "virtualenvs") {
+			t.Fatalf("excluded path reached the tree: %s", e.Path)
+		}
 	}
 }
 
