@@ -379,7 +379,7 @@ func (a *app) view(c *ui.Context) {
 		a.titleBar(c)
 		ui.Row(c).Grow(1).Children(func() {
 			a.rail(c)
-			ui.Column(c).Grow(1).FillHeight().Children(func() {
+			ui.Column(c).Grow(1).FillHeight().Background(a.pal.Raised).Children(func() {
 				a.header(c)
 				a.list(c)
 				a.actionBar(c)
@@ -453,9 +453,9 @@ func (a *app) summary() string {
 
 func (a *app) rail(c *ui.Context) {
 	p := a.pal
-	ui.Column(c).Width(208).FillHeight().BorderWidth(0, 1, 0, 0).BorderColor(p.Rule).
+	ui.Column(c).Width(200).FillHeight().BorderWidth(0, 1, 0, 0).BorderColor(p.Rule).
 		Children(func() {
-			ui.Column(c).Padding(16, 0, 0, 0).Gap(2).Children(func() {
+			ui.Column(c).Padding(14, 0, 0, 0).Gap(1).Children(func() {
 				a.section(c, "缓存")
 				a.railRow(c, "", "全部", a.totalSize())
 				for _, g := range a.groups {
@@ -478,7 +478,7 @@ func (a *app) rail(c *ui.Context) {
 
 func (a *app) section(c *ui.Context, label string) {
 	p := a.pal
-	ui.Text(c, label).FontSize(11).FontWeight(600).TextColor(p.Ink3).Padding(8, 0, 4, 16)
+	ui.Text(c, label).FontSize(11).FontWeight(600).TextColor(p.Ink3).Padding(7, 0, 3, 14)
 }
 
 func (a *app) railNote() string {
@@ -500,7 +500,7 @@ func (a *app) railRow(c *ui.Context, id, label string, size int64) {
 	if on {
 		resting = p.Selected
 	}
-	row := ui.Row(c).Height(36).Padding(0, 16).Gap(8).AlignItems(ui.Center).
+	row := ui.Row(c).Height(34).Padding(0, 14).Gap(8).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.selected = id })
 	row.Background(hoverFill(row, resting, p.Hover))
 	row.Children(func() {
@@ -539,7 +539,7 @@ func weight(on bool) int {
 func (a *app) header(c *ui.Context) {
 	p := a.pal
 	g, ok := a.group(a.selected)
-	title, total, sub := "可清理", a.totalSize(), fmt.Sprintf("%d 个缓存 · 用时 %s", a.totalCount(), a.elapsed())
+	title, total, sub := "可清理", a.totalSize(), fmt.Sprintf("%d 个缓存 · %d 项", a.totalCount(), a.totalLeaves())
 	var picks []core.Pick
 	if ok {
 		title, total = g.group.Name, g.size
@@ -547,20 +547,19 @@ func (a *app) header(c *ui.Context) {
 		sub = fmt.Sprintf("%d 项可清理", sumCount(g))
 	}
 	ui.Column(c).Shrink(0).Children(func() {
-		ui.Row(c).Height(104).Children(func() {
+		ui.Row(c).Height(68).Children(func() {
 			ui.Spacer(c)
-			ui.Column(c).Width(a.contentWidth(c)).Padding(16, 32, 12, 32).Children(func() {
+			ui.Column(c).Width(a.contentWidth(c)).Padding(11, 32, 8, 32).Justify(ui.Center).Children(func() {
 				ui.Row(c).Gap(12).AlignItems(ui.Baseline).Children(func() {
-					ui.Text(c, title).FontSize(20).FontWeight(600).TextColor(p.Ink).Grow(1).SingleLine()
-					ui.Text(c, core.Bytes(total)).Font(core.Mono()).FontSize(24).FontWeight(600).TextColor(p.Ink).Shrink(0)
+					ui.Text(c, title).FontSize(18).FontWeight(600).TextColor(p.Ink).SingleLine().Shrink(0)
+					ui.Text(c, sub).FontSize(12).TextColor(p.Ink3).SingleLine().Grow(1)
+					ui.Text(c, core.Bytes(total)).Font(core.Mono()).FontSize(20).FontWeight(600).TextColor(p.Ink).Shrink(0)
 				})
-				ui.Text(c, sub).FontSize(12).TextColor(p.Ink3).SingleLine()
-				ui.Spacer(c)
-				ui.Row(c).Gap(16).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, a.headerSource(g, ok)).FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
+				ui.Row(c).Height(24).Gap(12).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, a.headerSource(g, ok)).FontSize(11).TextColor(p.Ink3).SingleLine().Grow(1)
 					if n := a.warnCount(g, ok); n > 0 {
 						ui.Text(c, fmt.Sprintf("%d 个缓存读取失败", n)).
-							FontSize(12).FontWeight(600).TextColor(p.Danger).Shrink(0)
+							FontSize(11).FontWeight(600).TextColor(p.Danger).Shrink(0)
 					}
 					for _, act := range a.presets(picks) {
 						a.chip(c, act)
@@ -577,7 +576,7 @@ func (a *app) header(c *ui.Context) {
 // put and the measure does not balloon.
 func (a *app) contentWidth(c *ui.Context) float32 {
 	w, _ := c.Size()
-	return min(w-208, 900)
+	return min(w-200, 900)
 }
 
 // headerSource says where this family's caches came from: a default, an
@@ -623,16 +622,8 @@ func (a *app) warnCount(g groupState, ok bool) int {
 	return n
 }
 
-func (a *app) elapsed() string {
-	if a.cache == nil {
-		return "—"
-	}
-	return a.cache.Elapsed.Round(time.Millisecond).String()
-}
-
 func (a *app) list(c *ui.Context) {
-	p := a.pal
-	ui.Scroll(c).Grow(1).Background(p.Canvas).Children(func() {
+	ui.Scroll(c).Grow(1).Children(func() {
 		ui.Row(c).Children(func() {
 			ui.Spacer(c)
 			ui.Column(c).Width(a.contentWidth(c)).Padding(0, 0, 16, 0).Children(func() {
@@ -661,21 +652,21 @@ func (a *app) overview(c *ui.Context) {
 		n++
 		g := g
 		size := g.size
-		row := ui.Row(c).Height(64).Padding(0, 32).Gap(16).AlignItems(ui.Center).
+		row := ui.Row(c).Height(56).Padding(0, 32).Gap(16).AlignItems(ui.Center).
 			Cursor(ui.CursorPointer).OnClick(func() { a.selected = g.group.ID })
 		row.Background(hoverFill(row, ui.Transparent, p.Hover))
 		row.Children(func() {
-			ui.Column(c).Grow(1).Gap(2).Children(func() {
-				ui.Text(c, g.group.Name).FontSize(14).FontWeight(600).TextColor(p.Ink).SingleLine()
-				ui.Text(c, fmt.Sprintf("%d 个缓存 · %d 项", len(g.items), sumCount(g))).
-					FontSize(12).TextColor(p.Ink2).SingleLine()
-			})
-			ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(14).TextColor(p.Ink).Shrink(0)
+			ui.Text(c, g.group.Name).FontSize(14).FontWeight(600).TextColor(p.Ink).SingleLine().Grow(1)
+			// Fixed columns keep counts and sizes in one rule down the page.
+			ui.Text(c, fmt.Sprintf("%d 个缓存 · %d 项", len(g.items), sumCount(g))).
+				FontSize(12).TextColor(p.Ink3).SingleLine().Width(180).TextAlign(ui.End).Shrink(0)
+			ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(13).TextColor(p.Ink).
+				Width(96).TextAlign(ui.End).Shrink(0)
 		})
 		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 	}
 	if n == 0 {
-		ui.Column(c).Padding(48, 32).Gap(6).Children(func() {
+		ui.Column(c).Padding(44, 32).Gap(6).Children(func() {
 			ui.Text(c, "没有找到可清理的缓存").FontSize(14).FontWeight(600).TextColor(p.Ink)
 			ui.Text(c, "已检查环境变量与各工具的默认位置").FontSize(12).TextColor(p.Ink3)
 		})
@@ -702,7 +693,7 @@ func (a *app) family(c *ui.Context, g groupState) {
 func (a *app) skeleton(c *ui.Context) {
 	p := a.pal
 	for range 3 {
-		ui.Column(c).Height(64).Padding(0, 32).Children(func() {
+		ui.Column(c).Height(56).Padding(0, 32).Children(func() {
 			ui.Box(c).Size(160, 12).Shrink(0).Background(p.Hover)
 		})
 	}
@@ -724,6 +715,14 @@ func (a *app) totalCount() int {
 	return n
 }
 
+func (a *app) totalLeaves() int {
+	n := 0
+	for _, g := range a.groups {
+		n += sumCount(g)
+	}
+	return n
+}
+
 // actionBar is the strip that turns a selection into the one action that
 // matters. It is a bar, not a floating pill: native windows do not float.
 func (a *app) actionBar(c *ui.Context) {
@@ -735,13 +734,14 @@ func (a *app) actionBar(c *ui.Context) {
 	}
 	ui.Column(c).Shrink(0).Children(func() {
 		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-		ui.Row(c).Height(64).Background(p.Raised).Children(func() {
+		ui.Row(c).Height(56).Background(p.Raised).Children(func() {
 			ui.Spacer(c)
 			ui.Row(c).Width(a.contentWidth(c)).Padding(0, 32).Gap(16).AlignItems(ui.Center).Children(func() {
-				ui.Column(c).Grow(1).Gap(2).Children(func() {
-					ui.Text(c, fmt.Sprintf("已选 %d 项 · %s", n, core.Bytes(bytes))).
-						FontSize(14).FontWeight(600).TextColor(p.Ink).SingleLine()
-					ui.Text(c, fmt.Sprintf("共 %s", core.Bytes(total))).FontSize(12).TextColor(p.Ink3).SingleLine()
+				ui.Row(c).Gap(10).AlignItems(ui.Baseline).Grow(1).Children(func() {
+					ui.Text(c, fmt.Sprintf("已选 %d 项", n)).
+						FontSize(13).FontWeight(600).TextColor(p.Ink).SingleLine().Shrink(0)
+					ui.Text(c, fmt.Sprintf("%s · 共 %s", core.Bytes(bytes), core.Bytes(total))).
+						Font(core.Mono()).FontSize(12).TextColor(p.Ink3).SingleLine()
 				})
 				if n > 0 {
 					clear := ui.ButtonBase(c).Padding(6, 10).Cursor(ui.CursorPointer)
@@ -763,7 +763,7 @@ func (a *app) primaryButton(c *ui.Context, label string, enabled bool, fn func()
 	if !enabled {
 		bg, fg = ui.Transparent, p.Ink3
 	}
-	btn := ui.ButtonBase(c).Height(36).Padding(0, 16).Background(bg).Shrink(0).AlignItems(ui.Center)
+	btn := ui.ButtonBase(c).Height(32).Padding(0, 14).Background(bg).Shrink(0).AlignItems(ui.Center)
 	if enabled {
 		btn.Cursor(ui.CursorPointer)
 	} else {
