@@ -67,13 +67,12 @@ func Mono() string { return "Consolas" }
 func Display() string { return "Segoe UI Variable Display" }
 
 // ApplyTheme sets the mygo theme for this frame and returns the palette that
-// goes with it.
+// goes with it. The light palette is the product's look, so a dark system
+// appearance does not repaint it; DarkPalette stays for a future explicit
+// choice.
 func ApplyTheme(c *ui.Context) *Palette {
 	t := *c.Theme()
 	p := Light
-	if t.Dark {
-		p = DarkPalette
-	}
 	t.Background = p.Canvas
 	// Rows and plain containers default to the surface colour, and the list
 	// must read as one ground.
@@ -99,6 +98,9 @@ func ApplyTheme(c *ui.Context) *Palette {
 	t.Radius = 0
 	t.Spacing = 2
 	t.FontSize = 14
+	// Native controls (spinner, scroller, check marks) follow these flags, so
+	// pin them to the light palette rather than to the system appearance.
+	t.Dark = false
 	c.SetTheme(&t)
 	return &p
 }
