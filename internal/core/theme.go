@@ -23,6 +23,7 @@ type Palette struct {
 	OnAccent   ui.Color // label on the accent
 	Danger     ui.Color
 	Success    ui.Color
+	Warning    ui.Color
 	Dark       bool
 }
 
@@ -41,6 +42,7 @@ var (
 		OnAccent:   ui.Hex("#FFFFFF"),
 		Danger:     ui.Hex("#A8291F"),
 		Success:    ui.Hex("#2E6B4F"),
+		Warning:    ui.Hex("#8A6416"),
 	}
 	DarkPalette = Palette{
 		Canvas:     ui.Hex("#16181B"),
@@ -56,6 +58,7 @@ var (
 		OnAccent:   ui.Hex("#0E1114"),
 		Danger:     ui.Hex("#F0746A"),
 		Success:    ui.Hex("#6BBF8A"),
+		Warning:    ui.Hex("#D3A24A"),
 		Dark:       true,
 	}
 )
@@ -87,7 +90,7 @@ func ApplyTheme(c *ui.Context) *Palette {
 	t.AccentPressed = p.Accent
 	t.AccentText = p.OnAccent
 	t.Danger = p.Danger
-	t.Warning = p.Ink2
+	t.Warning = p.Warning
 	t.Success = p.Success
 	t.Selection = p.Selected
 	t.Focus = p.Accent

@@ -33,7 +33,9 @@ func testAppWith(t *testing.T, so Options) *App {
 	}, so)
 	a.cache = fixture()
 	a.phase = phaseReady
+	a.now = fixedTime(0)
 	a.regroup()
+	a.recommend()
 	return a
 }
 
@@ -99,7 +101,7 @@ func fixture() *core.Cache {
 func TestPlanSheetRenders(t *testing.T) {
 	a := testApp(t, false)
 	a.now = fixedTime(0)
-	tt := ui.NewTester(a.view, 940, 660)
+	tt := ui.NewTester(a.view, 1200, 780)
 	write(t, "overview.png", tt.Image())
 
 	// Open .NET, select every removable item, then review the plan.
@@ -107,6 +109,8 @@ func TestPlanSheetRenders(t *testing.T) {
 		t.Fatal(err)
 	}
 	write(t, "family.png", tt.Image())
+	a.clearChecks()
+	tt.Frame()
 	if err := tt.Click("全部选中"); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +131,7 @@ func TestPlanSheetRenders(t *testing.T) {
 func TestSelectionAndDebug(t *testing.T) {
 	a := testApp(t, true)
 	a.now = fixedTime(0)
-	tt := ui.NewTester(a.view, 940, 660)
+	tt := ui.NewTester(a.view, 1200, 780)
 	if err := tt.Click("Go"); err != nil {
 		t.Fatal(err)
 	}
@@ -146,10 +150,11 @@ func TestSelectionAndDebug(t *testing.T) {
 func TestPresetSelectsLeaves(t *testing.T) {
 	a := testApp(t, false)
 	a.now = fixedTime(0)
-	tt := ui.NewTester(a.view, 940, 660)
+	tt := ui.NewTester(a.view, 1200, 780)
 	if err := tt.Click(".NET"); err != nil {
 		t.Fatal(err)
 	}
+	a.clearChecks()
 	if err := tt.Click("保留最新"); err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +169,7 @@ func TestWidths(t *testing.T) {
 	for _, sz := range []struct {
 		name string
 		w, h int
-	}{{"narrow", 860, 560}, {"wide", 1280, 800}} {
+	}{{"narrow", 980, 620}, {"wide", 1440, 900}} {
 		a := testApp(t, false)
 		a.now = fixedTime(0)
 		tt := ui.NewTester(a.view, sz.w, sz.h)
@@ -172,26 +177,55 @@ func TestWidths(t *testing.T) {
 	}
 }
 
+// A scan lands on a recommendation, not on an empty list: stale entries and
+// old versions are checked, the newest version and anything recent are not.
+func TestRecommendationChecksOnlySafeItems(t *testing.T) {
+	a := testAppWith(t, Options{})
+	a.now = fixedTime(0)
+	if n, _ := a.checkedTotal(); n == 0 {
+		t.Fatal("a fresh scan must recommend something to clean")
+	}
+	for p := range a.checked {
+		if strings.HasSuffix(p, "xunit.1.2") || strings.HasSuffix(p, "serilog.1.2") ||
+			strings.HasSuffix(p, `newtonsoft.json\newtonsoft.json.1.2`) {
+			t.Fatalf("recommendation checked the newest version: %s", p)
+		}
+		if strings.HasSuffix(p, `go-build\00`) {
+			t.Fatalf("recommendation checked a cache touched this week: %s", p)
+		}
+		if strings.Contains(p, `npm-cache\_cacache`) && !a.checked[p] {
+			t.Fatalf("stale entry %s was not recommended", p)
+		}
+	}
+	if !a.checked[`C:\Users\tester\AppData\Local\npm-cache\_cacache`] {
+		t.Fatal("a cache idle for 90 days should be recommended")
+	}
+}
+
+// A build that can delete cleans straight from the list; only a build that
+// refuses to delete opens the written-out plan.
 func TestPlanExecuteVisibleOnlyOutsideDebug(t *testing.T) {
 	a := testAppWith(t, Options{})
 	a.now = fixedTime(0)
 	a.checked[`C:\Users\tester\AppData\Local\go-build\00`] = true
-	a.openPlan(a.selectedPlan())
-	tt := ui.NewTester(a.view, 940, 660)
-	if !tt.HasText("执行清理") {
-		t.Fatalf("execute missing; texts %v", tt.Texts())
+	tt := ui.NewTester(a.view, 1200, 780)
+	if !tt.HasText("开始清理") {
+		t.Fatalf("clean missing; texts %v", tt.Texts())
+	}
+	if tt.HasText("查看清理计划") {
+		t.Fatal("the list is the plan; a normal build must not detour through a sheet")
 	}
 
 	d := testApp(t, true)
 	d.now = fixedTime(0)
 	d.checked[`C:\Users\tester\AppData\Local\go-build\00`] = true
-	d.openPlan(d.selectedPlan())
-	td := ui.NewTester(d.view, 940, 660)
-	if td.HasText("执行清理") {
-		t.Fatal("debug build must not offer execute")
-	}
+	d.startClean()
+	td := ui.NewTester(d.view, 1200, 780)
 	if !td.HasText("调试模式：只列出，不删除。") {
 		t.Fatalf("debug note missing; texts %v", td.Texts())
+	}
+	if td.HasText("开始清理") {
+		t.Fatal("debug build must not offer to clean")
 	}
 }
 
@@ -200,7 +234,7 @@ func TestPlanExecuteVisibleOnlyOutsideDebug(t *testing.T) {
 func TestDarkSystemKeepsLightPalette(t *testing.T) {
 	a := testApp(t, false)
 	a.now = fixedTime(0)
-	tt := ui.NewTester(a.view, 940, 660)
+	tt := ui.NewTester(a.view, 1200, 780)
 	tt.SetDark(true)
 	tt.Frame()
 	if a.pal.Dark || a.pal.Canvas != core.Light.Canvas {
@@ -221,7 +255,7 @@ func TestUnreadableScanIsVisible(t *testing.T) {
 	a.cache.Results["node/npm"] = res
 	a.regroup()
 
-	tt := ui.NewTester(a.view, 940, 660)
+	tt := ui.NewTester(a.view, 1200, 780)
 	if !tt.HasText("1 个缓存读取失败") {
 		t.Fatalf("overview missing the warning; texts %v", tt.Texts())
 	}
@@ -230,7 +264,7 @@ func TestUnreadableScanIsVisible(t *testing.T) {
 	}
 	meta := ""
 	for _, s := range tt.Texts() {
-		if strings.HasPrefix(s, "3 项") {
+		if strings.Contains(s, "3 项") && strings.Contains(s, "前") {
 			meta = s
 		}
 	}
@@ -333,7 +367,7 @@ func TestReceiptComparesBeforeAndAfter(t *testing.T) {
 		t.Fatalf("regenerated = %d (%d bytes), still = %d", rc.regenerated, rc.regenBytes, rc.still)
 	}
 
-	tt := ui.NewTester(a.view, 940, 660)
+	tt := ui.NewTester(a.view, 1200, 780)
 	tt.Frame()
 	if !tt.HasText("清理前 → 清理后") {
 		t.Fatalf("receipt missing; texts %v", tt.Texts())
@@ -417,12 +451,13 @@ func TestReceiptCallsOldSurvivorsStill(t *testing.T) {
 // The sheet must say why each path goes and which version stays — the two
 // things that make "保留最新" safe enough to press.
 func TestPlanShowsReasonsAndKept(t *testing.T) {
-	a := testAppWith(t, Options{})
+	a := testAppWith(t, Options{NoDelete: true})
 	a.now = fixedTime(0)
-	tt := ui.NewTester(a.view, 940, 660)
+	tt := ui.NewTester(a.view, 1200, 780)
 	if err := tt.Click(".NET"); err != nil {
 		t.Fatal(err)
 	}
+	a.clearChecks()
 	if err := tt.Click("保留最新"); err != nil {
 		t.Fatal(err)
 	}
@@ -459,10 +494,11 @@ func TestKeepNewestSparesPlainCaches(t *testing.T) {
 	}
 	a.regroup()
 
-	tt := ui.NewTester(a.view, 940, 660)
+	tt := ui.NewTester(a.view, 1200, 780)
 	if err := tt.Click(".NET"); err != nil {
 		t.Fatal(err)
 	}
+	a.clearChecks()
 	if err := tt.Click("保留最新"); err != nil {
 		t.Fatal(err)
 	}
@@ -515,7 +551,7 @@ func TestPlanSheetLongPaths(t *testing.T) {
 		a.checked[p.Path] = true
 	}
 	a.openPlan(a.selectedPlan())
-	tt := ui.NewTester(a.view, 940, 660)
+	tt := ui.NewTester(a.view, 1200, 780)
 	write(t, "plan-long.png", tt.Image())
 	if !tt.HasText("8.0.0-preview.7.23375.6") {
 		t.Fatalf("long path missing; texts %v", tt.Texts())

@@ -33,10 +33,10 @@ func main() {
 		a := app.New(cfg, core.DefaultOptions(), app.Options{Debug: *debug, NoDelete: *noDelete || *debug})
 		a.Window = mygo.NewWindow(mygo.WindowOptions{
 			Title:           "outrash",
-			Width:           940,
-			Height:          660,
-			MinWidth:        860,
-			MinHeight:       560,
+			Width:           1200,
+			Height:          780,
+			MinWidth:        980,
+			MinHeight:       620,
 			BackgroundColor: "#F6F6F4",
 			TitleBarStyle:   mygo.TitleBarHidden,
 			Content:         app.View(a),
