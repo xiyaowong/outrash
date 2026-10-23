@@ -110,7 +110,7 @@ func (a *app) chip(c *ui.Context, act preset) {
 func (a *app) itemRow(c *ui.Context, it itemState) {
 	p := a.pal
 	picks := allPicks(it.res)
-	if len(picks) == 0 {
+	if len(picks) == 0 && !it.res.Failed() {
 		return
 	}
 	key := "i:" + it.item.ID
@@ -166,6 +166,8 @@ func (a *app) itemMeta(res core.Result) string {
 	}
 	var head string
 	switch {
+	case versions == 0 && entries == 0 && res.Failed():
+		head = "读取失败"
 	case versions > 0 && entries > 0:
 		head = fmt.Sprintf("%d 个版本 · %d 项", versions, entries)
 	case versions > 0:
@@ -174,7 +176,10 @@ func (a *app) itemMeta(res core.Result) string {
 		head = fmt.Sprintf("%d 项", entries)
 	}
 	if age := ageText(a.now, newest); age != "" {
-		return head + " · " + age
+		head += " · " + age
+	}
+	if res.Failed() && versions+entries > 0 {
+		head += " · 读取失败"
 	}
 	return head
 }

@@ -199,6 +199,37 @@ func TestDarkTheme(t *testing.T) {
 	write(t, "dark.png", tt.Image())
 }
 
+// A cache the scan could not read must not pass for an empty one.
+func TestUnreadableScanIsVisible(t *testing.T) {
+	a := testAppWith(t, options{})
+	a.now = fixedTime(0)
+	res, ok := a.cache.Get("node", "npm")
+	if !ok {
+		t.Fatal("fixture lost npm")
+	}
+	res.Roots[0].Err = os.ErrPermission
+	a.cache.Results["node/npm"] = res
+	a.regroup()
+
+	tt := ui.NewTester(a.view, 940, 660)
+	if !tt.HasText("1 个缓存读取失败") {
+		t.Fatalf("overview missing the warning; texts %v", tt.Texts())
+	}
+	if err := tt.Click("Node.js"); err != nil {
+		t.Fatal(err)
+	}
+	meta := ""
+	for _, s := range tt.Texts() {
+		if strings.HasPrefix(s, "3 项") {
+			meta = s
+		}
+	}
+	if !strings.Contains(meta, "读取失败") {
+		t.Fatalf("item row missing the warning; texts %v", tt.Texts())
+	}
+	write(t, "unreadable.png", tt.Image())
+}
+
 func TestAbbrevPath(t *testing.T) {
 	long := `C:\Users\tester\.nuget\packages\microsoft.extensions.logging.abstractions\8.0.0-preview.7.23375.6`
 	got := abbrevPath(long, 72)

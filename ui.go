@@ -77,6 +77,20 @@ type groupState struct {
 	count int
 }
 
+// visible keeps a family on screen when it has bytes to show or when a
+// failed scan is the reason it has none.
+func (g groupState) visible() bool {
+	if g.size > 0 {
+		return true
+	}
+	for _, it := range g.items {
+		if it.res.Failed() {
+			return true
+		}
+	}
+	return false
+}
+
 type itemState struct {
 	item core.Item
 	res  core.Result
@@ -127,6 +141,9 @@ func (a *app) scan() {
 			a.phase = phaseReady
 			a.now = time.Now()
 			a.regroup()
+			if a.debug {
+				a.printScanWarnings(cache)
+			}
 		})
 	}()
 }
@@ -153,7 +170,7 @@ func (a *app) regroup() {
 	// A rescan can empty the family on screen; falling back to the overview
 	// beats showing an empty list.
 	if a.phase == phaseReady && a.selected != "" {
-		if g, ok := a.group(a.selected); !ok || g.size == 0 {
+		if g, ok := a.group(a.selected); !ok || !g.visible() {
 			a.selected = ""
 		}
 	}
@@ -272,7 +289,7 @@ func (a *app) rail(c *ui.Context) {
 				a.section(c, "缓存")
 				a.railRow(c, "", "全部", a.totalSize())
 				for _, g := range a.groups {
-					if g.size == 0 {
+					if !g.visible() {
 						continue
 					}
 					a.railRow(c, g.group.ID, g.group.Name, g.size)
@@ -360,6 +377,10 @@ func (a *app) header(c *ui.Context) {
 				ui.Spacer(c)
 				ui.Row(c).Gap(16).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, a.headerSource(g, ok)).FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
+					if n := a.warnCount(g, ok); n > 0 {
+						ui.Text(c, fmt.Sprintf("%d 个缓存读取失败", n)).
+							FontSize(12).FontWeight(600).TextColor(p.Danger).Shrink(0)
+					}
 					for _, act := range a.presets(picks) {
 						a.chip(c, act)
 					}
@@ -402,6 +423,25 @@ func (a *app) headerSource(g groupState, ok bool) string {
 	return ""
 }
 
+// warnCount is how many items on screen were scanned incompletely: the
+// family's when one is open, every family's otherwise.
+func (a *app) warnCount(g groupState, ok bool) int {
+	items := g.items
+	if !ok {
+		items = nil
+		for _, gg := range a.groups {
+			items = append(items, gg.items...)
+		}
+	}
+	n := 0
+	for _, it := range items {
+		if it.res.Failed() {
+			n++
+		}
+	}
+	return n
+}
+
 func (a *app) elapsed() string {
 	if a.cache == nil {
 		return "—"
@@ -434,7 +474,7 @@ func (a *app) overview(c *ui.Context) {
 	p := a.pal
 	n := 0
 	for _, g := range a.groups {
-		if g.size == 0 {
+		if !g.visible() {
 			continue
 		}
 		n++
