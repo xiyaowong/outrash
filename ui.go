@@ -77,6 +77,7 @@ type report struct {
 	lines   []string
 	freed   int64
 	failed  int
+	gone    int
 	elapsed time.Duration
 	// receipt compares the families before the clean with the rescan that
 	// followed it; nil until a clean starts.

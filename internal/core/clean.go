@@ -8,6 +8,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,9 @@ type Removal struct {
 	Path  string
 	Bytes int64
 	Err   error
+	// Gone marks a path that was already absent, which is not a failure:
+	// the tool or the user cleared it between the scan and the run.
+	Gone bool
 }
 
 // Outcome totals a run.
@@ -26,6 +30,7 @@ type Outcome struct {
 	Runs    []Removal
 	Freed   int64
 	Failed  int
+	Gone    int
 	Elapsed time.Duration
 }
 
@@ -40,12 +45,19 @@ func Remove(p *Plan, roots []string) Outcome {
 	var out Outcome
 	for _, s := range p.Steps {
 		r := Removal{Path: s.Path, Bytes: s.Bytes}
-		if err := check(s.Path, roots); err != nil {
+		switch err := check(s.Path, roots); {
+		case errors.Is(err, fs.ErrNotExist):
+			// Nothing to remove; the cache went away on its own.
+			r.Gone = true
+			out.Gone++
+		case err != nil:
 			r.Err = err
-		} else if err := os.RemoveAll(s.Path); err != nil {
-			r.Err = err
-		} else {
-			out.Freed += s.Bytes
+		default:
+			if err := os.RemoveAll(s.Path); err != nil {
+				r.Err = err
+			} else {
+				out.Freed += s.Bytes
+			}
 		}
 		if r.Err != nil {
 			out.Failed++
