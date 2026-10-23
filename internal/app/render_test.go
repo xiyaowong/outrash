@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"image"
 	"image/png"
 	"os"
@@ -844,7 +845,7 @@ func TestContextMenusByDepth(t *testing.T) {
 	if err := tt.RightClick(".NET"); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"折叠该分组", "全选此分组", "-", "详细信息"} {
+	for _, want := range []string{"折叠", "-", "选择", "详细信息"} {
 		if !slices.Contains(tt.Menu(), want) {
 			t.Fatalf("family menu = %q, want %q", tt.Menu(), want)
 		}
@@ -862,23 +863,50 @@ func TestContextMenusByDepth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A package: the keep-newest policy is the menu's own verb.
+	// The selection verbs are the same at every depth, and live one level in
+	// so no menu row carries its own scope.
+	var famPicks []core.Pick
+	for _, g := range a.groups {
+		if g.group.Name == ".NET" {
+			famPicks = a.groupPicks(g)
+		}
+	}
+	if len(famPicks) == 0 {
+		t.Fatal("the .NET family holds nothing")
+	}
+	tt.RightClick(".NET")
+	if err := tt.ChooseMenuItem("选择", fmt.Sprintf("全选 %d 项", len(famPicks))); err != nil {
+		t.Fatalf("family select submenu: %v", err)
+	}
+	tt.Frame()
+	if on, total := a.checkState(famPicks); on != total {
+		t.Fatalf("全选 checked %d of the family's %d", on, total)
+	}
+	tt.RightClick(".NET")
+	if err := tt.ChooseMenuItem("选择", "全不选"); err != nil {
+		t.Fatalf("family clear: %v", err)
+	}
+	tt.Frame()
+	if on, _ := a.checkState(famPicks); on != 0 {
+		t.Fatalf("全不选 left %d of the family checked", on)
+	}
+
+	// A package: the keep-newest policy is the menu's own verb, in the same
+	// submenu.
 	if err := tt.RightClick("serilog"); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(tt.Menu(), "仅选旧版本") {
-		t.Fatalf("package menu = %q", tt.Menu())
+	if err := tt.ChooseMenuItem("选择", "仅旧版本"); err != nil {
+		t.Fatalf("package menu has no 仅旧版本: %v", err)
 	}
-	a.clearChecks()
-	tt.ChooseMenuItem("仅选旧版本")
 	tt.Frame()
 	for p := range a.checked {
 		if strings.HasSuffix(p, "serilog.1.2") {
-			t.Fatalf("仅选旧版本 checked the newest: %s", p)
+			t.Fatalf("仅旧版本 checked the newest: %s", p)
 		}
 	}
 	if n, _ := a.checkedTotal(); n == 0 {
-		t.Fatal("仅选旧版本 selected nothing")
+		t.Fatal("仅旧版本 selected nothing")
 	}
 
 	// A leaf: reveal and copy act on its one path.
@@ -904,10 +932,10 @@ func TestContextMenusByDepth(t *testing.T) {
 		t.Fatalf("clipboard = %q", got)
 	}
 	tt.RightClick("serilog.1.1")
-	tt.ChooseMenuItem("选中此项")
+	tt.ChooseMenuItem("勾选")
 	tt.Frame()
 	if !a.checked[revealed] {
-		t.Fatal("选中此项 did not check the leaf")
+		t.Fatal("勾选 did not check the leaf")
 	}
 
 	// A cache: one root here, so 打开缓存目录 is a plain item, not a submenu.
@@ -959,6 +987,29 @@ func TestContextMenuNamesEveryRoot(t *testing.T) {
 	tt.Frame()
 	if opened != `D:\npm-cache` {
 		t.Fatalf("opened %q, want the root that was chosen", opened)
+	}
+}
+
+// Clearing the selection must not read as "clean everything": the bar says
+// 全不选, the one word that pairs with the 全选 control beside it.
+func TestClearSelectionLabel(t *testing.T) {
+	a := testAppWith(t, Options{})
+	a.now = fixedTime(0)
+	if n, _ := a.checkedTotal(); n == 0 {
+		t.Fatal("nothing recommended to clear")
+	}
+	tt := ui.NewTester(a.view, 1200, 780)
+	if tt.HasText("清空") {
+		t.Fatalf("the bar still says 清空; texts %v", tt.Texts())
+	}
+	if err := tt.Click("全不选"); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := a.checkedTotal(); n != 0 {
+		t.Fatalf("全不选 left %d items checked", n)
+	}
+	if tt.HasText("全不选") {
+		t.Fatal("the control must go away once nothing is selected")
 	}
 }
 
