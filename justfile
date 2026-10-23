@@ -2,6 +2,14 @@
 # one-liners so the default shell (PowerShell) and sh both run them.
 set windows-shell := ["pwsh", "-NoLogo", "-NoProfile", "-Command"]
 
+# -s drops the symbol table, -w the DWARF data, -trimpath the build paths, and
+# -buildvcs the version stamp: 14.2 MB down to 9.9 MB, nothing a user needs.
+link_flags := "-s -w"
+
+# Windows gets no console window; other targets would reject -H.
+exe := if os_family() == "windows" { ".exe" } else { "" }
+gui := if os_family() == "windows" { " -H=windowsgui" } else { "" }
+
 default:
     @just --list
 
@@ -10,6 +18,35 @@ ci:
     go build ./...
     go vet ./...
     go test ./...
+
+# Vet, including the native UI build-lifetime checks mygo adds.
+lint:
+    go vet ./...
+    go tool mygo vet .
+
+# The tests on their own.
+test:
+    go test ./...
+
+# The tests again under the race detector.
+race:
+    go test -race ./...
+
+# Coverage per package.
+cover:
+    go test -cover ./...
+
+# Stripped, path-free, no console window, into gitignored build/.
+build:
+    go build -trimpath -buildvcs=false -ldflags "{{link_flags}}{{gui}}" -o build/outrash{{exe}} .
+
+# The same build without the linker flags, to see what they buy.
+build-full:
+    go build -o build/outrash-full{{exe}} .
+
+# The packaged app as it ships; only this one has a version in its about box.
+release:
+    go tool mygo build
 
 # The window, with every plan printed to stdout and deletion disabled.
 debug:
