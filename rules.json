@@ -1,0 +1,324 @@
+{
+  "version": 1,
+  "staleDays": 30,
+  "groups": [
+    {
+      "id": "node",
+      "name": "Node.js",
+      "color": "#5FA04E",
+      "items": [
+        {
+          "id": "npm",
+          "name": "npm 缓存",
+          "note": "下次安装依赖时自动重新下载",
+          "env": ["npm_config_cache"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/npm-cache"],
+            "darwin": ["~/.npm"],
+            "linux": ["~/.npm"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "pnpm",
+          "name": "pnpm 存储",
+          "note": "下次安装依赖时自动重新下载",
+          "env": ["npm_config_store_dir"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/pnpm/store"],
+            "darwin": ["~/Library/pnpm/store"],
+            "linux": ["~/.local/share/pnpm/store"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "yarn",
+          "name": "Yarn 缓存",
+          "note": "下次安装依赖时自动重新下载",
+          "env": ["YARN_CACHE_FOLDER"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/Yarn/Cache", "%LOCALAPPDATA%/Yarn/Berry/cache"],
+            "darwin": ["~/Library/Caches/Yarn", "~/.yarn/berry/cache"],
+            "linux": ["~/.cache/yarn", "~/.yarn/berry/cache"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "bun",
+          "name": "Bun 缓存",
+          "note": "下次安装依赖时自动重新下载",
+          "env": ["BUN_INSTALL_CACHE_DIR"],
+          "paths": {
+            "windows": ["%USERPROFILE%/.bun/install/cache"],
+            "darwin": ["~/.bun/install/cache"],
+            "linux": ["~/.bun/install/cache"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "deno",
+          "name": "Deno 缓存",
+          "note": "下次运行时自动重新下载",
+          "env": ["DENO_DIR"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/deno"],
+            "darwin": ["~/Library/Caches/deno"],
+            "linux": ["~/.cache/deno"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "playwright",
+          "name": "Playwright 浏览器",
+          "note": "可用 npx playwright install 重新下载",
+          "env": ["PLAYWRIGHT_BROWSERS_PATH"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/ms-playwright"],
+            "darwin": ["~/Library/Caches/ms-playwright"],
+            "linux": ["~/.cache/ms-playwright"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "electron",
+          "name": "Electron 二进制",
+          "note": "下次安装时自动重新下载",
+          "env": ["electron_config_cache"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/electron/Cache"],
+            "darwin": ["~/Library/Caches/electron"],
+            "linux": ["~/.cache/electron"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "cypress",
+          "name": "Cypress 二进制",
+          "note": "可用 npx cypress install 重新下载",
+          "env": ["CYPRESS_CACHE_FOLDER"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/Cypress/Cache"],
+            "darwin": ["~/Library/Caches/Cypress"],
+            "linux": ["~/.cache/Cypress"]
+          },
+          "unit": "entries"
+        }
+      ]
+    },
+    {
+      "id": "dotnet",
+      "name": ".NET",
+      "color": "#6C3AC8",
+      "items": [
+        {
+          "id": "nuget-packages",
+          "name": "NuGet 全局包",
+          "note": "还原项目时自动重新下载",
+          "env": ["NUGET_PACKAGES"],
+          "paths": {
+            "windows": ["%USERPROFILE%/.nuget/packages"],
+            "darwin": ["~/.nuget/packages"],
+            "linux": ["~/.nuget/packages"]
+          },
+          "unit": "versioned"
+        },
+        {
+          "id": "nuget-http",
+          "name": "NuGet 下载缓存",
+          "note": "还原项目时自动重新下载",
+          "env": ["NUGET_HTTP_CACHE_PATH"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/NuGet/v3-cache"],
+            "darwin": ["~/.local/share/NuGet/v3-cache"],
+            "linux": ["~/.local/share/NuGet/v3-cache"]
+          },
+          "unit": "entries"
+        }
+      ]
+    },
+    {
+      "id": "go",
+      "name": "Go",
+      "color": "#0093B0",
+      "items": [
+        {
+          "id": "go-build",
+          "name": "构建缓存",
+          "note": "go build 时自动重新编译",
+          "env": ["GOCACHE"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/go-build"],
+            "darwin": ["~/Library/Caches/go-build"],
+            "linux": ["~/.cache/go-build"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "go-mod",
+          "name": "模块缓存",
+          "note": "构建时自动重新下载",
+          "env": ["GOMODCACHE"],
+          "paths": {
+            "windows": ["%GOPATH%/pkg/mod", "%USERPROFILE%/go/pkg/mod"],
+            "darwin": ["%GOPATH%/pkg/mod", "~/go/pkg/mod"],
+            "linux": ["%GOPATH%/pkg/mod", "~/go/pkg/mod"]
+          },
+          "unit": "entries"
+        }
+      ]
+    },
+    {
+      "id": "rust",
+      "name": "Rust",
+      "color": "#C4602C",
+      "items": [
+        {
+          "id": "cargo-registry",
+          "name": "Cargo 注册表",
+          "note": "构建时自动重新下载",
+          "paths": {
+            "windows": ["%CARGO_HOME%/registry", "%USERPROFILE%/.cargo/registry"],
+            "darwin": ["%CARGO_HOME%/registry", "~/.cargo/registry"],
+            "linux": ["%CARGO_HOME%/registry", "~/.cargo/registry"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "cargo-git",
+          "name": "Cargo Git 依赖",
+          "note": "构建时自动重新下载",
+          "paths": {
+            "windows": ["%CARGO_HOME%/git", "%USERPROFILE%/.cargo/git"],
+            "darwin": ["%CARGO_HOME%/git", "~/.cargo/git"],
+            "linux": ["%CARGO_HOME%/git", "~/.cargo/git"]
+          },
+          "unit": "entries"
+        }
+      ]
+    },
+    {
+      "id": "python",
+      "name": "Python",
+      "color": "#3776AB",
+      "items": [
+        {
+          "id": "pip",
+          "name": "pip 缓存",
+          "note": "下次安装时自动重新下载",
+          "env": ["PIP_CACHE_DIR"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/pip/cache"],
+            "darwin": ["~/Library/Caches/pip"],
+            "linux": ["~/.cache/pip"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "uv",
+          "name": "uv 缓存",
+          "note": "下次安装时自动重新下载",
+          "env": ["UV_CACHE_DIR"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/uv/cache"],
+            "darwin": ["~/.cache/uv"],
+            "linux": ["~/.cache/uv"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "poetry",
+          "name": "Poetry 缓存",
+          "note": "下次安装时自动重新下载",
+          "env": ["POETRY_CACHE_DIR"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/pypoetry/Cache"],
+            "darwin": ["~/Library/Caches/pypoetry"],
+            "linux": ["~/.cache/pypoetry"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "conda",
+          "name": "Conda 包缓存",
+          "note": "下次安装时自动重新下载",
+          "paths": {
+            "windows": ["%USERPROFILE%/.conda/pkgs"],
+            "darwin": ["~/.conda/pkgs"],
+            "linux": ["~/.conda/pkgs"]
+          },
+          "unit": "entries"
+        }
+      ]
+    },
+    {
+      "id": "jvm",
+      "name": "JVM",
+      "color": "#E07020",
+      "items": [
+        {
+          "id": "gradle",
+          "name": "Gradle 缓存",
+          "note": "构建时自动重新下载",
+          "paths": {
+            "windows": ["%GRADLE_USER_HOME%/caches", "%USERPROFILE%/.gradle/caches"],
+            "darwin": ["%GRADLE_USER_HOME%/caches", "~/.gradle/caches"],
+            "linux": ["%GRADLE_USER_HOME%/caches", "~/.gradle/caches"]
+          },
+          "unit": "entries"
+        }
+      ]
+    },
+    {
+      "id": "other",
+      "name": "其他",
+      "color": "#6E6E73",
+      "items": [
+        {
+          "id": "pub",
+          "name": "Flutter / Dart",
+          "note": "构建时自动重新下载",
+          "paths": {
+            "windows": ["%PUB_CACHE%/hosted", "%PUB_CACHE%/git", "%LOCALAPPDATA%/Pub/Cache/hosted", "%LOCALAPPDATA%/Pub/Cache/git"],
+            "darwin": ["%PUB_CACHE%/hosted", "%PUB_CACHE%/git", "~/.pub-cache/hosted", "~/.pub-cache/git"],
+            "linux": ["%PUB_CACHE%/hosted", "%PUB_CACHE%/git", "~/.pub-cache/hosted", "~/.pub-cache/git"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "composer",
+          "name": "Composer 缓存",
+          "note": "下次安装时自动重新下载",
+          "env": ["COMPOSER_CACHE_DIR"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/Composer"],
+            "darwin": ["~/Library/Caches/composer"],
+            "linux": ["~/.cache/composer"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "swiftpm",
+          "name": "Swift Package 缓存",
+          "note": "构建时自动重新下载",
+          "paths": {
+            "darwin": ["~/Library/Caches/org.swift.swiftpm"],
+            "linux": ["~/.cache/org.swift.swiftpm"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "vcpkg",
+          "name": "vcpkg 二进制缓存",
+          "note": "构建时自动重新编译",
+          "env": ["VCPKG_DEFAULT_BINARY_CACHE"],
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/vcpkg/archives"],
+            "darwin": ["~/.cache/vcpkg/archives"],
+            "linux": ["~/.cache/vcpkg/archives"]
+          },
+          "unit": "entries"
+        }
+      ]
+    }
+  ]
+}
