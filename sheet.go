@@ -14,6 +14,9 @@ import (
 func uiView(a *app) *ui.Content { return ui.View(a.view) }
 
 func (a *app) openPlan(p *core.Plan) {
+	if a.busy {
+		return
+	}
 	if p.Empty() {
 		a.msg = "没有需要清理的内容"
 		return
@@ -170,31 +173,37 @@ func abbrevPath(p string, max int) string {
 	return string(r[:head]) + "…" + string(r[len(r)-tail:])
 }
 
-// run deletes the shown plan in the background, then reports.
+// run deletes the shown plan in the background, then rescans.
 func (a *app) run() {
 	pl := a.shown
-	if pl == nil {
+	if pl == nil || a.busy {
 		return
 	}
 	a.modal = modalNone
+	a.shown = nil
+	a.busy = true
 	a.msg = "正在清理…"
-	a.win.Invalidate()
+	a.clearChecks()
+	a.repaint()
 	roots := a.roots()
 	go func() {
-		out := core.Remove(pl, roots)
-		a.win.Update(func() {
-			a.report = &report{freed: out.Freed, failed: out.Failed, elapsed: out.Elapsed}
-			for _, r := range out.Runs {
-				if r.Err != nil {
-					a.report.lines = append(a.report.lines, fmt.Sprintf("未能删除 %s：%v", r.Path, r.Err))
-				}
-			}
-			a.msg = fmt.Sprintf("已清理 %s", core.Bytes(out.Freed))
-			a.clearChecks()
-			a.modal = modalReport
-			a.shown = nil
-		})
+		out := a.remove(pl, roots)
+		a.applyUpdate(func() { a.finish(out) })
 	}()
+}
+
+// finish applies a completed removal and only now rescans: a scan racing
+// the deletion would list paths that no longer exist.
+func (a *app) finish(out core.Outcome) {
+	a.busy = false
+	a.report = &report{freed: out.Freed, failed: out.Failed, elapsed: out.Elapsed}
+	for _, r := range out.Runs {
+		if r.Err != nil {
+			a.report.lines = append(a.report.lines, fmt.Sprintf("未能删除 %s：%v", r.Path, r.Err))
+		}
+	}
+	a.msg = ""
+	a.modal = modalReport
 	a.scan()
 }
 

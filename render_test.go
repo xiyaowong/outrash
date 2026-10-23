@@ -230,6 +230,49 @@ func TestUnreadableScanIsVisible(t *testing.T) {
 	write(t, "unreadable.png", tt.Image())
 }
 
+// A removal must finish before the list is rebuilt: a scan racing the
+// deletion would show paths that are already gone.
+func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
+	a := testAppWith(t, options{})
+	a.cfg = &core.Config{} // keeps the tests' rescan off the disk
+	started := make(chan struct{})
+	release := make(chan struct{})
+	posted := make(chan struct{}, 4)
+	a.remove = func(*core.Plan, []string) core.Outcome {
+		close(started)
+		<-release
+		return core.Outcome{Freed: 4096}
+	}
+	a.post = func(f func()) {
+		f()
+		posted <- struct{}{}
+	}
+	a.checked[`C:\gone`] = true
+	a.shown = &core.Plan{Title: "t"}
+
+	a.run()
+	<-started
+	if a.phase == phaseScanning {
+		t.Fatal("rescan started before the removal returned")
+	}
+	if a.msg != "正在清理…" {
+		t.Fatalf("title says %q, want the cleaning notice", a.msg)
+	}
+	if len(a.checked) != 0 {
+		t.Fatal("the run must consume the selection")
+	}
+
+	close(release)
+	<-posted // finish applied
+	if a.report == nil || a.report.freed != 4096 {
+		t.Fatalf("report = %+v, want 4096 bytes freed", a.report)
+	}
+	<-posted // the rescan completed
+	if a.phase != phaseReady {
+		t.Fatalf("phase = %v after the rescan, want ready", a.phase)
+	}
+}
+
 func TestAbbrevPath(t *testing.T) {
 	long := `C:\Users\tester\.nuget\packages\microsoft.extensions.logging.abstractions\8.0.0-preview.7.23375.6`
 	got := abbrevPath(long, 72)
