@@ -606,7 +606,7 @@ func (a *App) panel(c *ui.Context) {
 				a.panelBlock(c, "总览", func() {
 					ui.Row(c).Gap(20).Children(func() {
 						a.stat(c, "缓存", fmt.Sprint(a.totalCount()))
-						a.stat(c, "可清理", core.Bytes(a.totalSize()))
+						a.stat(c, "全部", core.Bytes(a.totalSize()))
 						a.stat(c, "耗时", a.elapsed())
 					})
 				})
