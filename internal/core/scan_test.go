@@ -240,6 +240,33 @@ func TestReadEntriesReportsUnreadableRoot(t *testing.T) {
 	}
 }
 
+// Closing stop while items are still being dispatched must end the scan,
+// not leave the sender blocked on a channel no worker reads.
+func TestRunReturnsWhenStopped(t *testing.T) {
+	cfg := &Config{Groups: []Group{{ID: "g", Name: "G", Items: []Item{{
+		ID:   "cache",
+		Name: "cache",
+		Unit: UnitEntries,
+		Paths: map[string][]string{
+			runtime.GOOS: {filepath.Join(t.TempDir(), "cache")},
+		},
+	}}}}}
+	o := Options{GOOS: runtime.GOOS, Getenv: func(string) string { return "" }}
+	stop := make(chan struct{})
+	close(stop)
+
+	done := make(chan *Cache, 1)
+	go func() { done <- Run(cfg, o, 2, nil, stop) }()
+	select {
+	case c := <-done:
+		if c == nil {
+			t.Fatal("Run returned a nil cache")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run blocked after stop closed")
+	}
+}
+
 func TestResultUnreadable(t *testing.T) {
 	if (Result{}).Failed() {
 		t.Fatal("a complete scan is not failed")

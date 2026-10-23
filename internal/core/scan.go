@@ -134,8 +134,14 @@ func Run(cfg *Config, o Options, workers int, onResult Progress, stop <-chan str
 			}
 		}()
 	}
+dispatch:
 	for i := range items {
-		jobs <- i
+		select {
+		case jobs <- i:
+		case <-stop:
+			// Every worker has left; sending now would block forever.
+			break dispatch
+		}
 	}
 	close(jobs)
 	wg.Wait()
