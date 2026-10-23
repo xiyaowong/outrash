@@ -40,9 +40,15 @@ var ErrUnsafe = errors.New("拒绝删除：不在扫描范围内，或路径过�
 // Remove removes every step in order. roots are the directories the scan
 // measured; a step outside all of them is refused, so a catalog change
 // between scan and clean cannot widen the blast radius.
-func Remove(p *Plan, roots []string) Outcome {
+func Remove(p *Plan, roots []string) Outcome { return RemoveWith(p, roots, nil) }
+
+// RemoveWith is Remove, reporting how many bytes it has finished with as it
+// goes. A step counts as done whether it was removed, was already gone, or
+// failed: the estimate is about time spent, not success.
+func RemoveWith(p *Plan, roots []string, progress func(done, total int64)) Outcome {
 	start := time.Now()
 	var out Outcome
+	var done int64
 	for _, s := range p.Steps {
 		r := Removal{Path: s.Path, Bytes: s.Bytes}
 		switch err := check(s.Path, roots); {
@@ -63,6 +69,10 @@ func Remove(p *Plan, roots []string) Outcome {
 			out.Failed++
 		}
 		out.Runs = append(out.Runs, r)
+		done += s.Bytes
+		if progress != nil {
+			progress(done, p.Bytes)
+		}
 	}
 	out.Elapsed = time.Since(start)
 	return out

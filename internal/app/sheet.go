@@ -193,8 +193,15 @@ func (a *App) run() {
 	// Taken before the removal, so the report can compare it with the rescan.
 	a.report = &report{receipt: a.openReceipt(pl)}
 	roots := a.roots()
+	a.progress = &progress{total: pl.Bytes, steps: len(pl.Steps), start: time.Now()}
+	pr := a.progress
 	go func() {
-		out := a.remove(pl, roots)
+		out := a.remove(pl, roots, func(done, total int64) {
+			pr.set(done, total)
+			// The title bar shows the estimate, so the frame has to follow
+			// the removal rather than wait for it.
+			a.repaint()
+		})
 		a.applyUpdate(func() { a.finish(out) })
 	}()
 }

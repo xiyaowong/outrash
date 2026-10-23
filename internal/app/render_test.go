@@ -274,6 +274,26 @@ func TestUnreadableScanIsVisible(t *testing.T) {
 	write(t, "unreadable.png", tt.Image())
 }
 
+func TestEstimateCountsDown(t *testing.T) {
+	cases := []struct {
+		done, total int64
+		elapsed     time.Duration
+		want        string
+	}{
+		{0, 100, time.Second, "清理中…"},
+		{0, 100, 3 * time.Second, "清理中…"},
+		{100, 100, 2 * time.Second, "即将完成"},
+		{50, 100, 2 * time.Second, "剩余约 2 秒"},
+		{50, 100, time.Minute, "剩余约 1 分 0 秒"},
+		{10, 100, 2 * time.Hour, "剩余约 18 小时 0 分"},
+	}
+	for _, c := range cases {
+		if got := estimate(c.done, c.total, c.elapsed); got != c.want {
+			t.Errorf("estimate(%d/%d, %s) = %q, want %q", c.done, c.total, c.elapsed, got, c.want)
+		}
+	}
+}
+
 // A removal must finish before the list is rebuilt: a scan racing the
 // deletion would show paths that are already gone.
 func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
@@ -282,7 +302,7 @@ func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	posted := make(chan struct{}, 4)
-	a.remove = func(*core.Plan, []string) core.Outcome {
+	a.remove = func(*core.Plan, []string, func(done, total int64)) core.Outcome {
 		close(started)
 		<-release
 		return core.Outcome{Freed: 4096}
