@@ -5,6 +5,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -817,6 +818,147 @@ func TestAboutSheetFromRail(t *testing.T) {
 	}
 	if a.modal != modalNone {
 		t.Fatalf("关闭 left modal %v open", a.modal)
+	}
+}
+
+// Each depth answers a different question, so each has its own menu: a leaf
+// names one path, a package offers the keep-newest policy, a cache may sit in
+// several roots, and a family has no path at all.
+func TestContextMenusByDepth(t *testing.T) {
+	revealed, opened := "", ""
+	prevReveal, prevOpen := revealPath, openPath
+	revealPath = func(p string) { revealed = p }
+	openPath = func(p string) { opened = p }
+	t.Cleanup(func() { revealPath, openPath = prevReveal, prevOpen })
+
+	a := testAppWith(t, Options{})
+	a.now = fixedTime(0)
+	onlyOpen(a, "dotnet")
+	tt := ui.NewTester(a.view, 1200, 780)
+	// The family opens its items; the item opens its packages.
+	if err := tt.Click("NuGet 全局包"); err != nil {
+		t.Fatal(err)
+	}
+
+	// A family: no path, so nothing that pretends to reveal one.
+	if err := tt.RightClick(".NET"); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"折叠该分组", "全选此分组", "-", "详细信息"} {
+		if !slices.Contains(tt.Menu(), want) {
+			t.Fatalf("family menu = %q, want %q", tt.Menu(), want)
+		}
+	}
+	if slices.Contains(tt.Menu(), "复制路径") {
+		t.Fatalf("a family offers a path it does not have: %q", tt.Menu())
+	}
+	tt.ChooseMenuItem("详细信息")
+	tt.Frame()
+	if a.modal != modalDetail || a.detail.title != ".NET" {
+		t.Fatalf("family details = %+v, modal %v", a.detail, a.modal)
+	}
+	write(t, "detail.png", tt.Image())
+	if err := tt.Click("关闭"); err != nil {
+		t.Fatal(err)
+	}
+
+	// A package: the keep-newest policy is the menu's own verb.
+	if err := tt.RightClick("serilog"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(tt.Menu(), "仅选旧版本") {
+		t.Fatalf("package menu = %q", tt.Menu())
+	}
+	a.clearChecks()
+	tt.ChooseMenuItem("仅选旧版本")
+	tt.Frame()
+	for p := range a.checked {
+		if strings.HasSuffix(p, "serilog.1.2") {
+			t.Fatalf("仅选旧版本 checked the newest: %s", p)
+		}
+	}
+	if n, _ := a.checkedTotal(); n == 0 {
+		t.Fatal("仅选旧版本 selected nothing")
+	}
+
+	// A leaf: reveal and copy act on its one path.
+	a.clearChecks()
+	if err := tt.Click("serilog"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.RightClick("serilog.1.1"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(tt.Menu(), "在文件夹中显示") {
+		t.Fatalf("leaf menu = %q", tt.Menu())
+	}
+	tt.ChooseMenuItem("在文件夹中显示")
+	tt.Frame()
+	if !strings.HasSuffix(revealed, `serilog\serilog.1.1`) {
+		t.Fatalf("revealed %q", revealed)
+	}
+	tt.RightClick("serilog.1.1")
+	tt.ChooseMenuItem("复制路径")
+	tt.Frame()
+	if got := tt.Clipboard(); !strings.HasSuffix(got, `serilog\serilog.1.1`) {
+		t.Fatalf("clipboard = %q", got)
+	}
+	tt.RightClick("serilog.1.1")
+	tt.ChooseMenuItem("选中此项")
+	tt.Frame()
+	if !a.checked[revealed] {
+		t.Fatal("选中此项 did not check the leaf")
+	}
+
+	// A cache: one root here, so 打开缓存目录 is a plain item, not a submenu.
+	if err := tt.RightClick("NuGet 全局包"); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(tt.Menu(), "serilog") {
+		t.Fatalf("a one-root cache should not open a submenu: %q", tt.Menu())
+	}
+	tt.ChooseMenuItem("打开缓存目录")
+	tt.Frame()
+	if !strings.HasSuffix(opened, `\.nuget\packages`) {
+		t.Fatalf("opened %q", opened)
+	}
+	write(t, "menu.png", tt.Image())
+}
+
+// A cache the scan found in two places offers both, rather than guessing
+// which one 复制路径 means.
+func TestContextMenuNamesEveryRoot(t *testing.T) {
+	opened := ""
+	prevOpen := openPath
+	openPath = func(p string) { opened = p }
+	t.Cleanup(func() { openPath = prevOpen })
+
+	a := testAppWith(t, Options{})
+	a.now = fixedTime(0)
+	res, ok := a.cache.Get("node", "npm")
+	if !ok {
+		t.Fatal("fixture lost npm")
+	}
+	second := res.Roots[0]
+	second.Path = `D:\npm-cache`
+	res.Roots = append(res.Roots, second)
+	a.cache.Results["node/npm"] = res
+	a.regroup()
+	onlyOpen(a, "node")
+
+	tt := ui.NewTester(a.view, 1200, 780)
+	if err := tt.RightClick("npm 缓存"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(tt.Menu(), "打开缓存目录") {
+		t.Fatalf("menu = %q", tt.Menu())
+	}
+	if err := tt.ChooseMenuItem("打开缓存目录", `D:\npm-cache`); err != nil {
+		t.Fatalf("the second root is not on the menu: %v", err)
+	}
+	tt.Frame()
+	if opened != `D:\npm-cache` {
+		t.Fatalf("opened %q, want the root that was chosen", opened)
 	}
 }
 

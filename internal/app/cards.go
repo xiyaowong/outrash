@@ -151,7 +151,8 @@ func (a *App) familyRow(c *ui.Context, g groupState) {
 	picks := a.groupPicks(g)
 	on, total := a.checkState(picks)
 	row := ui.Row(c).Height(38).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open })
+		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
+		ContextMenu(a.familyMenu(g))
 	row.Background(hoverFill(row, tint(p.Ink2, p.Surface, 0.03), p.Hover))
 	row.Children(func() {
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
@@ -198,7 +199,8 @@ func (a *App) itemRow(c *ui.Context, it itemState) {
 	open := a.open[key]
 	on, total := a.checkState(picks)
 	row := ui.Row(c).Height(44).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open })
+		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
+		ContextMenu(a.itemMenu(c, it, a.familyName(it)))
 	row.Background(hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		indent(c, indentItem)
@@ -232,6 +234,19 @@ func (a *App) itemRow(c *ui.Context, it itemState) {
 		a.entries(c, it)
 	}
 	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+}
+
+// familyName is the family an item belongs to, for the details sheet: an
+// item's own ID is a catalog key, not a name a reader knows.
+func (a *App) familyName(it itemState) string {
+	for _, g := range a.groups {
+		for _, member := range g.items {
+			if member.item.ID == it.item.ID {
+				return g.group.Name
+			}
+		}
+	}
+	return ""
 }
 
 // familyTag is the risk column for a whole family: it names the worst thing
@@ -326,10 +341,10 @@ func (a *App) entries(c *ui.Context, it itemState) {
 	for _, root := range it.res.Roots {
 		for _, e := range root.Entries {
 			if len(e.Versions) > 0 {
-				a.versioned(c, e)
+				a.versioned(c, it, e)
 				continue
 			}
-			a.leaf(c, e.Name, e.Path, e.Size, e.ModTime, indentLeaf)
+			a.leaf(c, it, e.Name, e.Path, e.Size, e.ModTime, indentLeaf)
 		}
 	}
 }
@@ -347,20 +362,15 @@ func indent(c *ui.Context, w float32) {
 	ui.Box(c).Width(w).Height(1).Shrink(0)
 }
 
-func (a *App) versioned(c *ui.Context, ent core.Entry) {
+func (a *App) versioned(c *ui.Context, it itemState, ent core.Entry) {
 	p := a.pal
-	picks := make([]core.Pick, 0, len(ent.Versions))
-	for _, v := range ent.Versions {
-		picks = append(picks, core.Pick{
-			Path: v.Path, Name: ent.Name + " " + v.Name, Bytes: v.Size,
-			ModTime: v.ModTime, Package: ent.Name,
-		})
-	}
+	picks := versionPicks(ent)
 	key := "p:" + ent.Path
 	open := a.open[key]
 	on, total := a.checkState(picks)
 	row := ui.Row(c).Height(32).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open })
+		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
+		ContextMenu(a.packageMenu(c, it, ent))
 	row.Background(hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		indent(c, indentLeaf)
@@ -375,12 +385,12 @@ func (a *App) versioned(c *ui.Context, ent core.Entry) {
 	})
 	if open {
 		for _, v := range ent.Versions {
-			a.leaf(c, v.Name, v.Path, v.Size, v.ModTime, indentLeaf+16)
+			a.leaf(c, it, v.Name, v.Path, v.Size, v.ModTime, indentLeaf+16)
 		}
 	}
 }
 
-func (a *App) leaf(c *ui.Context, name, path string, size int64, mod time.Time, ind float32) {
+func (a *App) leaf(c *ui.Context, it itemState, name, path string, size int64, mod time.Time, ind float32) {
 	p := a.pal
 	on := a.checked[path]
 	m := markOff
@@ -388,7 +398,8 @@ func (a *App) leaf(c *ui.Context, name, path string, size int64, mod time.Time, 
 		m = markOn
 	}
 	row := ui.Row(c).Height(30).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).OnClick(func() { a.checked[path] = !on })
+		Cursor(ui.CursorPointer).OnClick(func() { a.checked[path] = !on }).
+		ContextMenu(a.leafMenu(c, it, name, path, size, mod))
 	resting := ui.Transparent
 	if on {
 		resting = p.Selected

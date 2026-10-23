@@ -82,6 +82,7 @@ type App struct {
 	modal  modal
 	shown  *core.Plan
 	report *report
+	detail *detail
 	msg    string
 }
 
@@ -143,6 +144,7 @@ const (
 	modalPlan
 	modalReport
 	modalAbout
+	modalDetail
 )
 
 type report struct {
