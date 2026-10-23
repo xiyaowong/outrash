@@ -24,10 +24,11 @@ Windows-first dev-cache cleaner. Go + mygo native UI. Cross-platform logic, no w
 ## Commands
 
 ```
-go test ./...
+just ci                  # build + vet + test, the CI pair
+just debug               # every plan printed to stdout, execute button hidden
+just safe                # same refusal, keeps the normal UI
+just shots               # regenerate testdata/shots/*.png
 go tool mygo vet .
-go run . -debug          # prints every plan to stdout, execute button hidden
-go run . -no-delete      # same refusal, keeps the normal UI
 ```
 
 ## mygo essentials
