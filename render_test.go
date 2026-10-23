@@ -195,13 +195,18 @@ func TestPlanExecuteVisibleOnlyOutsideDebug(t *testing.T) {
 	}
 }
 
-func TestDarkTheme(t *testing.T) {
+// The product locks the light look: a dark system appearance must not
+// repaint the window.
+func TestDarkSystemKeepsLightPalette(t *testing.T) {
 	a := testApp(t, false)
 	a.now = fixedTime(0)
 	tt := ui.NewTester(a.view, 940, 660)
 	tt.SetDark(true)
 	tt.Frame()
-	write(t, "dark.png", tt.Image())
+	if a.pal.Dark || a.pal.Canvas != core.Light.Canvas {
+		t.Fatalf("palette follows the system: %+v", a.pal)
+	}
+	write(t, "dark-system.png", tt.Image())
 }
 
 // A cache the scan could not read must not pass for an empty one.
