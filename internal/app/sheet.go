@@ -152,7 +152,7 @@ func (a *App) planSheet(c *ui.Context) {
 
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 				ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, "调试模式：只列出，不删除。").
+					ui.Text(c, a.planFooter()).
 						FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
 					a.actionButton(c, "关闭", true, true, a.dismiss)
 				})
@@ -175,6 +175,16 @@ func abbrevPath(p string, max int) string {
 	}
 	head, tail := max/3, max-max/3-1
 	return string(r[:head]) + "…" + string(r[len(r)-tail:])
+}
+
+// planFooter names the build's refusal to delete the way it was started.
+// The sheet is the only path either build has to a written plan, so the
+// sentence has to match the flag the user passed.
+func (a *App) planFooter() string {
+	if a.so.Debug {
+		return "调试模式：只列出，不删除。"
+	}
+	return "已禁用删除：只列出，不删除。"
 }
 
 // run deletes the shown plan in the background, then rescans.

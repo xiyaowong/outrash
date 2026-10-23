@@ -5,6 +5,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -226,6 +227,51 @@ func TestPlanExecuteVisibleOnlyOutsideDebug(t *testing.T) {
 	}
 	if td.HasText("开始清理") {
 		t.Fatal("debug build must not offer to clean")
+	}
+}
+
+// The right panel measures the caches, not the selection: a label that says
+// 可清理 next to the whole total contradicts the action bar's 已选 line. The
+// row tags that read 可清理 are advice about a family, which is a different
+// claim.
+func TestPanelTotalIsNotTheSelection(t *testing.T) {
+	a := testAppWith(t, Options{})
+	tt := ui.NewTester(a.view, 1200, 780)
+	texts := tt.Texts()
+	total := core.Bytes(a.totalSize())
+	n, chosen := a.checkedTotal()
+	if n == 0 {
+		t.Fatal("no recommendation to contrast with")
+	}
+	if core.Bytes(chosen) == total {
+		t.Skip("fixture recommends every byte; the labels would agree")
+	}
+	for i, s := range texts {
+		if s == total && i+1 < len(texts) && texts[i+1] == "可清理" {
+			t.Fatalf("the total is labelled as cleanable; texts %v", texts)
+		}
+	}
+	if !slices.Contains(texts, "全部") {
+		t.Fatalf("panel missing the total's label; texts %v", texts)
+	}
+}
+
+// Both no-delete builds open the written plan, but only one of them is a
+// debug build; the sheet has to name the flag that was actually passed.
+func TestPlanSheetFooterNamesTheBuild(t *testing.T) {
+	for _, tc := range []struct {
+		so   Options
+		want string
+	}{
+		{Options{Debug: true, NoDelete: true}, "调试模式：只列出，不删除。"},
+		{Options{NoDelete: true}, "已禁用删除：只列出，不删除。"},
+	} {
+		a := testAppWith(t, tc.so)
+		a.startClean()
+		tt := ui.NewTester(a.view, 1200, 780)
+		if !tt.HasText(tc.want) {
+			t.Fatalf("%+v: footer missing %q; texts %v", tc.so, tc.want, tt.Texts())
+		}
 	}
 }
 
