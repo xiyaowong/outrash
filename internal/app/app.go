@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"runtime"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -42,13 +43,41 @@ type App struct {
 	bar bool
 	// remove runs a plan, and post lands an update on the UI thread. Tests
 	// replace them to observe the order.
-	remove func(*core.Plan, []string) core.Outcome
+	remove func(*core.Plan, []string, func(done, total int64)) core.Outcome
 	post   func(func())
+	// progress is the clean's byte cursor, written by the removal goroutine
+	// and read by the frame that shows the estimate.
+	progress *progress
 
 	modal  modal
 	shown  *core.Plan
 	report *report
 	msg    string
+}
+
+// progress is what a running clean can say about itself: the plan's total,
+// how far it got, and when it started. The estimate comes from that rate,
+// which is honest because every step is a delete of a measured directory.
+type progress struct {
+	mu       sync.Mutex
+	total    int64
+	done     int64
+	steps    int
+	finished int
+	start    time.Time
+}
+
+func (p *progress) set(done, total int64) {
+	p.mu.Lock()
+	p.done, p.total = done, total
+	p.finished++
+	p.mu.Unlock()
+}
+
+func (p *progress) read() (done, total int64, elapsed time.Duration) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.done, p.total, time.Since(p.start)
 }
 
 type Options struct {
@@ -138,13 +167,15 @@ type itemState struct {
 
 func New(cfg *core.Config, o core.Options, so Options) *App {
 	return &App{
-		cfg:     cfg,
-		opts:    o,
-		so:      so,
-		open:    map[string]bool{},
-		checked: map[string]bool{},
-		now:     time.Now(),
-		remove:  core.Remove,
+		cfg:      cfg,
+		opts:     o,
+		so:       so,
+		open:     map[string]bool{},
+		checked:  map[string]bool{},
+		now:      time.Now(),
+		remove:   core.RemoveWith,
+		post:     nil,
+		progress: &progress{},
 	}
 }
 
@@ -477,6 +508,9 @@ func (a *App) titleBar(c *ui.Context) {
 		})
 		ui.Box(c).Width(1).Height(12).Shrink(0).Background(p.Rule)
 		ui.Text(c, a.summary()).FontSize(12).TextColor(p.Ink3).SingleLine().Grow(1)
+		if a.busy {
+			a.cleanProgress(c)
+		}
 		if a.so.Debug || a.so.NoDelete {
 			ui.Text(c, a.modeNote()).FontSize(11).TextColor(p.Ink2).Shrink(0)
 		}
@@ -491,6 +525,53 @@ func (a *App) titleBar(c *ui.Context) {
 		}
 	})
 	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+}
+
+// cleanProgress is the estimate: how far the removal got, and how long the
+// rest should take at the rate so far. It sits in the title bar because that
+// is the one line every screen keeps.
+func (a *App) cleanProgress(c *ui.Context) {
+	p := a.pal
+	pr := a.progress
+	if pr == nil {
+		return
+	}
+	done, total, elapsed := pr.read()
+	ui.Text(c, estimate(done, total, elapsed)).Font(core.Mono()).
+		FontSize(11).TextColor(p.Ink2).Shrink(0)
+	bar := ui.Box(c).Width(120).Height(4).Shrink(0).Background(p.Hover)
+	frac := 0.0
+	if total > 0 {
+		frac = min(float64(done)/float64(total), 1)
+	}
+	bar.Draw(func(pt *ui.Painter, r ui.Rect) {
+		pt.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W * float32(frac), H: r.H}, p.Accent, 0)
+	})
+}
+
+// estimate turns the bytes done so far into the time left. Under a second of
+// evidence the rate is noise, so it says nothing rather than guess.
+func estimate(done, total int64, elapsed time.Duration) string {
+	if total <= 0 || done <= 0 || elapsed < 500*time.Millisecond {
+		return "清理中…"
+	}
+	rate := float64(done) / elapsed.Seconds()
+	left := time.Duration(float64(max(total-done, 0)) / rate * float64(time.Second))
+	left = left.Round(time.Second)
+	if left <= 0 {
+		return "即将完成"
+	}
+	return "剩余约 " + fmtDuration(left)
+}
+
+func fmtDuration(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%d 秒", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%d 分 %d 秒", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%d 小时 %d 分", int(d.Hours()), int(d.Minutes())%60)
 }
 
 // modeNote says the build cannot delete, wherever the user is looking: the
