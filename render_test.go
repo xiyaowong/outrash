@@ -273,6 +273,38 @@ func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
 	}
 }
 
+// 保留最新 promises to narrow the selection to old versions. A family that
+// also holds a plain download cache must not have that cache swept in.
+func TestKeepNewestSparesPlainCaches(t *testing.T) {
+	a := testApp(t, false)
+	a.now = fixedTime(0)
+	root := core.Root{Path: `C:\Users\tester\AppData\Local\NuGet\v3-cache`, Source: "环境变量 NUGET_HTTP_CACHE_PATH"}
+	root.Entries = []core.Entry{{Name: "feed.dat", Path: root.Path + `\feed.dat`, Size: 5_000_000, ModTime: fixedTime(2)}}
+	root.Size, root.Count = 5_000_000, 1
+	a.cache.Results["dotnet/nuget-http"] = core.Result{
+		GroupID: "dotnet", ItemID: "nuget-http", Unit: core.UnitEntries,
+		Roots: []core.Root{root}, Size: root.Size, Count: root.Count,
+	}
+	a.regroup()
+
+	tt := ui.NewTester(a.view, 940, 660)
+	if err := tt.Click(".NET"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("保留最新"); err != nil {
+		t.Fatal(err)
+	}
+	n, _ := a.checkedTotal()
+	if n != 6 {
+		t.Fatalf("checked %d picks, want the 6 old package versions", n)
+	}
+	for p := range a.checked {
+		if strings.Contains(p, "v3-cache") {
+			t.Fatalf("保留最新 selected a plain cache: %s", p)
+		}
+	}
+}
+
 func TestAbbrevPath(t *testing.T) {
 	long := `C:\Users\tester\.nuget\packages\microsoft.extensions.logging.abstractions\8.0.0-preview.7.23375.6`
 	got := abbrevPath(long, 72)
