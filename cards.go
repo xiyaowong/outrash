@@ -72,26 +72,34 @@ func (a *app) toggleChecks(picks []core.Pick) {
 type preset struct {
 	label string
 	pol   core.Policy
+	// scope is every pick the preset replaces the selection of; picks is
+	// what the policy acts on, which for 保留最新 is the versioned subset.
+	scope []core.Pick
 	picks []core.Pick
 }
 
-// presets are the one-click selections a family offers: two at most, so the
-// header keeps its air.
+// presets are the one-page selections a family offers: two at most, so the
+// header keeps its air. 保留最新 never widens to caches without versions:
+// a plain entry has no newest, so the preset would just delete it all.
 func (a *app) presets(picks []core.Pick) []preset {
 	if len(picks) == 0 {
 		return nil
 	}
-	all := preset{"全部选中", core.Policy{Now: a.now}, picks}
-	versioned := slices.ContainsFunc(picks, func(p core.Pick) bool { return p.Package != "" })
-	if versioned {
-		return []preset{{"保留最新", core.Policy{KeepNewest: true, Now: a.now}, picks}, all}
+	all := preset{label: "全部选中", pol: core.Policy{Now: a.now}, scope: picks, picks: picks}
+	versioned := slices.DeleteFunc(slices.Clone(picks), func(p core.Pick) bool { return p.Package == "" })
+	if len(versioned) > 0 {
+		return []preset{
+			{label: "保留最新", pol: core.Policy{KeepNewest: true, Now: a.now}, scope: picks, picks: versioned},
+			all,
+		}
 	}
-	return []preset{{fmt.Sprintf("%d 天未用", a.cfg.StaleDays), core.Policy{StaleDays: a.cfg.StaleDays, Now: a.now}, picks}, all}
+	return []preset{{label: fmt.Sprintf("%d 天未用", a.cfg.StaleDays), pol: core.Policy{StaleDays: a.cfg.StaleDays, Now: a.now}, scope: picks, picks: picks}, all}
 }
 
 func (a *app) chip(c *ui.Context, act preset) {
 	p := a.pal
-	n := len(core.Select(act.picks, act.pol).Steps)
+	steps := core.Select(act.picks, act.pol).Steps
+	n := len(steps)
 	fg := p.Ink2
 	if n == 0 {
 		fg = p.Ink3
@@ -101,9 +109,7 @@ func (a *app) chip(c *ui.Context, act preset) {
 		ui.Text(c, act.label).FontSize(12).FontWeight(600).TextColor(fg).SingleLine()
 	})
 	if n > 0 {
-		row.Cursor(ui.CursorPointer).OnClick(func() {
-			a.setChecks(act.picks, core.Select(act.picks, act.pol).Steps)
-		})
+		row.Cursor(ui.CursorPointer).OnClick(func() { a.setChecks(act.scope, steps) })
 	}
 }
 
