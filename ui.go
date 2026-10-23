@@ -37,6 +37,9 @@ type app struct {
 
 	// busy is set while a removal runs; no plan may be opened over one.
 	busy bool
+	// bar mirrors the taskbar indicator, so a test can read what the
+	// window was told without a window.
+	bar bool
 	// remove runs a plan, and post lands an update on the UI thread. Tests
 	// replace them to observe the order.
 	remove func(*core.Plan, []string) core.Outcome
@@ -119,6 +122,7 @@ func newApp(cfg *core.Config, o core.Options, so options) *app {
 func (a *app) scan() {
 	a.phase = phaseScanning
 	a.msg = ""
+	a.busyBar(true)
 	a.repaint()
 	if a.stop != nil {
 		a.stop()
@@ -149,11 +153,30 @@ func (a *app) scan() {
 			a.phase = phaseReady
 			a.now = time.Now()
 			a.regroup()
+			a.busyBar(false)
 			if a.debug {
 				a.printScanWarnings(cache)
 			}
 		})
 	}()
+}
+
+// busyBar is the scan/clean indicator: a busy progress bar in the taskbar
+// button on Windows, the dock on macOS, the launcher on Linux. Progress is
+// not measurable per step, so it spins rather than lies with a percentage.
+func (a *app) busyBar(on bool) {
+	if a.bar == on {
+		return
+	}
+	a.bar = on
+	if a.win == nil {
+		return
+	}
+	p := mygo.ProgressBar{}
+	if on {
+		p.State = mygo.ProgressIndeterminate
+	}
+	a.win.SetProgressBar(p)
 }
 
 func (a *app) repaint() {

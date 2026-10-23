@@ -263,6 +263,9 @@ func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
 	if a.msg != "正在清理…" {
 		t.Fatalf("title says %q, want the cleaning notice", a.msg)
 	}
+	if !a.bar {
+		t.Fatal("the taskbar indicator must be busy while cleaning")
+	}
 	if len(a.checked) != 0 {
 		t.Fatal("the run must consume the selection")
 	}
@@ -275,6 +278,9 @@ func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
 	<-posted // the rescan completed
 	if a.phase != phaseReady {
 		t.Fatalf("phase = %v after the rescan, want ready", a.phase)
+	}
+	if a.bar {
+		t.Fatal("the taskbar indicator must clear once the rescan ends")
 	}
 }
 
