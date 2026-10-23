@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -100,17 +101,30 @@ func (a *App) chip(c *ui.Context, act preset) {
 	p := a.pal
 	steps := core.Select(act.picks, act.pol).Steps
 	n := len(steps)
-	fg := p.Ink2
+	fg := p.Ink
 	if n == 0 {
 		fg = p.Ink3
 	}
-	row := ui.Row(c).Height(24).Padding(0, 4).AlignItems(ui.Center).Shrink(0)
-	row.Children(func() {
-		ui.Text(c, act.label).FontSize(12).FontWeight(600).TextColor(fg).SingleLine()
-	})
+	row := ui.ButtonBase(c).Height(28).Radius(3).Padding(0, 10).Shrink(0).
+		AlignItems(ui.Center).Border(1, p.RuleStrong)
 	if n > 0 {
 		row.Cursor(ui.CursorPointer).OnClick(func() { a.setChecks(act.scope, steps) })
 	}
+	bg := ui.Transparent
+	switch {
+	case n == 0:
+	case row.Pressed():
+		bg = p.Selected
+	case row.Hovered():
+		bg = p.Hover
+	}
+	row.Background(bg)
+	row.Children(func() {
+		ui.Text(c, act.label).FontSize(12).FontWeight(600).TextColor(fg).SingleLine()
+		if n > 0 {
+			ui.Text(c, fmt.Sprintf(" %d", n)).Font(core.Mono()).FontSize(11).TextColor(p.Ink3).SingleLine()
+		}
+	})
 }
 
 func (a *App) itemRow(c *ui.Context, it itemState) {
@@ -122,19 +136,29 @@ func (a *App) itemRow(c *ui.Context, it itemState) {
 	key := "i:" + it.item.ID
 	open := a.open[key]
 	on, total := a.checkState(picks)
-	row := ui.Row(c).Height(56).Padding(0, 32).Gap(12).AlignItems(ui.Center).
+	row := ui.Row(c).Height(56).Padding(0, 28).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open })
 	row.Background(hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
 		ui.Column(c).Grow(1).Gap(2).Children(func() {
-			ui.Text(c, it.item.Name).FontSize(14).FontWeight(600).TextColor(p.Ink).SingleLine()
-			ui.Text(c, rootPath(it.res)).Font(core.Mono()).FontSize(11).TextColor(p.Ink2).SingleLine()
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, it.item.Name).FontSize(14).FontWeight(600).TextColor(p.Ink).SingleLine().Shrink(0)
+				if t := noteTag(it.item.Note); t != "" {
+					ui.Box(c).Tooltip(it.item.Note).Children(func() {
+						tag(c, t, p.Success, p.Raised)
+					})
+				}
+				if it.res.Failed() {
+					tag(c, "读取失败", p.Danger, p.Raised)
+				}
+			})
+			ui.Text(c, rootPath(it.res)).Font(core.Mono()).FontSize(11).TextColor(p.Ink3).SingleLine()
 		})
-		ui.Column(c).Gap(2).AlignItems(ui.End).Shrink(0).Children(func() {
-			ui.Text(c, core.Bytes(it.res.Size)).Font(core.Mono()).FontSize(14).TextColor(p.Ink).SingleLine()
-			ui.Text(c, a.itemMeta(it.res)).FontSize(12).TextColor(p.Ink2).SingleLine()
-		})
+		ui.Text(c, a.itemMeta(it.res)).FontSize(12).TextColor(p.Ink2).SingleLine().
+			Width(colCount).TextAlign(ui.End).Shrink(0)
+		ui.Text(c, core.Bytes(it.res.Size)).Font(core.Mono()).FontSize(13).TextColor(p.Ink).
+			SingleLine().Width(colSize).TextAlign(ui.End).Shrink(0)
 		a.expander(c, open)
 	})
 	if open {
@@ -143,6 +167,22 @@ func (a *App) itemRow(c *ui.Context, it itemState) {
 		})
 	}
 	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+}
+
+// noteTag shortens the catalog's sentence into the word that decides: the
+// full note is one hover away, and the list stays scannable.
+func noteTag(note string) string {
+	switch {
+	case note == "":
+		return ""
+	case strings.Contains(note, "重新编译"):
+		return "重新编译"
+	case strings.Contains(note, "playwright"), strings.Contains(note, "cypress"):
+		return "需手动下载"
+	case strings.Contains(note, "自动重新下载"):
+		return "自动下载"
+	}
+	return note
 }
 
 func rootPath(res core.Result) string {
@@ -215,14 +255,14 @@ func (a *App) versioned(c *ui.Context, ent core.Entry) {
 	key := "p:" + ent.Path
 	open := a.open[key]
 	on, total := a.checkState(picks)
-	row := ui.Row(c).Height(32).Padding(0, 32, 0, 68).Gap(12).AlignItems(ui.Center).
+	row := ui.Row(c).Height(32).Padding(0, 28, 0, 60).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open })
 	row.Background(hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
 		ui.Text(c, ent.Name).Font(core.Mono()).FontSize(12).TextColor(p.Ink).SingleLine().Grow(1)
-		ui.Text(c, fmt.Sprintf("%d 个版本", len(ent.Versions))).FontSize(12).TextColor(p.Ink3).Shrink(0)
-		ui.Text(c, core.Bytes(ent.Size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).Shrink(0).Width(96).TextAlign(ui.End)
+		ui.Text(c, fmt.Sprintf("%d 个版本", len(ent.Versions))).FontSize(12).TextColor(p.Ink3).Width(colCount).TextAlign(ui.End).Shrink(0)
+		ui.Text(c, core.Bytes(ent.Size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).Shrink(0).Width(colSize).TextAlign(ui.End)
 	})
 	if open {
 		ui.Column(c).Children(func() {
@@ -240,7 +280,7 @@ func (a *App) leaf(c *ui.Context, name, path string, size int64, mod time.Time) 
 	if on {
 		m = markOn
 	}
-	row := ui.Row(c).Height(32).Padding(0, 32, 0, 68).Gap(12).AlignItems(ui.Center).
+	row := ui.Row(c).Height(32).Padding(0, 28, 0, 60).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.checked[path] = !on })
 	resting := ui.Transparent
 	if on {
@@ -253,7 +293,7 @@ func (a *App) leaf(c *ui.Context, name, path string, size int64, mod time.Time) 
 		if age := ageText(a.now, mod); age != "" {
 			ui.Text(c, age).FontSize(12).TextColor(p.Ink3).Shrink(0)
 		}
-		ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink3).Shrink(0).Width(96).TextAlign(ui.End)
+		ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink3).Shrink(0).Width(colSize).TextAlign(ui.End)
 	})
 }
 

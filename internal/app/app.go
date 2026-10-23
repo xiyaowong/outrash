@@ -182,6 +182,7 @@ func (a *App) Scan() {
 			a.phase = phaseReady
 			a.now = time.Now()
 			a.regroup()
+			a.recommend()
 			a.busyBar(false)
 			a.closeReceipt(cache)
 			if a.so.Debug {
@@ -189,6 +190,38 @@ func (a *App) Scan() {
 			}
 		})
 	}()
+}
+
+// recommend checks what the product would clean on its own: stale entries,
+// and old versions of versioned caches. It runs after a scan so the first
+// screen already shows a decision the user can only narrow, never build.
+func (a *App) recommend() {
+	for k := range a.checked {
+		delete(a.checked, k)
+	}
+	pol := core.Policy{StaleDays: a.cfg.StaleDays, KeepNewest: true, Now: a.now}
+	for _, g := range a.groups {
+		for _, it := range g.items {
+			picks := allPicks(it.res)
+			pol := pol
+			if !anyVersioned(picks) {
+				// A plain cache has no newest to keep: age alone decides.
+				pol.KeepNewest = false
+			}
+			for _, s := range core.Select(picks, pol).Steps {
+				a.checked[s.Path] = true
+			}
+		}
+	}
+}
+
+func anyVersioned(picks []core.Pick) bool {
+	for _, p := range picks {
+		if p.Package != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // openReceipt snapshots what the families hold before a clean, and which
@@ -370,21 +403,50 @@ func (a *App) view(c *ui.Context) {
 	a.now = time.Now()
 	c.OnShortcut(ui.Cmd, ui.KeyR, a.Scan)
 	c.OnShortcut(ui.Cmd, ui.KeyA, a.selectAllVisible)
-	c.OnShortcut(0, ui.KeyEnter, a.reviewSelected)
+	c.OnShortcut(0, ui.KeyEnter, a.startClean)
 	c.OnShortcut(0, ui.KeyEscape, a.dismiss)
 
 	ui.Column(c).Fill().Background(a.pal.Canvas).Children(func() {
 		a.titleBar(c)
 		ui.Row(c).Grow(1).Children(func() {
-			a.rail(c)
 			ui.Column(c).Grow(1).FillHeight().Background(a.pal.Raised).Children(func() {
 				a.header(c)
 				a.list(c)
 				a.actionBar(c)
 			})
+			if a.panelVisible(c) {
+				a.panel(c)
+			}
 		})
 	})
 	a.sheet(c)
+}
+
+// panelVisible keeps the list readable on a narrow window: the totals column
+// is the first thing to go.
+func (a *App) panelVisible(c *ui.Context) bool {
+	w, _ := c.Size()
+	return w >= 1040
+}
+
+// startClean is the one action: the checked rows are the plan, so the list
+// the user is looking at is what gets removed. Only a build that cannot
+// delete (`-debug`, `-no-delete`) opens the written-out list instead.
+func (a *App) startClean() {
+	if a.modal != modalNone || a.busy {
+		return
+	}
+	n, _ := a.checkedTotal()
+	if n == 0 {
+		return
+	}
+	pl := a.selectedPlan()
+	if a.so.Debug || a.so.NoDelete {
+		a.openPlan(pl)
+		return
+	}
+	a.shown = pl
+	a.run()
 }
 
 // selectAllVisible selects every leaf of the family on screen, or all of
@@ -401,15 +463,6 @@ func (a *App) selectAllVisible() {
 	a.toggleChecks(picks)
 }
 
-func (a *App) reviewSelected() {
-	if a.modal != modalNone || a.busy {
-		return
-	}
-	if n, _ := a.checkedTotal(); n > 0 {
-		a.openPlan(a.selectedPlan())
-	}
-}
-
 func (a *App) titleBar(c *ui.Context) {
 	p := a.pal
 	bar := c.TitleBar()
@@ -424,6 +477,9 @@ func (a *App) titleBar(c *ui.Context) {
 		})
 		ui.Box(c).Width(1).Height(12).Shrink(0).Background(p.Rule)
 		ui.Text(c, a.summary()).FontSize(12).TextColor(p.Ink3).SingleLine().Grow(1)
+		if a.so.Debug || a.so.NoDelete {
+			ui.Text(c, a.modeNote()).FontSize(11).TextColor(p.Ink2).Shrink(0)
+		}
 		if a.phase == phaseScanning {
 			ui.Spinner(c).Width(12).Shrink(0)
 		}
@@ -435,6 +491,15 @@ func (a *App) titleBar(c *ui.Context) {
 		}
 	})
 	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+}
+
+// modeNote says the build cannot delete, wherever the user is looking: the
+// primary button changes meaning, so the title bar has to explain why.
+func (a *App) modeNote() string {
+	if a.so.Debug {
+		return "调试：只列计划"
+	}
+	return "已禁用删除"
 }
 
 func (a *App) summary() string {
@@ -449,23 +514,49 @@ func (a *App) summary() string {
 	return fmt.Sprintf("扫描于 %s · 用时 %s", a.cache.At.Format("15:04"), a.cache.Elapsed.Round(time.Millisecond))
 }
 
-func (a *App) rail(c *ui.Context) {
+// panel is the right column: totals, where the bytes sit, and the three
+// promises the product makes. It is read-only; every choice is on the list.
+func (a *App) panel(c *ui.Context) {
 	p := a.pal
-	ui.Column(c).Width(200).FillHeight().BorderWidth(0, 1, 0, 0).BorderColor(p.Rule).
+	ui.Column(c).Width(268).FillHeight().Background(p.Canvas).
+		BorderWidth(0, 0, 0, 1).BorderColor(p.Rule).
 		Children(func() {
-			ui.Column(c).Padding(14, 0, 0, 0).Gap(1).Children(func() {
-				a.section(c, "缓存")
-				a.railRow(c, "", "全部", a.totalSize())
-				for _, g := range a.groups {
-					if !g.visible() {
-						continue
+			ui.Column(c).Padding(20, 20).Gap(16).Children(func() {
+				a.panelBlock(c, "总览", func() {
+					ui.Row(c).Gap(20).Children(func() {
+						a.stat(c, "缓存", fmt.Sprint(a.totalCount()))
+						a.stat(c, "可清理", core.Bytes(a.totalSize()))
+						a.stat(c, "耗时", a.elapsed())
+					})
+				})
+				a.panelBlock(c, "占用最多", func() {
+					for _, it := range a.biggest(5) {
+						row := ui.Row(c).Height(28).Gap(8).AlignItems(ui.Center).
+							Cursor(ui.CursorPointer).OnClick(func() { a.selected = it.gid })
+						row.Background(hoverFill(row, ui.Transparent, p.Hover))
+						row.Children(func() {
+							ui.Text(c, it.name).FontSize(12).TextColor(p.Ink).SingleLine().Grow(1)
+							ui.Text(c, core.Bytes(it.size)).Font(core.Mono()).
+								FontSize(11).TextColor(p.Ink).Width(72).TextAlign(ui.End).Shrink(0)
+						})
 					}
-					a.railRow(c, g.group.ID, g.group.Name, g.size)
-				}
+				})
+				a.panelBlock(c, "注意", func() {
+					for _, line := range []string{
+						"只清理能重新下载或重新编译的内容，不碰源码与项目目录。",
+						"清理后各工具会在下次使用时自行恢复。",
+						"扫描不跟随符号链接，读不到的位置会标出来。",
+					} {
+						ui.Row(c).AlignItems(ui.Start).Gap(6).Children(func() {
+							ui.Box(c).Size(3, 3).Shrink(0).Margin(0, 6, 0, 0).Background(p.Ink3)
+							ui.Text(c, line).FontSize(11).TextColor(p.Ink2)
+						})
+					}
+				})
 			})
 			ui.Spacer(c)
 			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-			ui.Row(c).Padding(10, 16).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Padding(10, 20).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, a.railNote()).FontSize(11).TextColor(p.Ink3).SingleLine().Grow(1)
 				if a.phase == phaseScanning {
 					ui.Spinner(c).Width(12).Shrink(0)
@@ -474,9 +565,34 @@ func (a *App) rail(c *ui.Context) {
 		})
 }
 
-func (a *App) section(c *ui.Context, label string) {
+// bigItem is one cache item in the panel's ranking.
+type bigItem struct {
+	name, gid string
+	size      int64
+}
+
+// biggest names where the bytes actually are: the ranking answers "what do I
+// gain" faster than a family total does.
+func (a *App) biggest(n int) []bigItem {
+	var all []bigItem
+	for _, g := range a.groups {
+		for _, it := range g.items {
+			if it.res.Size <= 0 {
+				continue
+			}
+			all = append(all, bigItem{name: it.item.Name, gid: g.group.ID, size: it.res.Size})
+		}
+	}
+	slices.SortStableFunc(all, func(x, y bigItem) int { return cmp.Compare(y.size, x.size) })
+	return all[:min(n, len(all))]
+}
+
+func (a *App) panelBlock(c *ui.Context, title string, body func()) {
 	p := a.pal
-	ui.Text(c, label).FontSize(11).FontWeight(600).TextColor(p.Ink3).Padding(7, 0, 3, 14)
+	ui.Column(c).Gap(6).Children(func() {
+		ui.Text(c, title).FontSize(11).FontWeight(600).TextColor(p.Ink3)
+		body()
+	})
 }
 
 func (a *App) railNote() string {
@@ -488,33 +604,29 @@ func (a *App) railNote() string {
 	case a.cache == nil:
 		return ""
 	}
-	return fmt.Sprintf("%d 个缓存 · %s", a.totalCount(), core.Bytes(a.totalSize()))
+	return fmt.Sprintf("扫描于 %s", a.cache.At.Format("15:04"))
 }
 
-func (a *App) railRow(c *ui.Context, id, label string, size int64) {
-	p := a.pal
-	on := a.selected == id
-	resting := ui.Transparent
-	if on {
-		resting = p.Selected
+func (a *App) elapsed() string {
+	if a.cache == nil {
+		return "—"
 	}
-	row := ui.Row(c).Height(34).Padding(0, 14).Gap(8).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).OnClick(func() { a.selected = id })
-	row.Background(hoverFill(row, resting, p.Hover))
-	row.Children(func() {
-		ui.Box(c).Size(2, 16).Shrink(0).Background(barColor(on, p.Ink))
-		ui.Text(c, label).FontSize(14).FontWeight(weight(on)).TextColor(p.Ink).SingleLine().Grow(1)
-		if size > 0 {
-			ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(11).TextColor(p.Ink3).Shrink(0)
-		}
+	return a.cache.Elapsed.Round(time.Millisecond).String()
+}
+
+// tag is a small pill of fact: how a cache comes back, or why to be careful.
+// The fill is a tint of the text colour rather than a second palette.
+func tag(c *ui.Context, text string, fg, ground ui.Color) {
+	ui.Box(c).Height(18).Radius(3).Padding(1, 6).Shrink(0).AlignItems(ui.Center).
+		Background(tint(fg, ground, 0.10)).Children(func() {
+		ui.Text(c, text).FontSize(11).FontWeight(600).TextColor(fg).SingleLine()
 	})
 }
 
-func barColor(on bool, c ui.Color) ui.Color {
-	if on {
-		return c
-	}
-	return ui.Transparent
+// tint mixes fg into ground at alpha.
+func tint(fg, ground ui.Color, alpha float32) ui.Color {
+	blend := func(a, b uint8) uint8 { return uint8(float32(a)*alpha + float32(b)*(1-alpha)) }
+	return ui.RGBA(blend(fg.R, ground.R), blend(fg.G, ground.G), blend(fg.B, ground.B), 255)
 }
 
 // hoverFill is the row's background under the pointer. It is read while the
@@ -527,54 +639,85 @@ func hoverFill(row ui.Element, resting, hover ui.Color) ui.Color {
 	return resting
 }
 
-func weight(on bool) int {
-	if on {
-		return 600
+// actionButton is the one button shape: a quiet outline that fills under the
+// pointer and compresses while pressed, so it reads as a control, not a
+// label. primary gets the accent and the only solid fill on screen.
+func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, fn func()) {
+	p := a.pal
+	btn := ui.ButtonBase(c).Height(30).Radius(3).Padding(0, 12).
+		Shrink(0).AlignItems(ui.Center).Border(1, p.RuleStrong)
+	bg, fg := ui.Transparent, p.Ink
+	switch {
+	case !enabled:
+		fg = p.Ink3
+	case primary:
+		bg, fg = p.Accent, p.OnAccent
+		btn.Border(0, ui.Transparent)
 	}
-	return 400
+	if enabled {
+		btn.Cursor(ui.CursorPointer).OnClick(fn)
+	} else {
+		btn.Disabled(true)
+	}
+	switch {
+	case !enabled:
+	case primary && btn.Pressed():
+		bg = tint(p.Ink, p.Accent, 0.18)
+	case primary && btn.Hovered():
+		bg = tint(p.Ink, p.Accent, 0.10)
+	case btn.Pressed():
+		bg = p.Selected
+		btn.Border(1, p.Ink3)
+	case btn.Hovered():
+		bg = p.Hover
+	}
+	btn.Background(bg)
+	btn.Children(func() { ui.Text(c, label).FontSize(12).FontWeight(600).TextColor(fg).SingleLine() })
 }
 
 func (a *App) header(c *ui.Context) {
 	p := a.pal
 	g, ok := a.group(a.selected)
-	title, total, sub := "可清理", a.totalSize(), fmt.Sprintf("%d 个缓存 · %d 项", a.totalCount(), a.totalLeaves())
+	title, total, sub := "清理开发工具缓存", a.totalSize(),
+		fmt.Sprintf("共 %d 个缓存，%s 可重新下载或重新编译", a.totalCount(), core.Bytes(a.totalSize()))
 	var picks []core.Pick
 	if ok {
 		title, total = g.group.Name, g.size
 		picks = a.groupPicks(g)
-		sub = fmt.Sprintf("%d 项可清理", sumCount(g))
+		sub = fmt.Sprintf("%d 项可清理 · %s", sumCount(g), a.headerSource(g, ok))
 	}
 	ui.Column(c).Shrink(0).Children(func() {
-		ui.Row(c).Height(68).Children(func() {
-			ui.Spacer(c)
-			ui.Column(c).Width(a.contentWidth(c)).Padding(11, 32, 8, 32).Justify(ui.Center).Children(func() {
-				ui.Row(c).Gap(12).AlignItems(ui.Baseline).Children(func() {
-					ui.Text(c, title).FontSize(18).FontWeight(600).TextColor(p.Ink).SingleLine().Shrink(0)
-					ui.Text(c, sub).FontSize(12).TextColor(p.Ink3).SingleLine().Grow(1)
-					ui.Text(c, core.Bytes(total)).Font(core.Mono()).FontSize(20).FontWeight(600).TextColor(p.Ink).Shrink(0)
-				})
-				ui.Row(c).Height(24).Gap(12).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, a.headerSource(g, ok)).FontSize(11).TextColor(p.Ink3).SingleLine().Grow(1)
-					if n := a.warnCount(g, ok); n > 0 {
-						ui.Text(c, fmt.Sprintf("%d 个缓存读取失败", n)).
-							FontSize(11).FontWeight(600).TextColor(p.Danger).Shrink(0)
+		ui.Row(c).Padding(18, 28, 12, 28).Gap(12).AlignItems(ui.End).Children(func() {
+			ui.Column(c).Grow(1).Gap(4).Children(func() {
+				ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+					if ok {
+						back := ui.ButtonBase(c).Padding(2, 6).Cursor(ui.CursorPointer)
+						back.Children(func() { ui.Text(c, "← 全部").FontSize(12).TextColor(p.Ink2) })
+						if back.Clicked() {
+							a.selected = ""
+						}
 					}
-					for _, act := range a.presets(picks) {
-						a.chip(c, act)
-					}
+					ui.Text(c, title).FontSize(20).FontWeight(600).TextColor(p.Ink).SingleLine()
 				})
+				ui.Text(c, sub).FontSize(12).TextColor(p.Ink3).SingleLine()
 			})
-			ui.Spacer(c)
+			ui.Column(c).AlignItems(ui.End).Shrink(0).Children(func() {
+				ui.Text(c, core.Bytes(total)).Font(core.Mono()).FontSize(22).FontWeight(600).TextColor(p.Ink)
+				if n := a.warnCount(g, ok); n > 0 {
+					ui.Text(c, fmt.Sprintf("%d 个缓存读取失败", n)).
+						FontSize(11).FontWeight(600).TextColor(p.Danger)
+				}
+			})
 		})
+		if len(picks) > 0 {
+			ui.Row(c).Padding(0, 28, 8, 28).Gap(16).AlignItems(ui.Center).Children(func() {
+				for _, act := range a.presets(picks) {
+					a.chip(c, act)
+				}
+			})
+		}
 		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 	})
-}
-
-// contentWidth keeps lines readable when the window grows; the rail stays
-// put and the measure does not balloon.
-func (a *App) contentWidth(c *ui.Context) float32 {
-	w, _ := c.Size()
-	return min(w-200, 900)
 }
 
 // headerSource says where this family's caches came from: a default, an
@@ -622,53 +765,105 @@ func (a *App) warnCount(g groupState, ok bool) int {
 
 func (a *App) list(c *ui.Context) {
 	ui.Scroll(c).Grow(1).Children(func() {
-		ui.Row(c).Children(func() {
-			ui.Spacer(c)
-			ui.Column(c).Width(a.contentWidth(c)).Padding(0, 0, 16, 0).Children(func() {
-				if a.phase == phaseScanning && len(a.groups) == 0 {
-					a.skeleton(c)
-					return
-				}
-				if g, ok := a.group(a.selected); ok {
-					a.family(c, g)
-					return
-				}
-				a.overview(c)
-			})
-			ui.Spacer(c)
+		ui.Column(c).Padding(0, 0, 16, 0).Children(func() {
+			if a.phase == phaseScanning && len(a.groups) == 0 {
+				a.skeleton(c)
+				return
+			}
+			if g, ok := a.group(a.selected); ok {
+				a.family(c, g)
+				return
+			}
+			a.overview(c)
 		})
 	})
+}
+
+// columns is the shared measure of the list: checkbox, name, count, size.
+// Every row on every screen uses it, so the columns line up across families.
+const (
+	colCheck = 16
+	colCount = 140
+	colSize  = 96
+	colGap   = 12
+)
+
+// tableHead labels the columns once, at the top of the overview.
+func (a *App) tableHead(c *ui.Context) {
+	p := a.pal
+	ui.Row(c).Height(28).Padding(0, 28).Gap(colGap).AlignItems(ui.Center).Children(func() {
+		ui.Box(c).Size(colCheck, 1).Shrink(0)
+		ui.Text(c, "工具").FontSize(11).FontWeight(600).TextColor(p.Ink3).Grow(1)
+		ui.Text(c, "数量").FontSize(11).FontWeight(600).TextColor(p.Ink3).
+			Width(colCount).TextAlign(ui.End).Shrink(0)
+		ui.Text(c, "缓存大小").FontSize(11).FontWeight(600).TextColor(p.Ink3).
+			Width(colSize).TextAlign(ui.End).Shrink(0)
+	})
+	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 }
 
 func (a *App) overview(c *ui.Context) {
 	p := a.pal
 	n := 0
+	a.tableHead(c)
 	for _, g := range a.groups {
 		if !g.visible() {
 			continue
 		}
 		n++
 		g := g
-		size := g.size
-		row := ui.Row(c).Height(56).Padding(0, 32).Gap(16).AlignItems(ui.Center).
+		picks := a.groupPicks(g)
+		on, total := a.checkState(picks)
+		row := ui.Row(c).Height(56).Padding(0, 28).Gap(colGap).AlignItems(ui.Center).
 			Cursor(ui.CursorPointer).OnClick(func() { a.selected = g.group.ID })
 		row.Background(hoverFill(row, ui.Transparent, p.Hover))
 		row.Children(func() {
-			ui.Text(c, g.group.Name).FontSize(14).FontWeight(600).TextColor(p.Ink).SingleLine().Grow(1)
-			// Fixed columns keep counts and sizes in one rule down the page.
-			ui.Text(c, fmt.Sprintf("%d 个缓存 · %d 项", len(g.items), sumCount(g))).
-				FontSize(12).TextColor(p.Ink3).SingleLine().Width(180).TextAlign(ui.End).Shrink(0)
-			ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(13).TextColor(p.Ink).
-				Width(96).TextAlign(ui.End).Shrink(0)
+			a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
+			ui.Column(c).Grow(1).Gap(2).Children(func() {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, g.group.Name).FontSize(14).FontWeight(600).TextColor(p.Ink).SingleLine().Shrink(0)
+					a.advice(c, g)
+				})
+				if src := a.headerSource(g, true); src != "" {
+					ui.Text(c, src).Font(core.Mono()).FontSize(11).TextColor(p.Ink3).SingleLine()
+				}
+			})
+			ui.Text(c, fmt.Sprintf("%d 项", sumCount(g))).Font(core.Mono()).FontSize(12).
+				TextColor(p.Ink2).Width(colCount).TextAlign(ui.End).Shrink(0)
+			ui.Text(c, core.Bytes(g.size)).Font(core.Mono()).FontSize(13).TextColor(p.Ink).
+				Width(colSize).TextAlign(ui.End).Shrink(0)
 		})
 		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 	}
 	if n == 0 {
-		ui.Column(c).Padding(44, 32).Gap(6).Children(func() {
+		ui.Column(c).Padding(44, 28).Gap(6).Children(func() {
 			ui.Text(c, "没有找到可清理的缓存").FontSize(14).FontWeight(600).TextColor(p.Ink)
 			ui.Text(c, "已检查环境变量与各工具的默认位置").FontSize(12).TextColor(p.Ink3)
 		})
 	}
+}
+
+// advice is the one word that says whether clearing this family costs the
+// user anything: a cache touched this week will be rebuilt the moment the
+// tool runs again, an older one is sitting idle.
+func (a *App) advice(c *ui.Context, g groupState) {
+	p := a.pal
+	newest := time.Time{}
+	for _, it := range g.items {
+		for _, pk := range allPicks(it.res) {
+			if pk.ModTime.After(newest) {
+				newest = pk.ModTime
+			}
+		}
+	}
+	if newest.IsZero() {
+		return
+	}
+	if a.now.Sub(newest) < 7*24*time.Hour {
+		tag(c, "近期用过", p.Warning, p.Raised)
+		return
+	}
+	tag(c, "可清理", p.Success, p.Raised)
 }
 
 func sumCount(g groupState) int {
@@ -691,7 +886,7 @@ func (a *App) family(c *ui.Context, g groupState) {
 func (a *App) skeleton(c *ui.Context) {
 	p := a.pal
 	for range 3 {
-		ui.Column(c).Height(56).Padding(0, 32).Children(func() {
+		ui.Column(c).Height(56).Padding(0, 28).Children(func() {
 			ui.Box(c).Size(160, 12).Shrink(0).Background(p.Hover)
 		})
 	}
@@ -713,62 +908,32 @@ func (a *App) totalCount() int {
 	return n
 }
 
-func (a *App) totalLeaves() int {
-	n := 0
-	for _, g := range a.groups {
-		n += sumCount(g)
-	}
-	return n
-}
-
 // actionBar is the strip that turns a selection into the one action that
 // matters. It is a bar, not a floating pill: native windows do not float.
 func (a *App) actionBar(c *ui.Context) {
 	p := a.pal
 	n, bytes := a.checkedTotal()
-	total := a.totalSize()
-	if g, ok := a.group(a.selected); ok {
-		total = g.size
+	all := 0
+	for _, g := range a.groups {
+		all += len(a.groupPicks(g))
 	}
 	ui.Column(c).Shrink(0).Children(func() {
 		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-		ui.Row(c).Height(56).Background(p.Raised).Children(func() {
-			ui.Spacer(c)
-			ui.Row(c).Width(a.contentWidth(c)).Padding(0, 32).Gap(16).AlignItems(ui.Center).Children(func() {
-				ui.Row(c).Gap(10).AlignItems(ui.Baseline).Grow(1).Children(func() {
-					ui.Text(c, fmt.Sprintf("已选 %d 项", n)).
-						FontSize(13).FontWeight(600).TextColor(p.Ink).SingleLine().Shrink(0)
-					ui.Text(c, fmt.Sprintf("%s · 共 %s", core.Bytes(bytes), core.Bytes(total))).
-						Font(core.Mono()).FontSize(12).TextColor(p.Ink3).SingleLine()
-				})
-				if n > 0 {
-					clear := ui.ButtonBase(c).Padding(6, 10).Cursor(ui.CursorPointer)
-					clear.Children(func() { ui.Text(c, "清空").FontSize(14).TextColor(p.Ink2) })
-					if clear.Clicked() {
-						a.clearChecks()
-					}
-				}
-				a.primaryButton(c, "查看清理计划", n > 0, func() { a.openPlan(a.selectedPlan()) })
-			})
-			ui.Spacer(c)
+		ui.Row(c).Height(56).Padding(0, 28).Gap(16).AlignItems(ui.Center).Children(func() {
+			if all > 0 {
+				a.check(c, stateOf(n, all), a.selectAllVisible)
+				ui.Text(c, "全选").FontSize(12).TextColor(p.Ink2).Shrink(0)
+			}
+			ui.Text(c, fmt.Sprintf("已选 %d 项 · %s", n, core.Bytes(bytes))).
+				Font(core.Mono()).FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
+			if n > 0 {
+				a.actionButton(c, "清空", false, true, a.clearChecks)
+			}
+			label := "开始清理"
+			if a.so.Debug || a.so.NoDelete {
+				label = "查看清理计划"
+			}
+			a.actionButton(c, label, true, n > 0, a.startClean)
 		})
 	})
-}
-
-func (a *App) primaryButton(c *ui.Context, label string, enabled bool, fn func()) {
-	p := a.pal
-	bg, fg := p.Accent, p.OnAccent
-	if !enabled {
-		bg, fg = ui.Transparent, p.Ink3
-	}
-	btn := ui.ButtonBase(c).Height(32).Padding(0, 14).Background(bg).Shrink(0).AlignItems(ui.Center)
-	if enabled {
-		btn.Cursor(ui.CursorPointer)
-	} else {
-		btn.Border(1, p.RuleStrong)
-	}
-	btn.Children(func() { ui.Text(c, label).FontSize(14).FontWeight(600).TextColor(fg) })
-	if enabled && btn.Clicked() {
-		fn()
-	}
 }

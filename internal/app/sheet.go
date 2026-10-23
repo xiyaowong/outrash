@@ -152,20 +152,9 @@ func (a *App) planSheet(c *ui.Context) {
 
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 				ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
-					note := "下次使用时由各工具自行下载或重新编译。"
-					if a.so.Debug || a.so.NoDelete {
-						note = "调试模式：只列出，不删除。"
-					}
-					ui.Text(c, note).FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
-					cancel := ui.ButtonBase(c).Height(36).Padding(0, 12).Cursor(ui.CursorPointer)
-					cancel.Children(func() { ui.Text(c, "取消").FontSize(14).TextColor(p.Ink2) })
-					if cancel.Clicked() {
-						a.dismiss()
-					}
-					if a.so.Debug || a.so.NoDelete {
-						return
-					}
-					a.primaryButton(c, "执行清理", true, a.run)
+					ui.Text(c, "调试模式：只列出，不删除。").
+						FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
+					a.actionButton(c, "关闭", true, true, a.dismiss)
 				})
 			})
 		})
@@ -282,7 +271,7 @@ func (a *App) reportSheet(c *ui.Context) {
 				})
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 				ui.Row(c).Height(64).Padding(0, 24).Justify(ui.End).AlignItems(ui.Center).Children(func() {
-					a.primaryButton(c, "完成", true, a.dismiss)
+					a.actionButton(c, "完成", true, true, a.dismiss)
 				})
 			})
 		})
