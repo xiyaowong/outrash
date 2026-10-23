@@ -668,14 +668,11 @@ func (a *App) navItem(c *ui.Context, pg page, label string, icon navIcon) {
 	// they start at the same edge.
 	row := ui.ButtonBase(c).Height(34).Padding(0, 10).Gap(9).AlignItems(ui.Center).
 		Justify(ui.Start).Label(label).OnClick(func() { a.page = pg })
-	bg := ui.Transparent
-	switch {
-	case active:
-		bg = p.Selected
-	case row.Hovered():
-		bg = p.Hover
+	resting := ui.Transparent
+	if active {
+		resting = p.Selected
 	}
-	row.Background(bg).Radius(6)
+	row.Background(hoverFill(row, resting, p.Hover)).Radius(6)
 	// The marker is painted on the row rather than laid out in it: a child
 	// would shift the icon of whichever item is active.
 	row.Draw(func(pt *ui.Painter, r ui.Rect) {
@@ -1048,11 +1045,9 @@ func (a *App) barSub() string {
 
 func (a *App) textButton(c *ui.Context, label string, fn func()) {
 	p := a.pal
-	b := ui.ButtonBase(c).Height(28).Padding(0, 8).Shrink(0).AlignItems(ui.Center).
+	b := ui.ButtonBase(c).Height(28).Radius(6).Padding(0, 8).Shrink(0).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(fn)
-	if b.Hovered() {
-		b.Background(p.Hover)
-	}
+	b.Background(hoverFill(b, ui.Transparent, p.Hover))
 	b.Children(func() { ui.Text(c, label).FontSize(12).TextColor(p.Ink2) })
 }
 
@@ -1062,15 +1057,14 @@ func (a *App) textButton(c *ui.Context, label string, fn func()) {
 func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, fn func()) {
 	p := a.pal
 	btn := ui.ButtonBase(c).Height(30).Radius(6).Padding(0, 14).
-		Shrink(0).AlignItems(ui.Center).Border(1, p.RuleStrong)
-	bg, fg := p.Surface, p.Ink
+		Shrink(0).AlignItems(ui.Center)
+	bg, fg, edge := p.Surface, p.Ink, p.RuleStrong
 	switch {
 	case !enabled:
 		fg = p.Ink3
 		bg = ui.Transparent
 	case primary:
-		bg, fg = p.Accent, p.OnAccent
-		btn.Border(0, ui.Transparent)
+		bg, fg, edge = p.Accent, p.OnAccent, ui.Transparent
 	}
 	if enabled {
 		btn.Cursor(ui.CursorPointer).OnClick(fn)
@@ -1079,18 +1073,19 @@ func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, f
 	}
 	switch {
 	case !enabled:
-	case primary && btn.Pressed():
-		bg = p.AccentHover
-	case primary && btn.Hovered():
+	case primary && (btn.Pressed() || btn.Hovered()):
 		bg = p.AccentHover
 	case btn.Pressed():
-		bg = p.Selected
-		btn.Border(1, p.Accent)
+		bg, edge = p.Selected, p.Accent
 	case btn.Hovered():
 		bg = p.Hover
-		btn.Border(1, p.RuleStrong)
 	}
-	btn.Background(bg)
+	btn.Background(btn.AnimateColor("bg", bg, hoverAnim))
+	if primary {
+		btn.Border(0, ui.Transparent)
+	} else {
+		btn.Border(1, edge)
+	}
 	if primary && enabled {
 		btn.Shadow(0, 2, 6, 0, tint(p.Accent, p.Surface, 0.24))
 	}
@@ -1238,15 +1233,20 @@ func tint(fg, ground ui.Color, alpha float32) ui.Color {
 	return ui.RGBA(blend(fg.R, ground.R), blend(fg.G, ground.G), blend(fg.B, ground.B), 255)
 }
 
-// hoverFill is the row's background under the pointer. It is read while the
-// row is built, which is also what asks mygo for a frame when the pointer
-// enters or leaves.
-func hoverFill(row ui.Element, resting, hover ui.Color) ui.Color {
+// hoverFill is the row's background under the pointer, eased rather than
+// snapped. It is read while the row is built, which is also what asks mygo
+// for a frame when the pointer enters or leaves.
+func hoverFill(row ui.Element, resting, over ui.Color) ui.Color {
+	target := resting
 	if row.Hovered() {
-		return hover
+		target = over
 	}
-	return resting
+	return row.AnimateColor("hover", target, hoverAnim)
 }
+
+// hoverAnim is the ease every pointer state change takes: short enough to
+// feel immediate, long enough that the change is seen rather than found.
+var hoverAnim = ui.Animation{Duration: 120 * time.Millisecond, Ease: ui.EaseOut}
 
 func (a *App) totalSize() int64 {
 	var n int64

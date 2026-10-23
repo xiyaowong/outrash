@@ -131,9 +131,8 @@ func (a *App) chip(c *ui.Context, act preset) {
 		row.Border(1, p.Accent)
 	case row.Hovered():
 		bg = p.Hover
-		row.Border(1, p.RuleStrong)
 	}
-	row.Background(bg)
+	row.Background(row.AnimateColor("hover", bg, hoverAnim))
 	row.Children(func() {
 		ui.Text(c, act.label).FontSize(11).TextColor(fg).SingleLine()
 		if n > 0 {
