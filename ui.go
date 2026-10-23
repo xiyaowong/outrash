@@ -424,6 +424,7 @@ func (a *app) titleBar(c *ui.Context) {
 			ui.Box(c).Width(4).Shrink(0)
 			ui.Text(c, "TRASH").FontSize(12).FontWeight(700).TextColor(p.Ink)
 		})
+		ui.Box(c).Width(1).Height(12).Shrink(0).Background(p.Rule)
 		ui.Text(c, a.summary()).FontSize(12).TextColor(p.Ink3).SingleLine().Grow(1)
 		if a.phase == phaseScanning {
 			ui.Spinner(c).Width(12).Shrink(0)
@@ -495,12 +496,13 @@ func (a *app) railNote() string {
 func (a *app) railRow(c *ui.Context, id, label string, size int64) {
 	p := a.pal
 	on := a.selected == id
-	fill := ui.Transparent
+	resting := ui.Transparent
 	if on {
-		fill = p.Selected
+		resting = p.Selected
 	}
 	row := ui.Row(c).Height(36).Padding(0, 16).Gap(8).AlignItems(ui.Center).
-		Background(fill).Cursor(ui.CursorPointer).OnClick(func() { a.selected = id })
+		Cursor(ui.CursorPointer).OnClick(func() { a.selected = id })
+	row.Background(hoverFill(row, resting, p.Hover))
 	row.Children(func() {
 		ui.Box(c).Size(2, 16).Shrink(0).Background(barColor(on, p.Ink))
 		ui.Text(c, label).FontSize(14).FontWeight(weight(on)).TextColor(p.Ink).SingleLine().Grow(1)
@@ -515,6 +517,16 @@ func barColor(on bool, c ui.Color) ui.Color {
 		return c
 	}
 	return ui.Transparent
+}
+
+// hoverFill is the row's background under the pointer. It is read while the
+// row is built, which is also what asks mygo for a frame when the pointer
+// enters or leaves.
+func hoverFill(row ui.Element, resting, hover ui.Color) ui.Color {
+	if row.Hovered() {
+		return hover
+	}
+	return resting
 }
 
 func weight(on bool) int {
@@ -651,6 +663,7 @@ func (a *app) overview(c *ui.Context) {
 		size := g.size
 		row := ui.Row(c).Height(64).Padding(0, 32).Gap(16).AlignItems(ui.Center).
 			Cursor(ui.CursorPointer).OnClick(func() { a.selected = g.group.ID })
+		row.Background(hoverFill(row, ui.Transparent, p.Hover))
 		row.Children(func() {
 			ui.Column(c).Grow(1).Gap(2).Children(func() {
 				ui.Text(c, g.group.Name).FontSize(14).FontWeight(600).TextColor(p.Ink).SingleLine()

@@ -1,9 +1,9 @@
 // theme.go holds outrash's colors and type scale.
 //
-// The look is a ledger: warm paper, ink, hairlines, one saturated accent for
-// the single action that matters. No radius, no gradients, no shadows except
-// the plan sheet, because the product's honesty comes from looking like a
-// printed manifest rather than a dashboard.
+// The look is an industrial ledger: paper, graphite ink, hairlines, and one
+// low-saturation blue-gray for the single action that matters. No radius, no
+// gradients, no shadows except the plan sheet, because the product's honesty
+// comes from looking like a printed manifest rather than a dashboard.
 package core
 
 import "github.com/egoist/mygo/ui"
@@ -28,33 +28,33 @@ type Palette struct {
 
 var (
 	Light = Palette{
-		Canvas:     ui.Hex("#F2F1E8"),
-		Raised:     ui.Hex("#FAF9F3"),
-		Hover:      ui.Hex("#EAE8DC"),
-		Selected:   ui.Hex("#E4E0D0"),
-		Ink:        ui.Hex("#111111"),
-		Ink2:       ui.Hex("#57564F"),
-		Ink3:       ui.Hex("#7A786E"),
-		Rule:       ui.Hex("#D6D3C6"),
-		RuleStrong: ui.Hex("#B5B2A3"),
-		Accent:     ui.Hex("#07C160"),
-		OnAccent:   ui.Hex("#111111"),
-		Danger:     ui.Hex("#B42318"),
+		Canvas:     ui.Hex("#F6F6F4"),
+		Raised:     ui.Hex("#FCFCFB"),
+		Hover:      ui.Hex("#EFEFEC"),
+		Selected:   ui.Hex("#E6E9EC"),
+		Ink:        ui.Hex("#16181C"),
+		Ink2:       ui.Hex("#54595F"),
+		Ink3:       ui.Hex("#7B8087"),
+		Rule:       ui.Hex("#E0E2E5"),
+		RuleStrong: ui.Hex("#C6C9CE"),
+		Accent:     ui.Hex("#3F638B"),
+		OnAccent:   ui.Hex("#FFFFFF"),
+		Danger:     ui.Hex("#A8291F"),
 		Success:    ui.Hex("#2E6B4F"),
 	}
 	DarkPalette = Palette{
-		Canvas:     ui.Hex("#121210"),
-		Raised:     ui.Hex("#1A1A17"),
-		Hover:      ui.Hex("#23231F"),
-		Selected:   ui.Hex("#2A2924"),
-		Ink:        ui.Hex("#F2F1E8"),
-		Ink2:       ui.Hex("#A7A59A"),
-		Ink3:       ui.Hex("#7C7A70"),
-		Rule:       ui.Hex("#2C2B26"),
-		RuleStrong: ui.Hex("#403E37"),
-		Accent:     ui.Hex("#07C160"),
-		OnAccent:   ui.Hex("#111111"),
-		Danger:     ui.Hex("#F97066"),
+		Canvas:     ui.Hex("#16181B"),
+		Raised:     ui.Hex("#1C1F23"),
+		Hover:      ui.Hex("#23272C"),
+		Selected:   ui.Hex("#2A3037"),
+		Ink:        ui.Hex("#F2F3F5"),
+		Ink2:       ui.Hex("#A7ACB3"),
+		Ink3:       ui.Hex("#7C828A"),
+		Rule:       ui.Hex("#2B2F34"),
+		RuleStrong: ui.Hex("#3E434A"),
+		Accent:     ui.Hex("#6E93BC"),
+		OnAccent:   ui.Hex("#0E1114"),
+		Danger:     ui.Hex("#F0746A"),
 		Success:    ui.Hex("#6BBF8A"),
 		Dark:       true,
 	}
