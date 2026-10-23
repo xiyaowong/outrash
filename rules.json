@@ -235,7 +235,8 @@
             "darwin": ["~/Library/Caches/pypoetry"],
             "linux": ["~/.cache/pypoetry"]
           },
-          "unit": "entries"
+          "unit": "entries",
+          "exclude": ["virtualenvs"]
         },
         {
           "id": "conda",

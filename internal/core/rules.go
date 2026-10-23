@@ -46,6 +46,10 @@ type Item struct {
 	Paths map[string][]string `json:"paths"`
 	Probe *Probe              `json:"probe"`
 	Unit  string              `json:"unit"`
+	// Exclude names children of a root that live there but are not cache:
+	// Poetry keeps project virtualenvs inside its cache directory, and a
+	// venv is not rebuilt by the tool the way a downloaded package is.
+	Exclude []string `json:"exclude"`
 }
 
 // Probe asks a tool where it keeps its cache, for the paths a user moved

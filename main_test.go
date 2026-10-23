@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"testing"
 
 	"outrash/internal/core"
@@ -31,5 +32,14 @@ func TestCatalogCoversCommonTools(t *testing.T) {
 	}
 	if cfg.StaleDays <= 0 {
 		t.Errorf("staleDays %d", cfg.StaleDays)
+	}
+	// Poetry keeps project virtualenvs under its cache dir; they must never
+	// be offered for deletion.
+	for _, g := range cfg.Groups {
+		for _, it := range g.Items {
+			if it.ID == "poetry" && !slices.Contains(it.Exclude, "virtualenvs") {
+				t.Error("poetry no longer excludes virtualenvs")
+			}
+		}
 	}
 }

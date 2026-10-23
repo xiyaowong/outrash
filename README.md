@@ -24,7 +24,7 @@ go run .         # 打开窗口，扫描后按工具分组显示
 
 ## 添加一个缓存
 
-规则都在 `rules.json`，通过 `go:embed` 在构建时打包。在分组里加一个 item：`id`、`name` 必填；`env` 是优先读取的环境变量；`paths` 按 `windows`/`darwin`/`linux` 给出路径模板，支持 `~` 和 `%VAR%`；`unit` 为 `entries`（默认，根的每个子项算一项）或 `versioned`（根/包/版本，可执行“保留最新”）。可选的 `probe` 会在环境变量未设置且默认路径都不存在时调用工具查询自己的缓存位置。
+规则都在 `rules.json`，通过 `go:embed` 在构建时打包。在分组里加一个 item：`id`、`name` 必填；`env` 是优先读取的环境变量；`paths` 按 `windows`/`darwin`/`linux` 给出路径模板，支持 `~` 和 `%VAR%`；`unit` 为 `entries`（默认，根的每个子项算一项）或 `versioned`（根/包/版本，可执行“保留最新”）；`exclude` 列出根下同住但**不可重建**的子目录（如 Poetry 的 `virtualenvs`），它们既不进列表也不计入大小。可选的 `probe` 会在环境变量未设置且默认路径都不存在时调用工具查询自己的缓存位置。
 
 ## 开发
 
