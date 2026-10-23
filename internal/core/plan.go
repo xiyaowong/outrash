@@ -64,6 +64,12 @@ type Plan struct {
 	Bytes int64
 	// Title says which action made the plan, for the sheet's header.
 	Title string
+	// notes carries each item's catalog note into Groups().
+	notes []noteEntry
+}
+
+type noteEntry struct {
+	group, item, note string
 }
 
 // Select decides what the policy removes from the picks.
@@ -262,12 +268,29 @@ func describe(pol Policy, chosen int) string {
 	return "清理已勾选的内容"
 }
 
+// PlanGroup is one family's share of a plan.
+type PlanGroup struct {
+	Name  string
+	Steps []Step
+	Bytes int64
+	// Items names each cache the steps came from, with the catalog's note on
+	// how that cache comes back.
+	Items []PlanItem
+}
+
+// PlanItem is one cache inside a group.
+type PlanItem struct {
+	Name string
+	Note string
+}
+
 // Add merges another plan into p, labelling its steps.
-func (p *Plan) Add(group, item string, other *Plan) {
+func (p *Plan) Add(group, item, note string, other *Plan) {
 	for _, s := range other.Steps {
 		s.Group, s.Item = group, item
 		p.Steps = append(p.Steps, s)
 	}
+	p.notes = append(p.notes, noteEntry{group: group, item: item, note: note})
 	p.Total()
 }
 
@@ -282,31 +305,28 @@ func (p *Plan) Total() *Plan {
 }
 
 // Groups lists the distinct group names in a plan, in plan order, with the
-// steps of each.
-func (p *Plan) Groups() []struct {
-	Name  string
-	Steps []Step
-	Bytes int64
-} {
-	var out []struct {
-		Name  string
-		Steps []Step
-		Bytes int64
-	}
+// steps of each and the notes of the items that put them there.
+func (p *Plan) Groups() []PlanGroup {
+	var out []PlanGroup
 	at := map[string]int{}
 	for _, s := range p.Steps {
 		i, ok := at[s.Group]
 		if !ok {
 			i = len(out)
 			at[s.Group] = i
-			out = append(out, struct {
-				Name  string
-				Steps []Step
-				Bytes int64
-			}{Name: s.Group})
+			out = append(out, PlanGroup{Name: s.Group})
 		}
 		out[i].Steps = append(out[i].Steps, s)
 		out[i].Bytes += s.Bytes
+	}
+	for _, n := range p.notes {
+		i, ok := at[n.group]
+		if !ok || n.note == "" {
+			continue
+		}
+		if !slices.ContainsFunc(out[i].Items, func(it PlanItem) bool { return it.Name == n.item }) {
+			out[i].Items = append(out[i].Items, PlanItem{Name: n.item, Note: n.note})
+		}
 	}
 	return out
 }
