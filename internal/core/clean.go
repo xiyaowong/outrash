@@ -155,15 +155,12 @@ func removeBelow(dir string, removed *int64, report func(int64)) error {
 		// size joins the total only after the removal succeeds, so a file
 		// that refuses to go is not reported as freed.
 		var size int64
-		if !e.IsDir() {
-			if info, err := e.Info(); err == nil {
-				size = info.Size()
-			}
-		}
 		if e.IsDir() {
 			if err := removeBelow(p, removed, report); err != nil {
 				return err
 			}
+		} else if info, err := e.Info(); err == nil {
+			size = info.Size()
 		}
 		if err := removePath(p); err != nil {
 			return err
