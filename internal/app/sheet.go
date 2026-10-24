@@ -332,6 +332,7 @@ func (a *App) run() {
 	a.busy = true
 	a.msg = "正在清理…"
 	a.clearChecks()
+	a.fx = &cleanFx{steps: map[string]core.Removal{}}
 	a.busyBar(true)
 	a.repaint()
 	// Taken before the removal, so the report can compare it with the rescan.
@@ -345,7 +346,13 @@ func (a *App) run() {
 			// The title bar shows the estimate, so the frame has to follow
 			// the removal rather than wait for it.
 			a.repaint()
+		}, func(r core.Removal) {
+			a.fx.add(r)
+			a.repaint()
 		})
+		// The last rows need fxTail to finish their strike; the rescan
+		// would rebuild the table out from under them.
+		time.Sleep(fxTail)
 		a.applyUpdate(func() { a.finish(out) })
 	}()
 }

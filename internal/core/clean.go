@@ -46,6 +46,16 @@ func Remove(p *Plan, roots []string) Outcome { return RemoveWith(p, roots, nil) 
 // goes. A step counts as done whether it was removed, was already gone, or
 // failed: the estimate is about time spent, not success.
 func RemoveWith(p *Plan, roots []string, progress func(done, total int64)) Outcome {
+	return removePlan(p, roots, progress, nil)
+}
+
+// RemoveSteps is RemoveWith, and tells onStep about each step the moment it
+// is over, so a UI can strike its row off while the estimate keeps running.
+func RemoveSteps(p *Plan, roots []string, progress func(done, total int64), onStep func(Removal)) Outcome {
+	return removePlan(p, roots, progress, onStep)
+}
+
+func removePlan(p *Plan, roots []string, progress func(done, total int64), onStep func(Removal)) Outcome {
 	start := time.Now()
 	var out Outcome
 	var done int64
@@ -69,6 +79,9 @@ func RemoveWith(p *Plan, roots []string, progress func(done, total int64)) Outco
 			out.Failed++
 		}
 		out.Runs = append(out.Runs, r)
+		if onStep != nil {
+			onStep(r)
+		}
 		done += s.Bytes
 		if progress != nil {
 			progress(done, p.Bytes)
