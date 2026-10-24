@@ -94,9 +94,34 @@ func fixture() *core.Cache {
 	}
 	gocache.Roots = []core.Root{goRoot}
 
+	var edge core.Result
+	edge.GroupID, edge.ItemID, edge.Unit = "apps", "edge", core.UnitEntries
+	edgeCache := core.Root{Path: `C:\Users\tester\AppData\Local\Microsoft\Edge\User Data\Default\Cache`, Source: "默认位置"}
+	edgeCache.Entries = []core.Entry{{Name: "Cache_Data", Path: edgeCache.Path + `\Cache_Data`, Size: 114_500_000, ModTime: fixedTime(1)}}
+	edgeCache.Size = 114_500_000
+	edgeCode := core.Root{Path: `C:\Users\tester\AppData\Local\Microsoft\Edge\User Data\Default\Code Cache`, Source: "默认位置"}
+	edgeCode.Entries = []core.Entry{{Name: "js", Path: edgeCode.Path + `\js`, Size: 83_300_000, ModTime: fixedTime(1)}}
+	edgeCode.Size = 83_300_000
+	edge.Roots = []core.Root{edgeCache, edgeCode}
+
+	var vscode core.Result
+	vscode.GroupID, vscode.ItemID, vscode.Unit = "apps", "vscode", core.UnitEntries
+	vsRoot := core.Root{Path: `C:\Users\tester\AppData\Roaming\Code\CachedExtensionVSIXs`, Source: "默认位置"}
+	for i, n := range []string{"vscodevim", "golang.go", "rust-lang"} {
+		vsRoot.Entries = append(vsRoot.Entries, core.Entry{
+			Name: n, Path: vsRoot.Path + `\` + n + ".vsix", Size: int64(43_000_000 + i*1_000_000), ModTime: fixedTime(40),
+		})
+	}
+	for _, e := range vsRoot.Entries {
+		vsRoot.Size += e.Size
+	}
+	vscode.Roots = []core.Root{vsRoot}
+
 	add(nuget)
 	add(npm)
 	add(gocache)
+	add(edge)
+	add(vscode)
 	return c
 }
 
@@ -193,7 +218,7 @@ func TestNavRailSwitchesPages(t *testing.T) {
 		want  page
 		text  string
 	}{
-		{"概览", pageOverview, "清理开发工具缓存"},
+		{"概览", pageOverview, "清理可重建缓存"},
 		{"清理记录", pageLog, "本次会话还没有清理记录"},
 		{"规则", pageRules, "清理方式"},
 		{"扫描结果", pageResults, "缓存路径"},

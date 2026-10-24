@@ -1,6 +1,6 @@
-// outrash finds the dependency caches of developer tools and shows what can
-// be rebuilt. The checked rows are the plan; the window only deletes when the
-// user presses the button that confirms them.
+// outrash finds the caches of developer tools and everyday apps and shows what
+// can be rebuilt. The checked rows are the plan; the window only deletes when
+// the user presses the button that confirms them.
 package main
 
 import (

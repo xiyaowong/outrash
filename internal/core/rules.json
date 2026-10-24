@@ -283,6 +283,200 @@
       ]
     },
     {
+      "id": "apps",
+      "name": "常用应用",
+      "items": [
+        {
+          "id": "edge",
+          "name": "Microsoft Edge 缓存",
+          "note": "下次打开网页时自动重新下载",
+          "paths": {
+            "windows": [
+              "%LOCALAPPDATA%/Microsoft/Edge/User Data/Default/Cache",
+              "%LOCALAPPDATA%/Microsoft/Edge/User Data/Profile */Cache",
+              "%LOCALAPPDATA%/Microsoft/Edge/User Data/Default/Code Cache",
+              "%LOCALAPPDATA%/Microsoft/Edge/User Data/Profile */Code Cache",
+              "%LOCALAPPDATA%/Microsoft/Edge/User Data/Default/GPUCache",
+              "%LOCALAPPDATA%/Microsoft/Edge/User Data/Profile */GPUCache",
+              "%LOCALAPPDATA%/Microsoft/Edge/User Data/Default/DawnGraphiteCache",
+              "%LOCALAPPDATA%/Microsoft/Edge/User Data/Default/DawnWebGPUCache",
+              "%LOCALAPPDATA%/Microsoft/Edge/User Data/Default/Service Worker/CacheStorage",
+              "%LOCALAPPDATA%/Microsoft/Edge/User Data/Profile */Service Worker/CacheStorage"
+            ],
+            "darwin": [
+              "~/Library/Caches/Microsoft Edge/Default/Cache",
+              "~/Library/Caches/Microsoft Edge/Profile */Cache",
+              "~/Library/Caches/Microsoft Edge/Default/Code Cache",
+              "~/Library/Caches/Microsoft Edge/Profile */Code Cache",
+              "~/Library/Caches/Microsoft Edge/Default/GPUCache",
+              "~/Library/Caches/Microsoft Edge/Profile */GPUCache"
+            ],
+            "linux": [
+              "~/.cache/microsoft-edge/Default/Cache",
+              "~/.cache/microsoft-edge/Profile */Cache",
+              "~/.cache/microsoft-edge/Default/Code Cache",
+              "~/.cache/microsoft-edge/Profile */Code Cache",
+              "~/.cache/microsoft-edge/Default/GPUCache",
+              "~/.cache/microsoft-edge/Profile */GPUCache"
+            ]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "chrome",
+          "name": "Google Chrome 缓存",
+          "note": "下次打开网页时自动重新下载",
+          "paths": {
+            "windows": [
+              "%LOCALAPPDATA%/Google/Chrome/User Data/Default/Cache",
+              "%LOCALAPPDATA%/Google/Chrome/User Data/Profile */Cache",
+              "%LOCALAPPDATA%/Google/Chrome/User Data/Default/Code Cache",
+              "%LOCALAPPDATA%/Google/Chrome/User Data/Profile */Code Cache",
+              "%LOCALAPPDATA%/Google/Chrome/User Data/Default/GPUCache",
+              "%LOCALAPPDATA%/Google/Chrome/User Data/Profile */GPUCache",
+              "%LOCALAPPDATA%/Google/Chrome/User Data/Default/Service Worker/CacheStorage",
+              "%LOCALAPPDATA%/Google/Chrome/User Data/Profile */Service Worker/CacheStorage"
+            ],
+            "darwin": [
+              "~/Library/Caches/Google/Chrome/Default/Cache",
+              "~/Library/Caches/Google/Chrome/Profile */Cache",
+              "~/Library/Caches/Google/Chrome/Default/Code Cache",
+              "~/Library/Caches/Google/Chrome/Profile */Code Cache",
+              "~/Library/Caches/Google/Chrome/Default/GPUCache",
+              "~/Library/Caches/Google/Chrome/Profile */GPUCache"
+            ],
+            "linux": [
+              "~/.cache/google-chrome/Default/Cache",
+              "~/.cache/google-chrome/Profile */Cache",
+              "~/.cache/google-chrome/Default/Code Cache",
+              "~/.cache/google-chrome/Profile */Code Cache",
+              "~/.cache/google-chrome/Default/GPUCache",
+              "~/.cache/google-chrome/Profile */GPUCache"
+            ]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "firefox",
+          "name": "Firefox 缓存",
+          "note": "下次打开网页时自动重新下载",
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/Mozilla/Firefox/Profiles/*/cache2"],
+            "darwin": ["~/Library/Caches/Firefox/Profiles/*/cache2"],
+            "linux": ["~/.cache/mozilla/firefox/*/cache2"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "vscode",
+          "name": "VS Code 缓存",
+          "note": "重新打开时自动重建",
+          "paths": {
+            "windows": [
+              "%APPDATA%/Code/Cache",
+              "%APPDATA%/Code/Code Cache",
+              "%APPDATA%/Code/GPUCache",
+              "%APPDATA%/Code/CachedData",
+              "%APPDATA%/Code/DawnGraphiteCache",
+              "%APPDATA%/Code/DawnWebGPUCache",
+              "%APPDATA%/Code/CachedExtensionVSIXs"
+            ],
+            "darwin": [
+              "~/Library/Application Support/Code/Cache",
+              "~/Library/Application Support/Code/Code Cache",
+              "~/Library/Application Support/Code/GPUCache",
+              "~/Library/Application Support/Code/CachedData",
+              "~/Library/Application Support/Code/CachedExtensionVSIXs"
+            ],
+            "linux": [
+              "~/.config/Code/Cache",
+              "~/.config/Code/Code Cache",
+              "~/.config/Code/GPUCache",
+              "~/.config/Code/CachedData",
+              "~/.config/Code/CachedExtensionVSIXs"
+            ]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "slack",
+          "name": "Slack 缓存",
+          "note": "重新打开时自动重新下载",
+          "paths": {
+            "windows": [
+              "%APPDATA%/Slack/Cache",
+              "%APPDATA%/Slack/Code Cache",
+              "%APPDATA%/Slack/GPUCache",
+              "%APPDATA%/Slack/Service Worker/CacheStorage"
+            ],
+            "darwin": [
+              "~/Library/Application Support/Slack/Cache",
+              "~/Library/Application Support/Slack/Code Cache",
+              "~/Library/Application Support/Slack/GPUCache"
+            ],
+            "linux": [
+              "~/.config/Slack/Cache",
+              "~/.config/Slack/Code Cache",
+              "~/.config/Slack/GPUCache"
+            ]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "discord",
+          "name": "Discord 缓存",
+          "note": "重新打开时自动重新下载",
+          "paths": {
+            "windows": [
+              "%APPDATA%/discord/Cache",
+              "%APPDATA%/discord/Code Cache",
+              "%APPDATA%/discord/GPUCache"
+            ],
+            "darwin": [
+              "~/Library/Application Support/discord/Cache",
+              "~/Library/Application Support/discord/Code Cache",
+              "~/Library/Application Support/discord/GPUCache"
+            ],
+            "linux": [
+              "~/.config/discord/Cache",
+              "~/.config/discord/Code Cache",
+              "~/.config/discord/GPUCache"
+            ]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "teams",
+          "name": "Teams 缓存",
+          "note": "重新打开时自动重新下载",
+          "paths": {
+            "windows": [
+              "%APPDATA%/Microsoft/Teams/Cache",
+              "%APPDATA%/Microsoft/Teams/Code Cache",
+              "%APPDATA%/Microsoft/Teams/GPUCache"
+            ],
+            "darwin": [
+              "~/Library/Application Support/Microsoft/Teams/Cache",
+              "~/Library/Application Support/Microsoft/Teams/Code Cache",
+              "~/Library/Application Support/Microsoft/Teams/GPUCache"
+            ]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "spotify",
+          "name": "Spotify 缓存",
+          "note": "下次播放时自动重新下载",
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/Spotify/Storage"],
+            "darwin": ["~/Library/Caches/com.spotify.client/Data"],
+            "linux": ["~/.cache/spotify/Storage"]
+          },
+          "unit": "entries"
+        }
+      ]
+    },
+    {
       "id": "other",
       "name": "其他",
       "items": [
