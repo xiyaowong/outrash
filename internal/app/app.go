@@ -830,7 +830,7 @@ func (a *App) pageHeader(c *ui.Context) {
 func (a *App) pageTitle() (title, sub string) {
 	switch a.page {
 	case pageOverview:
-		return "概览", "扫描本机开发工具与常用应用留下的缓存，只列出能重新下载或重新编译的内容"
+		return "概览", "扫描本机留下的可重建缓存，只列出能重新下载或重新编译的内容"
 	case pageResults:
 		if a.phase == phaseScanning {
 			return "可重建缓存", "正在扫描环境变量与各工具的默认位置"
@@ -873,7 +873,7 @@ func (a *App) overviewPage(c *ui.Context) {
 	ui.Column(c).Padding(24).Gap(24).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
 			ui.Text(c, "清理可重建缓存").FontSize(16).FontWeight(600).TextColor(p.Ink)
-			ui.Text(c, "扫描开发工具与常用应用留下的缓存，勾选后一次清理。").
+			ui.Text(c, "扫描本机留下的可重建缓存，勾选后一次清理。").
 				FontSize(12).TextColor(p.Ink2)
 			ui.Text(c, "只列出能重新下载或重新编译的内容，清理后各工具会在下次使用时自行恢复。").
 				FontSize(12).TextColor(p.Ink2)

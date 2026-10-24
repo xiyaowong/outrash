@@ -283,8 +283,8 @@
       ]
     },
     {
-      "id": "apps",
-      "name": "常用应用",
+      "id": "browsers",
+      "name": "浏览器",
       "items": [
         {
           "id": "edge",
@@ -366,7 +366,13 @@
             "linux": ["~/.cache/mozilla/firefox/*/cache2"]
           },
           "unit": "entries"
-        },
+        }
+      ]
+    },
+    {
+      "id": "editors",
+      "name": "编辑器",
+      "items": [
         {
           "id": "vscode",
           "name": "VS Code 缓存",
@@ -397,7 +403,13 @@
             ]
           },
           "unit": "entries"
-        },
+        }
+      ]
+    },
+    {
+      "id": "chat",
+      "name": "通讯",
+      "items": [
         {
           "id": "slack",
           "name": "Slack 缓存",
@@ -462,7 +474,13 @@
             ]
           },
           "unit": "entries"
-        },
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "name": "媒体",
+      "items": [
         {
           "id": "spotify",
           "name": "Spotify 缓存",
