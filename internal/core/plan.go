@@ -118,6 +118,29 @@ func Select(picks []Pick, pol Policy) *Plan {
 	return (&Plan{Steps: steps, Title: describe(pol, len(picks))}).Total()
 }
 
+// Greedy picks the largest entries until target bytes are covered, for the
+// "I just need some space back" selection. It stops at the pick that crosses
+// the target; when the picks run out first, it returns what there is.
+func Greedy(picks []Pick, target int64) []Pick {
+	if target <= 0 {
+		return nil
+	}
+	sorted := slices.Clone(picks)
+	slices.SortStableFunc(sorted, func(a, b Pick) int { return cmp.Compare(b.Bytes, a.Bytes) })
+	var out []Pick
+	var sum int64
+	for _, p := range sorted {
+		if p.Bytes <= 0 {
+			break // descending order: nothing behind this one pays either
+		}
+		out = append(out, p)
+		if sum += p.Bytes; sum >= target {
+			break
+		}
+	}
+	return out
+}
+
 // Annotate explains a plan against everything the family's scan saw, not
 // against the policy that made it. A checked plan is built with a plain
 // "remove these" policy, so without this every row would say 全部 and the

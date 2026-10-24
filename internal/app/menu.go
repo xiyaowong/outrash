@@ -146,11 +146,42 @@ func (a *App) selectItems(m *ui.Menu, picks []core.Pick, extra func(m *ui.Menu))
 		if sub.Item("全不选").Disabled(on == 0).Chosen() {
 			a.clearPicks(picks)
 		}
+		if on > 0 {
+			// The trims narrow what is checked instead of replacing it: a
+			// rough check followed by a trim is how a long list gets honest.
+			sub.Separator()
+			if sub.Item("从选中排除本周用过的").Chosen() {
+				a.dropRecent(picks)
+			}
+			if sub.Item("从选中排除小项").Chosen() {
+				a.dropSmall(picks)
+			}
+		}
 		if extra != nil {
 			sub.Separator()
 			extra(sub)
 		}
 	})
+}
+
+// dropRecent unchecks the picked paths written within the last week, the
+// window the risk column warns about.
+func (a *App) dropRecent(picks []core.Pick) {
+	for _, p := range picks {
+		if a.checked[p.Path] && !p.ModTime.IsZero() && a.now.Sub(p.ModTime) < 7*24*time.Hour {
+			delete(a.checked, p.Path)
+		}
+	}
+}
+
+// dropSmall unchecks the picked paths under 10 MB, the ones that pay little
+// and make the list long.
+func (a *App) dropSmall(picks []core.Pick) {
+	for _, p := range picks {
+		if a.checked[p.Path] && p.Bytes < 10<<20 {
+			delete(a.checked, p.Path)
+		}
+	}
 }
 
 // pathItems adds one item for a single path, or a submenu of them. A cache

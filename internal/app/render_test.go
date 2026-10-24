@@ -579,6 +579,107 @@ func TestCleanedRowsStrikeThrough(t *testing.T) {
 	}
 }
 
+// The panel's advice must come from the scan's own numbers: the size target
+// names what the biggest entries actually add up to, and the pareto line
+// stays silent when no such concentration exists.
+func TestPanelSuggestsSizeTarget(t *testing.T) {
+	a := testAppWith(t, Options{})
+	a.now = fixedTime(0)
+	tt := ui.NewTester(a.view, 1200, 780)
+	tt.Frame()
+	if !tt.HasText("凑够 1.0 GB · 勾 4 项") {
+		t.Fatalf("panel missing the size target; texts %v", tt.Texts())
+	}
+	if tt.HasText("就够了") {
+		t.Fatal("an evenly spread scan must not get the pareto advice")
+	}
+	if err := tt.Click("凑够 1.0 GB · 勾 4 项"); err != nil {
+		t.Fatal(err)
+	}
+	if n, bytes := a.checkedTotal(); n != 4 || bytes != 4*310_000_000 {
+		t.Fatalf("the target selected %d items, %d bytes; want the four go-build entries", n, bytes)
+	}
+}
+
+func TestPanelSuggestsTopHeavyScan(t *testing.T) {
+	a := testAppWith(t, Options{})
+	a.now = fixedTime(0)
+	a.cache = topHeavyCache()
+	a.regroup()
+	a.recommend()
+	tt := ui.NewTester(a.view, 1200, 780)
+	tt.Frame()
+	if !tt.HasText("清这 3 项就够了") {
+		t.Fatalf("a top-heavy scan must name the big three; texts %v", tt.Texts())
+	}
+}
+
+// topHeavyCache is a scan where three entries hold almost everything, the
+// shape the pareto advice exists for.
+func topHeavyCache() *core.Cache {
+	root := core.Root{Path: `C:\Users\tester\AppData\Local\go-build`, Source: "默认位置"}
+	for i, n := range []string{"00", "1a", "7f", "c3", "d4"} {
+		size := int64(10 << 20)
+		if i < 3 {
+			size = int64([]int{1000, 900, 800}[i]) << 20
+		}
+		root.Entries = append(root.Entries, core.Entry{
+			Name: n, Path: root.Path + `\` + n, Size: size, ModTime: fixedTime(90),
+		})
+		root.Size += size
+	}
+	return &core.Cache{Results: map[string]core.Result{
+		"go/go-build": {GroupID: "go", ItemID: "go-build", Unit: core.UnitEntries,
+			Roots: []core.Root{root}, Size: root.Size},
+	}}
+}
+
+// A path that came straight back after the last clean is the one the next
+// selection should skip, and the panel offers exactly that in one click.
+func TestPanelSuggestsSkippingRegenerated(t *testing.T) {
+	a := testAppWith(t, Options{})
+	a.now = fixedTime(0)
+	const cacache = `C:\Users\tester\AppData\Local\npm-cache\_cacache`
+	a.checked[cacache] = true
+	a.regen = map[string]bool{cacache: true}
+	tt := ui.NewTester(a.view, 1200, 780)
+	tt.Frame()
+	if !tt.HasText("跳过马上回信的 1 项") {
+		t.Fatalf("panel missing the skip advice; texts %v", tt.Texts())
+	}
+	if err := tt.Click("跳过马上回信的 1 项 · 20.0 MB"); err != nil {
+		t.Fatal(err)
+	}
+	if a.checked[cacache] {
+		t.Fatal("the skip advice must drop the path from the selection")
+	}
+}
+
+// The row menu's trims narrow the selection instead of replacing it.
+func TestRefineDropsFromSelection(t *testing.T) {
+	a := testAppWith(t, Options{})
+	a.now = fixedTime(0)
+	picks := []core.Pick{
+		{Path: `C:\r`, Bytes: 100 << 20, ModTime: fixedTime(0)},
+		{Path: `C:\old`, Bytes: 100 << 20, ModTime: fixedTime(90)},
+		{Path: `C:\small`, Bytes: 5 << 20, ModTime: fixedTime(90)},
+	}
+	for _, p := range picks {
+		a.checked[p.Path] = true
+	}
+	a.dropRecent(picks)
+	if a.checked[`C:\r`] {
+		t.Fatal("a pick written this week must drop")
+	}
+	if !a.checked[`C:\old`] || !a.checked[`C:\small`] {
+		t.Fatal("the other picks must stay")
+	}
+	a.dropSmall(picks)
+	if a.checked[`C:\small`] {
+		t.Fatal("a pick under 10 MB must drop")
+	}
+}
+
 // A receipt is only honest when it measures: the rescan after a clean must
 // show the same cache smaller, and only a path written after the removal
 // counts as regenerated.

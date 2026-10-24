@@ -239,6 +239,36 @@ func TestAnnotateExplainsKeptVersions(t *testing.T) {
 	}
 }
 
+// Greedy walks the sizes from the top and stops at the pick that crosses the
+// target, so a byte goal never drags in a pick it does not need.
+func TestGreedyTakesLargestUntilTarget(t *testing.T) {
+	picks := []Pick{
+		{Path: "a", Bytes: 300},
+		{Path: "b", Bytes: 500},
+		{Path: "c", Bytes: 100},
+		{Path: "d", Bytes: 400},
+	}
+	var got []string
+	var sum int64
+	for _, p := range Greedy(picks, 1000) {
+		got = append(got, p.Path)
+		sum += p.Bytes
+	}
+	if !equal(got, []string{"b", "d", "a"}) || sum != 1200 {
+		t.Fatalf("Greedy = %v, %d bytes; want [b d a] at 1200", got, sum)
+	}
+	if Greedy(picks, 0) != nil {
+		t.Fatal("a non-positive goal selects nothing")
+	}
+	var all []string
+	for _, p := range Greedy(picks, 1<<40) {
+		all = append(all, p.Path)
+	}
+	if !equal(all, []string{"b", "d", "a", "c"}) {
+		t.Fatalf("an unreachable goal returns everything, got %v", all)
+	}
+}
+
 func TestBytes(t *testing.T) {
 	cases := map[int64]string{
 		0:                         "0 B",
