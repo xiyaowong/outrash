@@ -133,9 +133,7 @@ func Run(cfg *Config, o Options, workers int, onResult Progress, stop <-chan str
 		jobs = make(chan int)
 	)
 	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range jobs {
 				select {
 				case <-stop:
@@ -150,7 +148,7 @@ func Run(cfg *Config, o Options, workers int, onResult Progress, stop <-chan str
 					onResult(r)
 				}
 			}
-		}()
+		})
 	}
 dispatch:
 	for i := range items {

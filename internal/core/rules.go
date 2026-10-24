@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -153,8 +154,8 @@ func runOnce(name string, args []string) (string, error) {
 		return "", err
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		if s := strings.TrimSpace(lines[i]); s != "" {
+	for _, line := range slices.Backward(lines) {
+		if s := strings.TrimSpace(line); s != "" {
 			return s, nil
 		}
 	}
@@ -196,13 +197,12 @@ func (it Item) Roots(o Options) (dirs []string, source string, fromEnv bool) {
 	if anyExists(dirs) {
 		return dirs, L("默认位置", "Default location"), false
 	}
-	if it.Probe != nil && o.Run != nil {
-		if out, err := o.Run(it.Probe.Cmd, it.Probe.Args); err == nil {
-			if d, ok := clean(out, o); ok {
-				if exists(d) {
-					return append(dirs, d), it.Probe.Cmd + " " + strings.Join(it.Probe.Args, " "), false
-				}
-			}
+	if it.Probe == nil || o.Run == nil {
+		return dirs, L("默认位置", "Default location"), false
+	}
+	if out, err := o.Run(it.Probe.Cmd, it.Probe.Args); err == nil {
+		if d, ok := clean(out, o); ok && exists(d) {
+			return append(dirs, d), it.Probe.Cmd + " " + strings.Join(it.Probe.Args, " "), false
 		}
 	}
 	return dirs, L("默认位置", "Default location"), false
@@ -277,12 +277,7 @@ func exists(p string) bool {
 }
 
 func anyExists(dirs []string) bool {
-	for _, d := range dirs {
-		if exists(d) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(dirs, exists)
 }
 
 func unique(in []string) []string {
@@ -310,7 +305,7 @@ func globPath(tpl string, o Options) []string {
 	if strings.HasPrefix(tpl, "/") {
 		cur = []string{"/"}
 	}
-	for _, seg := range strings.Split(tpl, "/") {
+	for seg := range strings.SplitSeq(tpl, "/") {
 		if seg == "" {
 			continue
 		}

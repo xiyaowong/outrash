@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -27,8 +28,8 @@ func (a *App) logPage(c *ui.Context) {
 		// Blocks stretch to the column: a separator that only spans its row's
 		// content reads as the error line's underline, not a table rule.
 		ui.Column(c).Fill().Gap(16).Children(func() {
-			for i := len(a.log) - 1; i >= 0; i-- {
-				a.logBlock(c, a.log[i])
+			for _, r := range slices.Backward(a.log) {
+				a.logBlock(c, r)
 			}
 		})
 	})

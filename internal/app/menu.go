@@ -71,8 +71,8 @@ func (a *App) leafMenu(c *ui.Context, it itemState, pick core.Pick) func(m *ui.M
 
 // packageMenu is a versioned package: several versions, one of which 保留最新
 // keeps, so the menu offers that policy rather than only check and uncheck.
-func (a *App) packageMenu(c *ui.Context, it itemState, ent core.Entry, env bool) func(m *ui.Menu) {
-	picks := versionPicks(ent, env)
+func (a *App) packageMenu(c *ui.Context, it itemState, ent core.Entry, fromEnv bool) func(m *ui.Menu) {
+	picks := versionPicks(ent, fromEnv)
 	// 仅旧版本 goes through setChecks, which does not filter: give it the
 	// bulk set, or a menu on an env-sourced package would check its versions.
 	bulk := autoPicks(picks)
@@ -87,7 +87,7 @@ func (a *App) packageMenu(c *ui.Context, it itemState, ent core.Entry, env bool)
 			c.WriteClipboard(ent.Path)
 		}
 		if m.Item(a.T("打开包目录")).Chosen() {
-			openPath(ent.Path)
+			openPath(a, ent.Path)
 		}
 		m.Separator()
 		if m.Item(a.T("详细信息")).Chosen() {
@@ -109,7 +109,7 @@ func (a *App) itemMenu(c *ui.Context, it itemState, family string) func(m *ui.Me
 		a.selectItems(m, picks, nil)
 		m.Separator()
 		a.pathItems(m, a.T("复制缓存路径"), roots, func(p string) { c.WriteClipboard(p) })
-		a.pathItems(m, a.T("打开缓存目录"), roots, openPath)
+		a.pathItems(m, a.T("打开缓存目录"), roots, func(p string) { openPath(a, p) })
 		m.Separator()
 		if m.Item(a.T("详细信息")).Chosen() {
 			a.showDetail(a.itemDetail(it, family))
@@ -243,13 +243,13 @@ func (a *App) clearPicks(picks []core.Pick) {
 }
 
 // versionPicks is the leaves of one versioned package, in the order the scan
-// listed them. env carries the root's source through to the picks.
-func versionPicks(ent core.Entry, env bool) []core.Pick {
+// listed them. fromEnv carries the root's source through to the picks.
+func versionPicks(ent core.Entry, fromEnv bool) []core.Pick {
 	picks := make([]core.Pick, 0, len(ent.Versions))
 	for _, v := range ent.Versions {
 		picks = append(picks, core.Pick{
 			Path: v.Path, Name: ent.Name + " " + v.Name, Bytes: v.Size,
-			ModTime: v.ModTime, Package: ent.Name, EnvSrc: env,
+			ModTime: v.ModTime, Package: ent.Name, EnvSrc: fromEnv,
 		})
 	}
 	return picks
@@ -271,7 +271,13 @@ func rootPaths(res core.Result) []string {
 // and a test must not touch the machine's file manager.
 var (
 	revealPath = func(path string) { mygo.Shell.ShowItemInFolder(path) }
-	openPath   = func(path string) { _ = mygo.Shell.OpenPath(path) }
+	// openPath reports to the status line instead of silently doing nothing:
+	// the likeliest miss is right after a clean, when the folder is gone.
+	openPath = func(a *App, path string) {
+		if err := mygo.Shell.OpenPath(path); err != nil {
+			a.msg = fmt.Sprintf(a.T("无法打开 %s"), path)
+		}
+	}
 )
 
 func (a *App) leafDetail(it itemState, pick core.Pick) detail {

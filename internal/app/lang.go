@@ -245,6 +245,7 @@ var en = map[string]string{
 
 	// Sheets.
 	"没有需要清理的内容":   "Nothing to clean",
+	"无法打开 %s":     "Could not open %s",
 	"%d 个路径 · %s": "%d paths · %s",
 	"保留 · ":       "Kept · ",
 	"、":           ", ",

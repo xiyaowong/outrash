@@ -150,7 +150,7 @@ var noteEN = map[string]string{
 	"下次打开网页时自动重新下载":                  "Re-downloaded as you browse",
 	"重新打开时自动重建":                      "Rebuilt on the next launch",
 	"打开项目时自动重建":                      "Rebuilt when a project reopens",
-	"打开时自动重建":                         "Rebuilt on open",
+	"打开时自动重建":                        "Rebuilt on open",
 	"重新打开时自动重新下载":                    "Re-downloaded on the next launch",
 	"使用时自动重建":                        "Rebuilt on use",
 	"下次播放时自动重新下载":                    "Re-downloaded on the next play",
