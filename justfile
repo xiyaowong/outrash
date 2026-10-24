@@ -61,3 +61,7 @@ safe:
 # Regenerate docs/screenshot.png (committed) and testdata/shots (scratch).
 shots:
     $env:OUTRASH_SHOTS = "1"; go test ./internal/app -count=1
+
+# Regenerate the icon and the Windows resource object the build links.
+icon:
+    go run ./assets/genicon
