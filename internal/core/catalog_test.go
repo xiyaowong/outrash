@@ -112,3 +112,51 @@ func TestHuggingFaceEntryExcludesTokenAndBlobs(t *testing.T) {
 		}
 	}
 }
+
+// The .gem root holds installed gems — packages with compiled extensions,
+// not a cache. Only the downloaded .gem files under ruby/*/cache may reach
+// the tree, or one click removes every user-installed gem.
+func TestGemsEntryOffersOnlyTheDownloadCache(t *testing.T) {
+	cfg, err := Parse(Rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gems Item
+	for _, g := range cfg.Groups {
+		for _, it := range g.Items {
+			if it.ID == "gems" {
+				gems = it
+			}
+		}
+	}
+	if gems.ID == "" {
+		t.Fatal("catalog lost gems")
+	}
+	for _, tpl := range gems.Paths["windows"] {
+		if !strings.HasSuffix(tpl, "/cache") {
+			t.Errorf("a gems template reaches past the download cache: %s", tpl)
+		}
+	}
+
+	home := t.TempDir()
+	ruby := filepath.Join(home, ".gem", "ruby", "3.4.0")
+	for _, d := range []string{"gems", "cache"} {
+		if err := os.MkdirAll(filepath.Join(ruby, d, "pkg"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		write(t, filepath.Join(ruby, d, "pkg", "f"), 10)
+	}
+	o := Options{GOOS: "windows", Home: home, Getenv: func(k string) string {
+		if k == "USERPROFILE" {
+			return home
+		}
+		return ""
+	}}
+	r := scanItem("lang", gems, o, nil)
+	if len(r.Roots) != 1 || r.Roots[0].Path != filepath.Join(ruby, "cache") {
+		t.Fatalf("roots %+v, want only the download cache", r.Roots)
+	}
+	if r.Size != 10 {
+		t.Fatalf("size %d, want the cache's 10 bytes", r.Size)
+	}
+}
