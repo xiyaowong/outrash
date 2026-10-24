@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "staleDays": 30,
   "groups": [
     {
@@ -552,6 +552,15 @@
             "linux": ["~/.cache/JetBrains/*/caches", "~/.cache/JetBrains/*/index"]
           },
           "unit": "entries"
+        },
+        {
+          "id": "wps",
+          "name": "WPS 缓存",
+          "note": "使用时自动重建",
+          "paths": {
+            "windows": ["%APPDATA%/kingsoft/office6/cache"]
+          },
+          "unit": "entries"
         }
       ]
     },
@@ -623,6 +632,15 @@
             ]
           },
           "unit": "entries"
+        },
+        {
+          "id": "qqnt",
+          "name": "QQ 临时文件",
+          "note": "使用时自动重建",
+          "paths": {
+            "windows": ["%APPDATA%/Tencent/QQNT/STemp"]
+          },
+          "unit": "entries"
         }
       ]
     },
@@ -638,44 +656,6 @@
             "windows": ["%LOCALAPPDATA%/Spotify/Storage"],
             "darwin": ["~/Library/Caches/com.spotify.client/Data"],
             "linux": ["~/.cache/spotify/Storage"]
-          },
-          "unit": "entries"
-        }
-      ]
-    },
-    {
-      "id": "cn",
-      "name": "国产软件",
-      "items": [
-        {
-          "id": "qqnt",
-          "name": "QQ 临时文件",
-          "note": "使用时自动重建",
-          "paths": {
-            "windows": ["%APPDATA%/Tencent/QQNT/STemp"]
-          },
-          "unit": "entries"
-        },
-        {
-          "id": "baidunetdisk",
-          "name": "百度网盘缓存",
-          "note": "重新打开时自动重新下载",
-          "paths": {
-            "windows": [
-              "%APPDATA%/baidunetdisk/Cache",
-              "%APPDATA%/baidunetdisk/Code Cache",
-              "%APPDATA%/baidunetdisk/GPUCache",
-              "%APPDATA%/baidunetdisk/DawnCache"
-            ]
-          },
-          "unit": "entries"
-        },
-        {
-          "id": "wps",
-          "name": "WPS 缓存",
-          "note": "使用时自动重建",
-          "paths": {
-            "windows": ["%APPDATA%/kingsoft/office6/cache"]
           },
           "unit": "entries"
         },
@@ -769,6 +749,20 @@
             "windows": ["%APPDATA%/cabal/packages", "%APPDATA%/cabal/store"],
             "darwin": ["~/.cabal/packages", "~/.cabal/store"],
             "linux": ["~/.cabal/packages", "~/.cabal/store"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "baidunetdisk",
+          "name": "百度网盘缓存",
+          "note": "重新打开时自动重新下载",
+          "paths": {
+            "windows": [
+              "%APPDATA%/baidunetdisk/Cache",
+              "%APPDATA%/baidunetdisk/Code Cache",
+              "%APPDATA%/baidunetdisk/GPUCache",
+              "%APPDATA%/baidunetdisk/DawnCache"
+            ]
           },
           "unit": "entries"
         },

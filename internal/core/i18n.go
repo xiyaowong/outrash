@@ -70,7 +70,6 @@ var groupEN = map[string]string{
 	"editors":  "Editors",
 	"chat":     "Chat",
 	"media":    "Media",
-	"cn":       "Domestic apps",
 	"other":    "Other",
 }
 
