@@ -764,17 +764,17 @@ func (a *App) pageHeader(c *ui.Context) {
 func (a *App) pageTitle() (title, sub string) {
 	switch a.page {
 	case pageOverview:
-		return "概览", "扫描本机开发工具的缓存目录，只列出能重新下载或重新编译的内容"
+		return "概览", "扫描本机开发工具与常用应用留下的缓存，只列出能重新下载或重新编译的内容"
 	case pageResults:
 		if a.phase == phaseScanning {
-			return "开发工具缓存", "正在扫描环境变量与各工具的默认位置"
+			return "可重建缓存", "正在扫描环境变量与各工具的默认位置"
 		}
 		n, failed := a.itemStats()
 		sub = fmt.Sprintf("%d 个缓存 · 已推荐 %d 项 · 可清理 %s", n, a.recommendedCount(), core.Bytes(a.recommendedBytes()))
 		if failed > 0 {
 			sub += fmt.Sprintf(" · %d 个读取失败", failed)
 		}
-		return "开发工具缓存", sub
+		return "可重建缓存", sub
 	case pageLog:
 		return "清理记录", "本次会话的清理结果；记录只存在内存里，退出即消失"
 	}
@@ -803,10 +803,10 @@ func (a *App) overviewPage(c *ui.Context) {
 	p := a.pal
 	ui.Column(c).Padding(24).Gap(24).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
-			ui.Text(c, "清理开发工具缓存").FontSize(16).FontWeight(600).TextColor(p.Ink)
-			ui.Text(c, "扫描 NuGet、npm、Go、Cargo 等工具留下的依赖与构建缓存，勾选后一次清理。").
+			ui.Text(c, "清理可重建缓存").FontSize(16).FontWeight(600).TextColor(p.Ink)
+			ui.Text(c, "扫描开发工具与常用应用留下的缓存，勾选后一次清理。").
 				FontSize(12).TextColor(p.Ink2)
-			ui.Text(c, "清理后各工具会在下次使用时自行重新下载或重新编译。").
+			ui.Text(c, "只列出能重新下载或重新编译的内容，清理后各工具会在下次使用时自行恢复。").
 				FontSize(12).TextColor(p.Ink2)
 		})
 		ui.Row(c).Height(1).Background(p.Rule)

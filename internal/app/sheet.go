@@ -168,7 +168,7 @@ func (a *App) aboutSheet(c *ui.Context) {
 					ui.Text(c, "Outrash").FontSize(20).FontWeight(650).TextColor(p.Ink).SingleLine()
 					ui.Text(c, "版本 "+appVersion()).Font(core.Mono()).FontSize(12).
 						TextColor(p.Ink3).SingleLine()
-					ui.Text(c, "扫描并清理开发工具留下的缓存").FontSize(12).
+					ui.Text(c, "扫描并清理可重建的缓存").FontSize(12).
 						TextColor(p.Ink2).SingleLine()
 				})
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)

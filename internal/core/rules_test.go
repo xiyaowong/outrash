@@ -132,6 +132,44 @@ func TestUnique(t *testing.T) {
 	}
 }
 
+// A browser keeps one cache per profile under a folder the user names, so the
+// catalog matches them with a wildcard. Only existing folders may come back:
+// a pattern that matches nothing must not become a path the scan measures and
+// the plan could offer, and a sibling folder must not be swept up by it.
+func TestRootsExpandsWildcardToExistingProfiles(t *testing.T) {
+	home := t.TempDir()
+	userData := filepath.Join(home, "User Data")
+	for _, dir := range []string{"Default", "Profile 1", "GPUPersistentCache"} {
+		if err := os.MkdirAll(filepath.Join(userData, dir, "Cache"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	o := Options{GOOS: "windows", Home: home, Getenv: env(map[string]string{"LOCALAPPDATA": home})}
+	roots := func(pattern ...string) []string {
+		dirs, _ := Item{Paths: map[string][]string{"windows": pattern}}.Roots(o)
+		return dirs
+	}
+
+	// Default is named literally, the numbered profiles by prefix: Chrome and
+	// Edge name no profile "Default 1", and a bare * also catches the GPU
+	// caches that live beside the profiles.
+	got := roots(
+		filepath.Join("%LOCALAPPDATA%", "User Data", "Default", "Cache"),
+		filepath.Join("%LOCALAPPDATA%", "User Data", "Profile *", "Cache"),
+	)
+	want := []string{
+		filepath.Join(userData, "Default", "Cache"),
+		filepath.Join(userData, "Profile 1", "Cache"),
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("dirs %v, want %v", got, want)
+	}
+
+	if dirs := roots(filepath.Join(home, "nobody", "*", "Cache")); len(dirs) != 0 {
+		t.Fatalf("a wildcard matching nothing produced %v", dirs)
+	}
+}
+
 func TestDefaultOptionsReadsHome(t *testing.T) {
 	o := DefaultOptions()
 	if o.GOOS == "" || o.Home == "" || o.Getenv == nil || o.Run == nil {

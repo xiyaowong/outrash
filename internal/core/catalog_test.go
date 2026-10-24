@@ -29,7 +29,7 @@ func TestCatalogCoversCommonTools(t *testing.T) {
 	}
 	for _, id := range []string{
 		"npm", "pnpm", "go-build", "go-mod", "nuget-packages", "cargo-registry", "pip",
-		"huggingface",
+		"huggingface", "edge", "chrome", "vscode",
 	} {
 		if !have[id] {
 			t.Errorf("catalog lost %q", id)

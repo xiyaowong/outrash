@@ -175,9 +175,23 @@ func (it Item) Roots(o Options) (dirs []string, source string) {
 		}
 	}
 	for _, tpl := range it.Paths[o.GOOS] {
-		if d, ok := expand(tpl, o); ok {
-			dirs = append(dirs, d)
+		d, ok := expand(tpl, o)
+		if !ok {
+			continue
 		}
+		// A template may name a per-profile folder with a wildcard, because
+		// browsers and chat apps keep one cache per profile under a name the
+		// user chose. Glob only ever returns paths that exist, so a pattern
+		// that matches nothing adds nothing.
+		if strings.ContainsAny(d, "*?[") {
+			matches, err := filepath.Glob(d)
+			if err != nil {
+				continue
+			}
+			dirs = append(dirs, matches...)
+			continue
+		}
+		dirs = append(dirs, d)
 	}
 	dirs = unique(dirs)
 	if anyExists(dirs) {
