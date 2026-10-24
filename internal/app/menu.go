@@ -40,8 +40,8 @@ func (a *App) showDetail(d detail) {
 
 // leafMenu is one version or one entry: a single path the user could find in
 // a file manager, and the smallest thing a check box acts on.
-func (a *App) leafMenu(c *ui.Context, it itemState, name, path string, size int64, mod time.Time) func(m *ui.Menu) {
-	pick := core.Pick{Path: path, Name: name, Bytes: size, ModTime: mod}
+func (a *App) leafMenu(c *ui.Context, it itemState, pick core.Pick) func(m *ui.Menu) {
+	path := pick.Path
 	return func(m *ui.Menu) {
 		on := a.checked[path]
 		// A check mark carries the state, so the label stays one word and the
@@ -64,7 +64,7 @@ func (a *App) leafMenu(c *ui.Context, it itemState, name, path string, size int6
 		}
 		m.Separator()
 		if m.Item(a.T("详细信息")).Chosen() {
-			a.showDetail(a.leafDetail(it, name, path, size, mod))
+			a.showDetail(a.leafDetail(it, pick))
 		}
 	}
 }
@@ -274,13 +274,13 @@ var (
 	openPath   = func(path string) { _ = mygo.Shell.OpenPath(path) }
 )
 
-func (a *App) leafDetail(it itemState, name, path string, size int64, mod time.Time) detail {
-	d := detail{title: name, kicker: a.T("缓存条目"), path: path, note: core.ItemNote(&it.item)}
+func (a *App) leafDetail(it itemState, pick core.Pick) detail {
+	d := detail{title: pick.Name, kicker: a.T("缓存条目"), path: pick.Path, note: core.ItemNote(&it.item)}
 	d.lines = []kv{
-		{a.T("路径"), path},
-		{a.T("大小"), core.Bytes(size)},
-		{a.T("最后写入"), stamp(a.now, mod)},
-		{a.T("所属缓存"), core.ItemName(&it.item)},
+		{label: a.T("路径"), value: pick.Path},
+		{label: a.T("大小"), value: core.Bytes(pick.Bytes)},
+		{label: a.T("最后写入"), value: stamp(a.now, pick.ModTime)},
+		{label: a.T("所属缓存"), value: core.ItemName(&it.item)},
 	}
 	return d
 }
