@@ -42,15 +42,16 @@
 
 ```sh
 just build       # 精简构建，约 9.9 MB，输出到 build/
+just build-full  # 不剥符号的对照构建，保留控制台，调试用
 just release     # 打包构建，带版本号和应用标识
 just debug       # 不删除：把计划打印到终端，界面上点"查看清理计划"能看到清单
 just safe        # 正常界面，但拒绝执行任何删除
 go run .         # 直接跑
 ```
 
-Windows 上 `build`、`build-full`、`release` 三个产物都不带控制台窗口，双击只开界面。
+Windows 上 `build` 和 `release` 是 GUI 子系统，双击只开界面；`build-full` 保留控制台子系统，方便从终端调试——GUI 子系统的 exe 在终端里看不到 stdout 和 stderr，而 `-debug` 的计划正好是打到 stdout 的。
 
-`just ci` 跑 build、vet 和测试。`just lint`、`just race`、`just cover` 分别跑 mygo 的 UI 生命周期检查、竞态检测和覆盖率。`just build-full` 是 `just build` 去掉 `-s -w -trimpath` 和 `-buildvcs=false` 的样子（14.2 MB 对 9.9 MB），用来看看这几个标志到底省了多少。
+`just ci` 跑 build、vet 和测试。`just lint`、`just race`、`just cover` 分别跑 mygo 的 UI 生命周期检查、竞态检测和覆盖率。`just build-full` 是 `just build` 去掉 `-s -w -trimpath` 和 `-buildvcs=false` 的样子（14.2 MB 对 9.9 MB）。
 
 ## 加一个缓存
 
