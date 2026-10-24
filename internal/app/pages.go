@@ -17,7 +17,7 @@ func (a *App) logPage(c *ui.Context) {
 	ui.Column(c).Padding(24, 24, 24, 24).Gap(16).Children(func() {
 		if len(a.log) == 0 {
 			ui.Column(c).Gap(6).Children(func() {
-				ui.Text(c, a.T("本次会话还没有清理记录")).FontSize(14).FontWeight(600).TextColor(p.Ink)
+				ui.Text(c, a.T("本次会话还没有清理记录")).FontSize(fz(14)).FontWeight(600).TextColor(p.Ink)
 				ui.Text(c, a.T("每次清理的结果只存在内存里，关闭窗口即消失。")).
 					FontSize(12).TextColor(p.Ink3)
 			})
@@ -33,9 +33,9 @@ func (a *App) logBlock(c *ui.Context, r runRecord) {
 	p := a.pal
 	ui.Column(c).Children(func() {
 		ui.Row(c).Height(34).Gap(16).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, r.at.Format("15:04:05")).Font(core.Mono()).FontSize(12).
+			ui.Text(c, r.at.Format("15:04:05")).Font(core.Mono()).FontSize(fz(12)).
 				TextColor(p.Ink2).Shrink(0)
-			ui.Text(c, fmt.Sprintf(a.T("释放 %s"), core.Bytes(r.freed))).FontSize(13).
+			ui.Text(c, fmt.Sprintf(a.T("释放 %s"), core.Bytes(r.freed))).FontSize(fz(13)).
 				FontWeight(600).TextColor(p.Ink).Shrink(0)
 			ui.Text(c, fmt.Sprintf(a.T("%d 项 · 耗时 %s"), r.items, fmtDuration(r.elapsed))).
 				FontSize(12).TextColor(p.Ink3).Shrink(0)
@@ -50,7 +50,7 @@ func (a *App) logBlock(c *ui.Context, r runRecord) {
 			}
 		})
 		for _, line := range r.lines {
-			ui.Text(c, line).Font(core.Mono()).FontSize(11).TextColor(p.Danger).
+			ui.Text(c, line).Font(core.Mono()).FontSize(fz(11)).TextColor(p.Danger).
 				SingleLine().Padding(0, 0, 0, 0).Tooltip(line)
 		}
 		ui.Box(c).Height(1).Shrink(0).Background(p.Rule).Padding(0, 0, 2, 0)
@@ -64,7 +64,7 @@ func (a *App) rulesPage(c *ui.Context) {
 	p := a.pal
 	ui.Column(c).Padding(24, 24, 24, 24).Gap(24).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
-			ui.Text(c, a.T("清理方式")).FontSize(14).FontWeight(600).TextColor(p.Ink)
+			ui.Text(c, a.T("清理方式")).FontSize(fz(14)).FontWeight(600).TextColor(p.Ink)
 			for _, line := range []string{
 				fmt.Sprintf(a.T("超过 %d 天没用过的缓存会被推荐勾选；有多个版本的包默认保留最新版。"), a.cfg.StaleDays),
 				a.T("只清理能重新下载或重新编译的内容，不碰源码、项目目录和运行环境；Poetry 的 virtualenvs 等不可重建的子目录被排除。"),
@@ -78,10 +78,10 @@ func (a *App) rulesPage(c *ui.Context) {
 		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 		ui.Column(c).Children(func() {
 			ui.Row(c).Height(30).Gap(colGap).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, a.T("分组")).FontSize(11).FontWeight(600).TextColor(p.Ink3).Width(120).Shrink(0)
-				ui.Text(c, a.T("缓存")).FontSize(11).FontWeight(600).TextColor(p.Ink3).Width(220).Shrink(0)
-				ui.Text(c, a.T("单位")).FontSize(11).FontWeight(600).TextColor(p.Ink3).Width(84).Shrink(0)
-				ui.Text(c, a.T("位置与变量")).FontSize(11).FontWeight(600).TextColor(p.Ink3).Grow(1)
+				ui.Text(c, a.T("分组")).FontSize(fz(11)).FontWeight(600).TextColor(p.Ink3).Width(120).Shrink(0)
+				ui.Text(c, a.T("缓存")).FontSize(fz(11)).FontWeight(600).TextColor(p.Ink3).Width(220).Shrink(0)
+				ui.Text(c, a.T("单位")).FontSize(fz(11)).FontWeight(600).TextColor(p.Ink3).Width(84).Shrink(0)
+				ui.Text(c, a.T("位置与变量")).FontSize(fz(11)).FontWeight(600).TextColor(p.Ink3).Grow(1)
 			})
 			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 			for _, g := range a.cfg.Groups {
@@ -95,12 +95,12 @@ func (a *App) rulesPage(c *ui.Context) {
 						unit = a.T("按版本")
 					}
 					ui.Row(c).Height(32).Gap(colGap).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, name).FontSize(12).FontWeight(600).TextColor(p.Ink).
+						ui.Text(c, name).FontSize(fz(12)).FontWeight(600).TextColor(p.Ink).
 							Width(120).Shrink(0).SingleLine()
-						ui.Text(c, core.ItemName(&it)).FontSize(12).TextColor(p.Ink).
+						ui.Text(c, core.ItemName(&it)).FontSize(fz(12)).TextColor(p.Ink).
 							Width(220).Shrink(0).SingleLine().Tooltip(core.ItemNote(&it))
-						ui.Text(c, unit).FontSize(11).TextColor(p.Ink3).Width(84).Shrink(0)
-						ui.Text(c, ruleSource(it)).Font(core.Mono()).FontSize(11).TextColor(p.Ink3).
+						ui.Text(c, unit).FontSize(fz(11)).TextColor(p.Ink3).Width(84).Shrink(0)
+						ui.Text(c, ruleSource(it)).Font(core.Mono()).FontSize(fz(11)).TextColor(p.Ink3).
 							SingleLine().Grow(1).Tooltip(ruleSource(it))
 					})
 					ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
@@ -108,7 +108,7 @@ func (a *App) rulesPage(c *ui.Context) {
 			}
 		})
 		ui.Column(c).Gap(4).Children(func() {
-			ui.Text(c, a.T("可以设置环境变量把缓存放到别处，程序会优先读取它。")).FontSize(11).TextColor(p.Ink3)
+			ui.Text(c, a.T("可以设置环境变量把缓存放到别处，程序会优先读取它。")).FontSize(fz(11)).TextColor(p.Ink3)
 		})
 	})
 }

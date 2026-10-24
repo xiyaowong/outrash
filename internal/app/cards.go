@@ -198,9 +198,9 @@ func (a *App) chip(c *ui.Context, act preset) {
 	}
 	row.Background(row.AnimateColor("hover", bg, hoverAnim))
 	row.Children(func() {
-		ui.Text(c, act.label).FontSize(11).TextColor(fg).SingleLine()
+		ui.Text(c, act.label).FontSize(fz(11)).TextColor(fg).SingleLine()
 		if n > 0 {
-			ui.Text(c, fmt.Sprintf(" %d", n)).Font(core.Mono()).FontSize(11).TextColor(p.Ink3).SingleLine()
+			ui.Text(c, fmt.Sprintf(" %d", n)).Font(core.Mono()).FontSize(fz(11)).TextColor(p.Ink3).SingleLine()
 		}
 	})
 }
@@ -220,12 +220,12 @@ func (a *App) familyRow(c *ui.Context, g groupState) {
 	row.Background(hoverFill(row, tint(p.Ink2, p.Surface, 0.03), p.Hover))
 	row.Children(func() {
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
-		ui.Text(c, core.GroupName(&g.group)).FontSize(13).FontWeight(600).TextColor(p.Ink).
+		ui.Text(c, core.GroupName(&g.group)).FontSize(fz(13)).FontWeight(600).TextColor(p.Ink).
 			SingleLine().Width(colName).Shrink(0)
 		ui.Spacer(c).Grow(1)
-		ui.Text(c, fmt.Sprintf(a.T("%d 项"), len(picks))).Font(core.Mono()).FontSize(12).
+		ui.Text(c, fmt.Sprintf(a.T("%d 项"), len(picks))).Font(core.Mono()).FontSize(fz(12)).
 			TextColor(p.Ink3).Width(colCount).TextAlign(ui.End).Shrink(0)
-		ui.Text(c, core.Bytes(a.familySize(g))).Font(core.Mono()).FontSize(12).
+		ui.Text(c, core.Bytes(a.familySize(g))).Font(core.Mono()).FontSize(fz(12)).
 			TextColor(p.Ink).Width(colSize).TextAlign(ui.End).Shrink(0)
 		ui.Box(c).Width(colStatus).Shrink(0).AlignItems(ui.Center).Children(func() {
 			a.familyTag(c, g)
@@ -239,7 +239,7 @@ func (a *App) familyRow(c *ui.Context, g groupState) {
 	if acts := a.presets(picks); len(acts) > 0 {
 		ui.Row(c).Height(32).Padding(0, 24, 0, 24+colCheck+colGap+indentItem).Gap(8).
 			AlignItems(ui.Center).Children(func() {
-			ui.Text(c, a.T("选择方式")).FontSize(11).TextColor(p.Ink3).Shrink(0)
+			ui.Text(c, a.T("选择方式")).FontSize(fz(11)).TextColor(p.Ink3).Shrink(0)
 			for _, act := range acts {
 				a.chip(c, act)
 			}
@@ -277,13 +277,13 @@ func (a *App) itemRow(c *ui.Context, it itemState) {
 	row.Children(func() {
 		indent(c, indentItem)
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
-		ui.Text(c, core.ItemName(&it.item)).FontSize(13).TextColor(p.Ink).SingleLine().
+		ui.Text(c, core.ItemName(&it.item)).FontSize(fz(13)).TextColor(p.Ink).SingleLine().
 			Width(colName - indentItem).Shrink(0).Tooltip(core.ItemNote(&it.item))
-		ui.Text(c, rootPathOf(roots)).Font(core.Mono()).FontSize(11).
+		ui.Text(c, rootPathOf(roots)).Font(core.Mono()).FontSize(fz(11)).
 			TextColor(p.Ink3).SingleLine().Ellipsis("…").Grow(1).Tooltip(rootPathOf(roots))
-		ui.Text(c, countText(roots)).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).
+		ui.Text(c, countText(roots)).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink2).
 			SingleLine().Width(colCount).TextAlign(ui.End).Shrink(0)
-		ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink).
+		ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink).
 			SingleLine().Width(colSize).TextAlign(ui.End).Shrink(0)
 		ui.Box(c).Width(colStatus).Shrink(0).AlignItems(ui.Center).Children(func() {
 			a.statusTag(c, it.res)
@@ -451,10 +451,10 @@ func (a *App) versioned(c *ui.Context, it itemState, ent core.Entry) {
 	row.Children(func() {
 		indent(c, indentLeaf)
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
-		ui.Text(c, ent.Name).Font(core.Mono()).FontSize(12).TextColor(p.Ink).SingleLine().Grow(1)
-		ui.Text(c, fmt.Sprintf(a.T("%d 版"), len(ent.Versions))).Font(core.Mono()).FontSize(12).
+		ui.Text(c, ent.Name).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink).SingleLine().Grow(1)
+		ui.Text(c, fmt.Sprintf(a.T("%d 版"), len(ent.Versions))).Font(core.Mono()).FontSize(fz(12)).
 			TextColor(p.Ink3).Width(colCount).TextAlign(ui.End).Shrink(0)
-		ui.Text(c, core.Bytes(ent.Size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).
+		ui.Text(c, core.Bytes(ent.Size)).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink2).
 			Width(colSize).TextAlign(ui.End).Shrink(0)
 		ui.Box(c).Width(colStatus).Shrink(0)
 		a.expander(c, open)
@@ -516,13 +516,13 @@ func (a *App) leaf(c *ui.Context, it itemState, name, path string, size int64, m
 		if on {
 			nameColor = p.Ink
 		}
-		ui.Text(c, name).Font(core.Mono()).FontSize(12).TextColor(nameColor).SingleLine().
+		ui.Text(c, name).Font(core.Mono()).FontSize(fz(12)).TextColor(nameColor).SingleLine().
 			Ellipsis("…").Grow(1).Tooltip(path)
 		if age := ageText(a.now, mod); age != "" {
-			ui.Text(c, age).FontSize(11).TextColor(p.Ink3).Shrink(0)
+			ui.Text(c, age).FontSize(fz(11)).TextColor(p.Ink3).Shrink(0)
 		}
 		ui.Box(c).Width(colCount).Shrink(0)
-		ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink3).
+		ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink3).
 			Shrink(0).Width(colSize).TextAlign(ui.End)
 		ui.Box(c).Width(colStatus).Shrink(0).AlignItems(ui.Center).Children(func() {
 			if failed {
