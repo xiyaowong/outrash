@@ -1219,9 +1219,10 @@ func (a *App) panel(c *ui.Context) {
 				})
 				a.panelBlock(c, "清理说明", func() {
 					for _, line := range []string{
-						"只清理能重新下载或重新编译的内容，不碰源码与项目目录。",
-						"清理后各工具会在下次使用时自行恢复。",
-						"缓存根是链接时不扫描，链接也不会把删除带到根之外。",
+						"只清能重新下载或重新编译的内容。",
+						"源码、项目目录、运行环境不碰。",
+						"清理后各工具在下次使用时自行恢复。",
+						"链接一律不跟，删除不出声明范围。",
 					} {
 						a.bullet(c, line)
 					}
@@ -1481,11 +1482,11 @@ func (a *App) bullet(c *ui.Context, line string) {
 func (a *App) riskNotes() []string {
 	var out []string
 	if _, failed := a.itemStats(); failed > 0 {
-		out = append(out, fmt.Sprintf("%d 个缓存读取不完整，显示的大小可能偏小。", failed))
+		out = append(out, fmt.Sprintf("%d 个缓存读取不全，大小可能偏小。", failed))
 	}
 	for _, g := range a.groups {
 		if newest := newestPick(g); !newest.IsZero() && a.now.Sub(newest) < 7*24*time.Hour {
-			out = append(out, g.group.Name+" 本周用过，清理后下次运行需要重建。")
+			out = append(out, g.group.Name+" 本周用过，清掉后下次要重建。")
 		}
 	}
 	if len(out) == 0 {

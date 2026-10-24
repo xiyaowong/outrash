@@ -564,7 +564,7 @@ func TestUnreadableScanIsVisible(t *testing.T) {
 	if !tt.HasText("1 个读取失败") {
 		t.Fatalf("header missing the warning; texts %v", tt.Texts())
 	}
-	if !tt.HasText("1 个缓存读取不完整") {
+	if !tt.HasText("1 个缓存读取不全") {
 		t.Fatalf("panel missing the warning; texts %v", tt.Texts())
 	}
 	onlyOpen(a, "node")
