@@ -179,7 +179,7 @@ func scanItem(groupID string, it Item, o Options, stop <-chan struct{}) Result {
 			continue
 		}
 		if isLink(info) {
-			r.Err = errors.Join(r.Err, fmt.Errorf("%s: 缓存根是链接，不扫描", d))
+			r.Err = errors.Join(r.Err, fmt.Errorf(L("%s: 缓存根是链接，不扫描", "%s: cache root is a link; skipped"), d))
 			continue
 		}
 		if !info.IsDir() {

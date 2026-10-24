@@ -34,8 +34,14 @@ type Outcome struct {
 	Elapsed time.Duration
 }
 
-// ErrUnsafe marks a path the cleaner refuses to touch.
-var ErrUnsafe = errors.New("拒绝删除：不在扫描范围内，或路径过于靠近根目录")
+// ErrUnsafe marks a path the cleaner refuses to touch. SetLang re-points it
+// per language; identity holds within a session, which is what errors.Is
+// needs.
+var (
+	errUnsafeZh = errors.New("拒绝删除：不在扫描范围内，或路径过于靠近根目录")
+	errUnsafeEn = errors.New("refusing to delete: outside the scanned roots, or too close to a drive root")
+	ErrUnsafe   = errUnsafeZh
+)
 
 // Remove removes every step in order. roots are the directories the scan
 // measured; a step outside all of them is refused, so a catalog change
@@ -239,7 +245,7 @@ func linkCheck(p string) error {
 		return err
 	}
 	if isLink(info) {
-		return fmt.Errorf("%w：%s 是链接", ErrUnsafe, p)
+		return fmt.Errorf(L("%w：%s 是链接", "%w: %s is a link"), ErrUnsafe, p)
 	}
 	return nil
 }

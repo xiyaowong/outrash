@@ -29,6 +29,7 @@ func main() {
 	// appearance, which on a dark desktop is white glyphs on this near-white
 	// bar. Locking the appearance light also locks them to dark ink.
 	mygo.Theme.SetSource(mygo.ThemeLight)
+	app.LoadLang()
 	mygo.App.WhenReady(func() {
 		a := app.New(cfg, core.DefaultOptions(), app.Options{Debug: *debug, NoDelete: *noDelete || *debug})
 		a.Window = mygo.NewWindow(mygo.WindowOptions{

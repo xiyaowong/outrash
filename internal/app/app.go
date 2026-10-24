@@ -375,7 +375,7 @@ func anyVersioned(picks []core.Pick) bool {
 func (a *App) openReceipt(pl *core.Plan) *receipt {
 	r := &receipt{planned: map[string]bool{}, failed: map[string]bool{}, after: -1}
 	for _, g := range a.groups {
-		r.groups = append(r.groups, delta{name: g.group.Name, before: g.size})
+		r.groups = append(r.groups, delta{name: core.GroupName(&g.group), before: g.size})
 		r.before += g.size
 	}
 	for _, s := range pl.Steps {
@@ -400,7 +400,7 @@ func (a *App) closeReceipt(cache *core.Cache) {
 		at[d.name] = i
 	}
 	for _, g := range a.groups {
-		i, ok := at[g.group.Name]
+		i, ok := at[core.GroupName(&g.group)]
 		if !ok {
 			continue
 		}
@@ -651,7 +651,7 @@ func (a *App) cleanProgress(c *ui.Context) {
 	done, total, elapsed := pr.read()
 	text := estimate(done, total, elapsed)
 	if finished, steps := pr.count(); steps > 1 {
-		text = fmt.Sprintf("%d/%d 项 · %s", finished, steps, text)
+		text = fmt.Sprintf(a.T("%d/%d 项 · %s"), finished, steps, text)
 	}
 	ui.Text(c, text).Font(core.Mono()).
 		FontSize(11).TextColor(p.Ink2).Shrink(0)
@@ -669,46 +669,46 @@ func (a *App) cleanProgress(c *ui.Context) {
 // evidence the rate is noise, so it says nothing rather than guess.
 func estimate(done, total int64, elapsed time.Duration) string {
 	if total <= 0 || done <= 0 || elapsed < 500*time.Millisecond {
-		return "清理中…"
+		return core.L("清理中…", "Cleaning…")
 	}
 	rate := float64(done) / elapsed.Seconds()
 	left := time.Duration(float64(max(total-done, 0)) / rate * float64(time.Second))
 	left = left.Round(time.Second)
 	if left <= 0 {
-		return "即将完成"
+		return core.L("即将完成", "Almost done")
 	}
-	return "剩余约 " + fmtDuration(left)
+	return core.L("剩余约 ", "about ") + fmtDuration(left)
 }
 
 func fmtDuration(d time.Duration) string {
 	switch {
 	case d < time.Minute:
-		return fmt.Sprintf("%d 秒", int(d.Seconds()))
+		return fmt.Sprintf(core.L("%d 秒", "%ds"), int(d.Seconds()))
 	case d < time.Hour:
-		return fmt.Sprintf("%d 分 %d 秒", int(d.Minutes()), int(d.Seconds())%60)
+		return fmt.Sprintf(core.L("%d 分 %d 秒", "%dm %ds"), int(d.Minutes()), int(d.Seconds())%60)
 	}
-	return fmt.Sprintf("%d 小时 %d 分", int(d.Hours()), int(d.Minutes())%60)
+	return fmt.Sprintf(core.L("%d 小时 %d 分", "%dh %dm"), int(d.Hours()), int(d.Minutes())%60)
 }
 
 // modeNote says the build cannot delete, wherever the user is looking: the
 // primary button changes meaning, so the title bar has to explain why.
 func (a *App) modeNote() string {
 	if a.so.Debug {
-		return "调试：只列计划"
+		return a.T("调试：只列计划")
 	}
-	return "已禁用删除"
+	return a.T("已禁用删除")
 }
 
 func (a *App) summary() string {
 	switch {
 	case a.phase == phaseScanning:
-		return "正在扫描缓存目录"
+		return a.T("正在扫描缓存目录")
 	case a.cache == nil:
 		return ""
 	case a.msg != "":
-		return a.msg
+		return a.T(a.msg)
 	}
-	return fmt.Sprintf("上次扫描 %s · 用时 %s", a.cache.At.Format("15:04"), a.cache.Elapsed.Round(time.Millisecond))
+	return fmt.Sprintf(a.T("上次扫描 %s · 用时 %s"), a.cache.At.Format("15:04"), a.cache.Elapsed.Round(time.Millisecond))
 }
 
 // nav is the rail: four pages, no settings. The active one is marked by a
@@ -729,7 +729,7 @@ func (a *App) nav(c *ui.Context) {
 					{pageLog, "清理记录", iconLog},
 					{pageRules, "规则", iconRules},
 				} {
-					a.navItem(c, it.page, it.label, it.icon)
+					a.navItem(c, it.page, a.T(it.label), it.icon)
 				}
 			})
 			ui.Spacer(c)
@@ -746,6 +746,7 @@ const (
 	iconLog
 	iconRules
 	iconAbout
+	iconLang
 )
 
 func (a *App) navItem(c *ui.Context, pg page, label string, icon navIcon) {
@@ -812,18 +813,33 @@ func (a *App) icon(c *ui.Context, kind navIcon, fg ui.Color) {
 			pt.Stroke(ui.Rect{X: x + 1.5, Y: y + 1.5, W: 13, H: 13}, fg, 7, 1)
 			pt.Fill(ui.Rect{X: x + 7.4, Y: y + 4.5, W: 1.6, H: 1.6}, fg, 0)
 			pt.Fill(ui.Rect{X: x + 7.2, Y: y + 7.5, W: 1.6, H: 4.5}, fg, 0)
+		case iconLang:
+			// A globe: the circle, its meridian, and the equator.
+			pt.Stroke(ui.Rect{X: x + 1.5, Y: y + 1.5, W: 13, H: 13}, fg, 7, 1)
+			pt.Stroke(ui.Rect{X: x + 5.5, Y: y + 1.5, W: 5, H: 13}, fg, 2.5, 1)
+			pt.Fill(ui.Rect{X: x + 3, Y: y + 7.5, W: 10, H: 1}, fg, 0)
 		}
 	})
 }
 
 func (a *App) navFooter(c *ui.Context) {
 	p := a.pal
-	row := ui.ButtonBase(c).Height(32).Padding(0, 10).Gap(9).AlignItems(ui.Center).
-		Justify(ui.Start).Label("关于").OnClick(func() { a.modal = modalAbout })
+	row := ui.Row(c).Height(32).Padding(0, 10).Gap(9).AlignItems(ui.Center)
 	row.Background(hoverFill(row, ui.Transparent, p.Hover)).Radius(6)
 	row.Children(func() {
-		a.icon(c, iconAbout, p.Ink2)
-		ui.Text(c, "关于").FontSize(13).TextColor(p.Ink2).SingleLine()
+		lang := ui.ButtonBase(c).Size(24, 24).AlignItems(ui.Center).
+			Label(a.T("切换语言")).
+			Tooltip(core.L("English", "中文"))
+		lang.Cursor(ui.CursorPointer).OnClick(a.toggleLang)
+		lang.Background(hoverFill(lang, ui.Transparent, p.Hover)).Radius(6)
+		lang.Children(func() { a.icon(c, iconLang, p.Ink2) })
+		about := ui.ButtonBase(c).Height(32).Padding(0, 10).Gap(9).AlignItems(ui.Center).
+			Justify(ui.Start).Label(a.T("关于")).OnClick(func() { a.modal = modalAbout })
+		about.Background(hoverFill(about, ui.Transparent, p.Hover)).Radius(6)
+		about.Children(func() {
+			a.icon(c, iconAbout, p.Ink2)
+			ui.Text(c, a.T("关于")).FontSize(13).TextColor(p.Ink2).SingleLine()
+		})
 	})
 }
 
@@ -840,7 +856,7 @@ func (a *App) pageHeader(c *ui.Context) {
 				ui.Column(c).AlignItems(ui.End).Shrink(0).Children(func() {
 					ui.Text(c, core.Bytes(a.totalSize())).Font(core.Mono()).FontSize(18).
 						FontWeight(600).TextColor(p.Ink)
-					ui.Text(c, "缓存总量").FontSize(11).TextColor(p.Ink3)
+					ui.Text(c, a.T("缓存总量")).FontSize(11).TextColor(p.Ink3)
 				})
 			}
 		})
@@ -851,24 +867,24 @@ func (a *App) pageHeader(c *ui.Context) {
 func (a *App) pageTitle() (title, sub string) {
 	switch a.page {
 	case pageOverview:
-		return "概览", "扫描本机留下的可重建缓存，只列出能重新下载或重新编译的内容"
+		return a.T("概览"), a.T("扫描本机留下的可重建缓存，只列出能重新下载或重新编译的内容")
 	case pageResults:
 		if a.phase == phaseScanning {
-			return "可重建缓存", "正在扫描环境变量与各工具的默认位置"
+			return a.T("可重建缓存"), a.T("正在扫描环境变量与各工具的默认位置")
 		}
 		n, failed := a.itemStats()
-		sub = fmt.Sprintf("%d 个缓存 · 已推荐 %d 项 · 可清理 %s", n, a.recommendedCount(), core.Bytes(a.recommendedBytes()))
+		sub = fmt.Sprintf(a.T("%d 个缓存 · 已推荐 %d 项 · 可清理 %s"), n, a.recommendedCount(), core.Bytes(a.recommendedBytes()))
 		if failed > 0 {
-			sub += fmt.Sprintf(" · %d 个读取失败", failed)
+			sub += fmt.Sprintf(a.T(" · %d 个读取失败"), failed)
 		}
 		if a.volume != "" {
-			sub += fmt.Sprintf(" · 只看 %s", volName(a.volume))
+			sub += fmt.Sprintf(a.T(" · 只看 %s"), volName(a.volume))
 		}
-		return "可重建缓存", sub
+		return a.T("可重建缓存"), sub
 	case pageLog:
-		return "清理记录", "本次会话的清理结果；记录只存在内存里，退出即消失"
+		return a.T("清理记录"), a.T("本次会话的清理结果；记录只存在内存里，退出即消失")
 	}
-	return "规则", "内置目录：每个工具缓存的位置、单位与安全约定"
+	return a.T("规则"), a.T("内置目录：每个工具缓存的位置、单位与安全约定")
 }
 
 // pageBody is the scrollable work area under the header.
@@ -893,35 +909,35 @@ func (a *App) overviewPage(c *ui.Context) {
 	p := a.pal
 	ui.Column(c).Padding(24).Gap(24).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
-			ui.Text(c, "清理可重建缓存").FontSize(16).FontWeight(600).TextColor(p.Ink)
-			ui.Text(c, "扫描本机留下的可重建缓存，勾选后一次清理。").
+			ui.Text(c, a.T("清理可重建缓存")).FontSize(16).FontWeight(600).TextColor(p.Ink)
+			ui.Text(c, a.T("扫描本机留下的可重建缓存，勾选后一次清理。")).
 				FontSize(12).TextColor(p.Ink2)
-			ui.Text(c, "只列出能重新下载或重新编译的内容，清理后各工具会在下次使用时自行恢复。").
+			ui.Text(c, a.T("只列出能重新下载或重新编译的内容，清理后各工具会在下次使用时自行恢复。")).
 				FontSize(12).TextColor(p.Ink2)
 		})
 		ui.Row(c).Height(1).Background(p.Rule)
 		ui.Column(c).Gap(10).Children(func() {
-			ui.Text(c, "本次状态").FontSize(11).FontWeight(600).TextColor(p.Ink3)
+			ui.Text(c, a.T("本次状态")).FontSize(11).FontWeight(600).TextColor(p.Ink3)
 			ui.Row(c).Gap(40).Children(func() {
-				a.stat(c, "缓存", fmt.Sprint(a.totalCount()))
-				a.stat(c, "总量", core.Bytes(a.totalSize()))
-				a.stat(c, "推荐清理", core.Bytes(a.recommendedBytes()))
-				a.stat(c, "耗时", a.elapsed())
+				a.stat(c, core.L("缓存", "Caches"), fmt.Sprint(a.totalCount()))
+				a.stat(c, a.T("总量"), core.Bytes(a.totalSize()))
+				a.stat(c, a.T("推荐清理"), core.Bytes(a.recommendedBytes()))
+				a.stat(c, a.T("耗时"), a.elapsed())
 			})
 		})
 		ui.Row(c).Gap(8).Children(func() {
-			label := "重新扫描"
+			label := a.T("重新扫描")
 			if a.cache == nil {
-				label = "开始扫描"
+				label = a.T("开始扫描")
 			}
 			a.actionButton(c, label, true, a.phase != phaseScanning, a.Scan)
 			if a.phase == phaseReady {
-				a.actionButton(c, "查看扫描结果", false, true, func() { a.page = pageResults })
+				a.actionButton(c, a.T("查看扫描结果"), false, true, func() { a.page = pageResults })
 			}
 		})
 		ui.Row(c).Height(1).Background(p.Rule)
 		ui.Column(c).Gap(8).Children(func() {
-			ui.Text(c, "占用最多").FontSize(11).FontWeight(600).TextColor(p.Ink3)
+			ui.Text(c, a.T("占用最多")).FontSize(11).FontWeight(600).TextColor(p.Ink3)
 			for _, it := range a.biggest(5) {
 				row := ui.Row(c).Height(26).Gap(12).AlignItems(ui.Center).
 					Cursor(ui.CursorPointer).OnClick(func() {
@@ -936,7 +952,7 @@ func (a *App) overviewPage(c *ui.Context) {
 				})
 			}
 			if len(a.biggest(1)) == 0 {
-				ui.Text(c, "还没有扫描结果").FontSize(12).TextColor(p.Ink3)
+				ui.Text(c, a.T("还没有扫描结果")).FontSize(12).TextColor(p.Ink3)
 			}
 		})
 	})
@@ -970,9 +986,9 @@ func (a *App) scanning(c *ui.Context) {
 	ui.Column(c).Padding(40, 24).Gap(10).Children(func() {
 		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 			ui.Spinner(c).Width(14).Shrink(0)
-			ui.Text(c, "正在扫描缓存目录").FontSize(14).FontWeight(600).TextColor(p.Ink)
+			ui.Text(c, a.T("正在扫描缓存目录")).FontSize(14).FontWeight(600).TextColor(p.Ink)
 		})
-		ui.Text(c, "按环境变量优先、默认位置兜底逐个目录统计；读不到的位置会在结果里标出来。").
+		ui.Text(c, a.T("按环境变量优先、默认位置兜底逐个目录统计；读不到的位置会在结果里标出来。")).
 			FontSize(12).TextColor(p.Ink3)
 	})
 }
@@ -980,10 +996,10 @@ func (a *App) scanning(c *ui.Context) {
 func (a *App) emptyResults(c *ui.Context) {
 	p := a.pal
 	ui.Column(c).Padding(40, 24).Gap(6).Children(func() {
-		ui.Text(c, "没有找到可清理的缓存").FontSize(14).FontWeight(600).TextColor(p.Ink)
-		ui.Text(c, "已检查环境变量与各工具的默认位置。安装工具并运行一次后，它们的缓存会出现在这里。").
+		ui.Text(c, a.T("没有找到可清理的缓存")).FontSize(14).FontWeight(600).TextColor(p.Ink)
+		ui.Text(c, a.T("已检查环境变量与各工具的默认位置。安装工具并运行一次后，它们的缓存会出现在这里。")).
 			FontSize(12).TextColor(p.Ink3)
-		a.actionButton(c, "重新扫描", false, true, a.Scan)
+		a.actionButton(c, a.T("重新扫描"), false, true, a.Scan)
 	})
 }
 
@@ -1006,12 +1022,12 @@ func (a *App) tableHead(c *ui.Context) {
 	ui.Column(c).Shrink(0).Children(func() {
 		ui.Row(c).Height(30).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Size(colCheck, 1).Shrink(0)
-			a.sortLabel(c, "名称", sortName, colName, ui.Start)
-			ui.Text(c, "缓存路径").FontSize(11).FontWeight(600).TextColor(p.Ink3).Grow(1)
-			ui.Text(c, "文件数量").FontSize(11).FontWeight(600).TextColor(p.Ink3).
+			a.sortLabel(c, a.T("名称"), sortName, colName, ui.Start)
+			ui.Text(c, a.T("缓存路径")).FontSize(11).FontWeight(600).TextColor(p.Ink3).Grow(1)
+			ui.Text(c, a.T("文件数量")).FontSize(11).FontWeight(600).TextColor(p.Ink3).
 				Width(colCount).TextAlign(ui.End).Shrink(0)
-			a.sortLabel(c, "缓存大小", sortSize, colSize, ui.End)
-			a.sortLabel(c, "风险状态", sortStatus, colStatus, ui.Start)
+			a.sortLabel(c, a.T("缓存大小"), sortSize, colSize, ui.End)
+			a.sortLabel(c, a.T("风险状态"), sortStatus, colStatus, ui.Start)
 			ui.Box(c).Width(24).Shrink(0)
 		})
 		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
@@ -1054,7 +1070,7 @@ func (a *App) sortedGroups() []groupState {
 	slices.SortStableFunc(out, func(x, y groupState) int {
 		switch a.sortBy {
 		case sortName:
-			return cmp.Compare(x.group.Name, y.group.Name)
+			return cmp.Compare(core.GroupName(&x.group), core.GroupName(&y.group))
 		case sortStatus:
 			if c := cmp.Compare(a.statusRank(x), a.statusRank(y)); c != 0 {
 				return c
@@ -1094,7 +1110,7 @@ func (a *App) actionBar(c *ui.Context) {
 		ui.Row(c).Height(52).Padding(8, 24).Gap(12).AlignItems(ui.Center).Children(func() {
 			if a.page == pageResults && all > 0 {
 				a.check(c, stateOf(n, all), a.selectAllVisible)
-				ui.Text(c, "全选").FontSize(12).TextColor(p.Ink2).Shrink(0)
+				ui.Text(c, a.T("全选")).FontSize(12).TextColor(p.Ink2).Shrink(0)
 				ui.Box(c).Width(1).Height(16).Shrink(0).Background(p.Rule)
 			}
 			ui.Column(c).Grow(1).Gap(2).Children(func() {
@@ -1105,12 +1121,12 @@ func (a *App) actionBar(c *ui.Context) {
 			if n > 0 {
 				// Paired with 全选 above: the bar's two selection verbs read
 				// as one pair, and neither can be mistaken for 开始清理.
-				a.textButton(c, "全不选", a.clearChecks)
+				a.textButton(c, a.T("全不选"), a.clearChecks)
 			}
-			a.actionButton(c, "重新扫描", false, a.phase != phaseScanning, a.Scan)
-			label := "开始清理"
+			a.actionButton(c, a.T("重新扫描"), false, a.phase != phaseScanning, a.Scan)
+			label := a.T("开始清理")
 			if a.so.Debug || a.so.NoDelete {
-				label = "查看清理计划"
+				label = a.T("查看清理计划")
 			}
 			a.actionButton(c, label, true, n > 0, a.startClean)
 		})
@@ -1122,27 +1138,27 @@ func (a *App) actionBar(c *ui.Context) {
 func (a *App) barStatus(n int, chosen int64) string {
 	switch {
 	case a.phase == phaseScanning:
-		return "正在扫描…"
+		return a.T("正在扫描…")
 	case a.busy:
-		return "正在清理…"
+		return a.T("正在清理…")
 	case a.cache == nil:
-		return "尚未扫描"
+		return a.T("尚未扫描")
 	case a.page == pageLog:
-		return fmt.Sprintf("本次会话已清理 %d 次", len(a.log))
+		return fmt.Sprintf(a.T("本次会话已清理 %d 次"), len(a.log))
 	case n == 0:
-		return "未选择任何项目"
+		return a.T("未选择任何项目")
 	}
-	return fmt.Sprintf("已选 %d 项 · 预计释放 %s", n, core.Bytes(chosen))
+	return fmt.Sprintf(a.T("已选 %d 项 · 预计释放 %s"), n, core.Bytes(chosen))
 }
 
 func (a *App) barSub() string {
 	switch {
 	case a.phase == phaseScanning:
-		return "结果会随扫描逐步出现"
+		return a.T("结果会随扫描逐步出现")
 	case a.cache == nil:
-		return "按 Ctrl+R 或点「重新扫描」开始"
+		return a.T("按 Ctrl+R 或点「重新扫描」开始")
 	}
-	return fmt.Sprintf("共 %d 个缓存 · %s · 推荐 %s", a.totalCount(), core.Bytes(a.totalSize()),
+	return fmt.Sprintf(a.T("共 %d 个缓存 · %s · 推荐 %s"), a.totalCount(), core.Bytes(a.totalSize()),
 		core.Bytes(a.recommendedBytes()))
 }
 
@@ -1205,15 +1221,15 @@ func (a *App) panel(c *ui.Context) {
 		BorderWidth(0, 0, 0, 1).BorderColor(p.Rule).
 		Children(func() {
 			ui.Column(c).Padding(20, 20).Gap(18).Children(func() {
-				a.panelBlock(c, "清理概览", func() {
+				a.panelBlock(c, a.T("清理概览"), func() {
 					ui.Column(c).Gap(8).Children(func() {
-						a.panelLine(c, "可清理缓存总量", core.Bytes(a.recommendedBytes()))
-						a.panelLine(c, "已选项目数量", fmt.Sprintf("%d 项", n))
-						a.panelLine(c, "已选清理空间", core.Bytes(bytes))
+						a.panelLine(c, a.T("可清理缓存总量"), core.Bytes(a.recommendedBytes()))
+						a.panelLine(c, a.T("已选项目数量"), fmt.Sprintf(a.T("%d 项"), n))
+						a.panelLine(c, a.T("已选清理空间"), core.Bytes(bytes))
 					})
 				})
 				if opts := a.volumeOptions(); len(opts) > 1 || a.volume != "" {
-					a.panelBlock(c, "筛选", func() {
+					a.panelBlock(c, a.T("筛选"), func() {
 						ui.Column(c).Gap(6).Children(func() {
 							if a.volume != "" {
 								a.volumeChip(c, volumeOpt{}, false)
@@ -1225,7 +1241,7 @@ func (a *App) panel(c *ui.Context) {
 					})
 				}
 				if sugg := a.suggestions(); len(sugg) > 0 {
-					a.panelBlock(c, "建议", func() {
+					a.panelBlock(c, a.T("建议"), func() {
 						ui.Column(c).Gap(6).Children(func() {
 							for _, s := range sugg {
 								a.suggestChip(c, s)
@@ -1233,19 +1249,19 @@ func (a *App) panel(c *ui.Context) {
 						})
 					})
 				}
-				a.panelBlock(c, "风险提示", func() {
+				a.panelBlock(c, a.T("风险提示"), func() {
 					for _, line := range a.riskNotes() {
 						a.bullet(c, line)
 					}
 				})
-				a.panelBlock(c, "清理说明", func() {
+				a.panelBlock(c, a.T("清理说明"), func() {
 					for _, line := range []string{
 						"只清能重新下载或重新编译的内容。",
 						"源码、项目目录、运行环境不碰。",
 						"清理后各工具在下次使用时自行恢复。",
 						"链接一律不跟，删除不出声明范围。",
 					} {
-						a.bullet(c, line)
+						a.bullet(c, a.T(line))
 					}
 				})
 			})
@@ -1303,10 +1319,10 @@ func (a *App) suggestions() []suggestion {
 		}
 	}
 	var out []suggestion
-	if s, ok := paretoSuggestion(live); ok {
+	if s, ok := a.paretoSuggestion(live); ok {
 		out = append(out, s)
 	}
-	if s, ok := targetSuggestion(live); ok {
+	if s, ok := a.targetSuggestion(live); ok {
 		out = append(out, s)
 	}
 	if s, ok := a.regenSuggestion(picks); ok {
@@ -1318,7 +1334,7 @@ func (a *App) suggestions() []suggestion {
 // paretoSuggestion names the few entries that hold most of the space, when
 // such a concentration exists: almost the same win for a fraction of the
 // list, which is the better deal whenever it is on offer.
-func paretoSuggestion(picks []core.Pick) (suggestion, bool) {
+func (a *App) paretoSuggestion(picks []core.Pick) (suggestion, bool) {
 	const top = 3
 	if len(picks) <= top {
 		return suggestion{}, false
@@ -1330,15 +1346,15 @@ func paretoSuggestion(picks []core.Pick) (suggestion, bool) {
 		return suggestion{}, false
 	}
 	return suggestion{
-		label: fmt.Sprintf("清这 %d 项就够了 · %s", top, core.Bytes(headBytes)),
-		note:  fmt.Sprintf("它们占可清理总量的 %d%%，其余的加起来也不多", headBytes*100/max(total, 1)),
+		label: fmt.Sprintf(a.T("清这 %d 项就够了 · %s"), top, core.Bytes(headBytes)),
+		note:  fmt.Sprintf(a.T("它们占可清理总量的 %d%%，其余的加起来也不多"), headBytes*100/max(total, 1)),
 		pick:  head,
 	}, true
 }
 
 // targetSuggestion reaches a byte goal with the biggest entries alone, for
 // the user who just wants some space back rather than a clean sweep.
-func targetSuggestion(picks []core.Pick) (suggestion, bool) {
+func (a *App) targetSuggestion(picks []core.Pick) (suggestion, bool) {
 	total := pickBytes(picks)
 	goal := int64(0)
 	switch {
@@ -1355,8 +1371,8 @@ func targetSuggestion(picks []core.Pick) (suggestion, bool) {
 		return suggestion{}, false
 	}
 	return suggestion{
-		label: fmt.Sprintf("凑够 %s · 勾 %d 项", core.Bytes(goal), len(got)),
-		note:  fmt.Sprintf("从最大的开始，共 %s，够数即停", core.Bytes(pickBytes(got))),
+		label: fmt.Sprintf(a.T("凑够 %s · 勾 %d 项"), core.Bytes(goal), len(got)),
+		note:  fmt.Sprintf(a.T("从最大的开始，共 %s，够数即停"), core.Bytes(pickBytes(got))),
 		pick:  got,
 	}, true
 }
@@ -1380,8 +1396,8 @@ func (a *App) regenSuggestion(picks []core.Pick) (suggestion, bool) {
 		return suggestion{}, false
 	}
 	return suggestion{
-		label: fmt.Sprintf("跳过马上回信的 %d 项 · %s", len(drop), core.Bytes(bytes)),
-		note:  "上次清理后立刻被工具写回，现在清了也会一样",
+		label: fmt.Sprintf(a.T("跳过马上回信的 %d 项 · %s"), len(drop), core.Bytes(bytes)),
+		note:  a.T("上次清理后立刻被工具写回，现在清了也会一样"),
 		drop:  drop,
 	}, true
 }
@@ -1456,7 +1472,7 @@ func (a *App) volumeOptions() []volumeOpt {
 
 // volName says a drive the way a person does: "C:" reads as C 盘.
 func volName(vol string) string {
-	return strings.TrimSuffix(vol, ":") + " 盘"
+	return strings.TrimSuffix(vol, ":") + core.L(" 盘", " drive")
 }
 
 // volumeChip is one filter bubble. The bubble for the drive on screen is the
@@ -1465,12 +1481,12 @@ func (a *App) volumeChip(c *ui.Context, o volumeOpt, active bool) {
 	p := a.pal
 	row := ui.ButtonBase(c).Height(26).Radius(13).Padding(0, 10).Shrink(0).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer)
-	label, note := "全部条目", "不再按盘筛选，显示每个位置的条目"
+	label, note := a.T("全部条目"), a.T("不再按盘筛选，显示每个位置的条目")
 	if o.vol != "" {
-		label = "只看 " + volName(o.vol)
-		note = fmt.Sprintf("列表收窄到 %s 上的条目，其他盘先收起来", volName(o.vol))
+		label = fmt.Sprintf(a.T("只看 %s"), volName(o.vol))
+		note = fmt.Sprintf(a.T("列表收窄到 %s 上的条目，其他盘先收起来"), volName(o.vol))
 		if o.home {
-			note = "系统盘。" + note
+			note = a.T("系统盘。") + note
 		}
 	}
 	row.OnClick(func() {
@@ -1503,15 +1519,15 @@ func (a *App) bullet(c *ui.Context, line string) {
 func (a *App) riskNotes() []string {
 	var out []string
 	if _, failed := a.itemStats(); failed > 0 {
-		out = append(out, fmt.Sprintf("%d 个缓存读取不全，大小可能偏小。", failed))
+		out = append(out, fmt.Sprintf(a.T("%d 个缓存读取不全，大小可能偏小。"), failed))
 	}
 	for _, g := range a.groups {
 		if newest := newestPick(g); !newest.IsZero() && a.now.Sub(newest) < 7*24*time.Hour {
-			out = append(out, g.group.Name+" 本周用过，清掉后下次要重建。")
+			out = append(out, fmt.Sprintf(a.T("%s 本周用过，清掉后下次要重建。"), core.GroupName(&g.group)))
 		}
 	}
 	if len(out) == 0 {
-		out = append(out, "没有发现风险项。")
+		out = append(out, a.T("没有发现风险项。"))
 	}
 	return out
 }
@@ -1531,7 +1547,7 @@ func (a *App) biggest(n int) []bigItem {
 			if it.res.Size <= 0 {
 				continue
 			}
-			all = append(all, bigItem{name: it.item.Name, gid: g.group.ID, size: it.res.Size})
+			all = append(all, bigItem{name: core.ItemName(&it.item), gid: g.group.ID, size: it.res.Size})
 		}
 	}
 	slices.SortStableFunc(all, func(x, y bigItem) int { return cmp.Compare(y.size, x.size) })
@@ -1549,13 +1565,13 @@ func (a *App) panelBlock(c *ui.Context, title string, body func()) {
 func (a *App) railNote() string {
 	switch {
 	case a.phase == phaseScanning:
-		return "扫描中"
+		return a.T("扫描中")
 	case a.so.Debug:
-		return "调试：只列计划"
+		return a.T("调试：只列计划")
 	case a.cache == nil:
 		return ""
 	}
-	return fmt.Sprintf("扫描于 %s", a.cache.At.Format("15:04"))
+	return fmt.Sprintf(a.T("扫描于 %s"), a.cache.At.Format("15:04"))
 }
 
 func (a *App) elapsed() string {

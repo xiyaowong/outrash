@@ -19,7 +19,7 @@ func (a *App) openPlan(p *core.Plan) {
 		return
 	}
 	if p.Empty() {
-		a.msg = "没有需要清理的内容"
+		a.msg = a.T("没有需要清理的内容")
 		return
 	}
 	if a.so.Debug {
@@ -34,7 +34,7 @@ func (a *App) openPlan(p *core.Plan) {
 func (a *App) printPlan(p *core.Plan) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n== %s ==\n", p.Title)
-	fmt.Fprintf(&b, "共 %d 项，%s\n", len(p.Steps), core.Bytes(p.Bytes))
+	fmt.Fprintf(&b, core.L("共 %d 项，%s\n", "%d items, %s\n"), len(p.Steps), core.Bytes(p.Bytes))
 	for i, s := range p.Steps {
 		fmt.Fprintf(&b, "%3d. %10s  %s  %s\n", i+1, core.Bytes(s.Bytes), s.Reason, s.Path)
 	}
@@ -55,7 +55,9 @@ func (a *App) printScanWarnings(cache *core.Cache) {
 	}
 	slices.Sort(keys)
 	var b strings.Builder
-	b.WriteString("\n== 扫描警告 ==\n")
+	b.WriteString("\n== ")
+	b.WriteString(core.L("扫描警告", "Scan warnings"))
+	b.WriteString(" ==\n")
 	for _, k := range keys {
 		r := cache.Results[k]
 		if r.Err != nil {
@@ -66,7 +68,7 @@ func (a *App) printScanWarnings(cache *core.Cache) {
 			case root.Err != nil:
 				fmt.Fprintf(&b, "%s  %s: %v\n", k, root.Path, root.Err)
 			case root.Skipped > 0:
-				fmt.Fprintf(&b, "%s  %s: %d 个路径无法读取\n", k, root.Path, root.Skipped)
+				fmt.Fprintf(&b, core.L("%s  %s: %d 个路径无法读取\n", "%s  %s: %d paths unreadable\n"), k, root.Path, root.Skipped)
 			}
 		}
 	}
@@ -132,18 +134,18 @@ func (a *App) detailSheet(c *ui.Context) {
 						ui.Text(c, d.note).FontSize(12).TextColor(p.Ink2).Padding(0, 0, 2, 0)
 					}
 					if d.err != "" {
-						ui.Text(c, "读取不全："+d.err).Font(core.Mono()).FontSize(11).
+						ui.Text(c, a.T("读取不全：")+d.err).Font(core.Mono()).FontSize(11).
 							TextColor(p.Danger)
 					}
 				})
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 				ui.Row(c).Height(60).Padding(0, 24).Gap(8).AlignItems(ui.Center).Children(func() {
 					if d.path != "" {
-						a.actionButton(c, "复制路径", false, true, func() { c.WriteClipboard(d.path) })
-						a.actionButton(c, "在文件夹中显示", false, true, func() { revealPath(d.path) })
+						a.actionButton(c, a.T("复制路径"), false, true, func() { c.WriteClipboard(d.path) })
+						a.actionButton(c, a.T("在文件夹中显示"), false, true, func() { revealPath(d.path) })
 					}
 					ui.Spacer(c)
-					a.actionButton(c, "关闭", true, true, a.dismiss)
+					a.actionButton(c, a.T("关闭"), true, true, a.dismiss)
 				})
 			})
 		})
@@ -166,25 +168,25 @@ func (a *App) aboutSheet(c *ui.Context) {
 			ui.Column(c).Children(func() {
 				ui.Column(c).Padding(24, 24, 18, 24).Gap(3).Children(func() {
 					ui.Text(c, "Outrash").FontSize(20).FontWeight(650).TextColor(p.Ink).SingleLine()
-					ui.Text(c, "版本 "+appVersion()).Font(core.Mono()).FontSize(12).
+					ui.Text(c, a.T("版本 ")+appVersion()).Font(core.Mono()).FontSize(12).
 						TextColor(p.Ink3).SingleLine()
-					ui.Text(c, "扫描并清理可重建的缓存").FontSize(12).
+					ui.Text(c, a.T("扫描并清理可重建的缓存")).FontSize(12).
 						TextColor(p.Ink2).SingleLine()
 				})
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 				ui.Column(c).Padding(20, 24).Gap(8).Children(func() {
-					a.aboutLine(c, "作者", "xiyaowong")
-					a.aboutLine(c, "许可", "MIT")
-					a.aboutLine(c, "内置规则", fmt.Sprintf("第 %d 版 · %d 项缓存", a.cfg.Version, a.ruleCount()))
+					a.aboutLine(c, a.T("作者"), "xiyaowong")
+					a.aboutLine(c, a.T("许可"), "MIT")
+					a.aboutLine(c, a.T("内置规则"), fmt.Sprintf(a.T("第 %d 版 · %d 项缓存"), a.cfg.Version, a.ruleCount()))
 					ui.Row(c).Gap(8).AlignItems(ui.Baseline).Children(func() {
-						ui.Text(c, "项目主页").FontSize(12).TextColor(p.Ink2).Grow(1)
+						ui.Text(c, a.T("项目主页")).FontSize(12).TextColor(p.Ink2).Grow(1)
 						ui.Link(c, "github.com/xiyaowong/outrash", "https://github.com/xiyaowong/outrash").
 							FontSize(12).TextColor(p.Accent)
 					})
 				})
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 				ui.Row(c).Height(60).Padding(0, 24).Justify(ui.End).AlignItems(ui.Center).Children(func() {
-					a.actionButton(c, "关闭", true, true, a.dismiss)
+					a.actionButton(c, a.T("关闭"), true, true, a.dismiss)
 				})
 			})
 		})
@@ -219,7 +221,7 @@ func appVersion() string {
 	if v := mygo.App.Version(); v != "" {
 		return v
 	}
-	return "开发版"
+	return core.L("开发版", "dev build")
 }
 
 // planSheet is the review step: every path, its size, the order, and the one
@@ -240,7 +242,7 @@ func (a *App) planSheet(c *ui.Context) {
 			ui.Column(c).Children(func() {
 				ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, pl.Title).FontSize(20).FontWeight(600).TextColor(p.Ink).Grow(1).SingleLine()
-					ui.Text(c, fmt.Sprintf("%d 个路径 · %s", len(pl.Steps), core.Bytes(pl.Bytes))).
+					ui.Text(c, fmt.Sprintf(a.T("%d 个路径 · %s"), len(pl.Steps), core.Bytes(pl.Bytes))).
 						Font(core.Mono()).FontSize(12).TextColor(p.Ink2).Shrink(0)
 				})
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
@@ -270,14 +272,14 @@ func (a *App) planSheet(c *ui.Context) {
 										SingleLine().Grow(1).Tooltip(s.Path)
 									// Why this path is on the list; the long form
 									// waits on the tooltip and in -debug.
-									ui.Text(c, string(s.Mode)).FontSize(11).TextColor(p.Ink3).
+									ui.Text(c, a.T(string(s.Mode))).FontSize(11).TextColor(p.Ink3).
 										Width(64).TextAlign(ui.End).Shrink(0).Tooltip(s.Reason)
 									ui.Text(c, core.Bytes(s.Bytes)).Font(core.Mono()).FontSize(12).
 										TextColor(p.Ink2).Width(88).TextAlign(ui.End).Shrink(0)
 								})
 							}
 							if len(g.Kept) > 0 {
-								ui.Text(c, "保留 · "+strings.Join(g.Kept, "、")).FontSize(11).
+								ui.Text(c, a.T("保留 · ")+strings.Join(g.Kept, a.T("、"))).FontSize(11).
 									TextColor(p.Success).SingleLine().Padding(0, 0, 0, 0)
 							}
 						}
@@ -288,7 +290,7 @@ func (a *App) planSheet(c *ui.Context) {
 				ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, a.planFooter()).
 						FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
-					a.actionButton(c, "关闭", true, true, a.dismiss)
+					a.actionButton(c, a.T("关闭"), true, true, a.dismiss)
 				})
 			})
 		})
@@ -316,9 +318,9 @@ func abbrevPath(p string, max int) string {
 // sentence has to match the flag the user passed.
 func (a *App) planFooter() string {
 	if a.so.Debug {
-		return "调试模式：只列出，不删除。"
+		return a.T("调试模式：只列出，不删除。")
 	}
-	return "已禁用删除：只列出，不删除。"
+	return a.T("已禁用删除：只列出，不删除。")
 }
 
 // run deletes the shown plan in the background, then rescans.
@@ -330,7 +332,7 @@ func (a *App) run() {
 	a.modal = modalNone
 	a.shown = nil
 	a.busy = true
-	a.msg = "正在清理…"
+	a.msg = a.T("正在清理…")
 	a.clearChecks()
 	a.fx = &cleanFx{steps: map[string]core.Removal{}}
 	a.busyBar(true)
@@ -375,7 +377,7 @@ func (a *App) finish(out core.Outcome) {
 	}
 	for _, run := range out.Runs {
 		if run.Err != nil {
-			r.lines = append(r.lines, fmt.Sprintf("未能删除 %s：%v", run.Path, run.Err))
+			r.lines = append(r.lines, fmt.Sprintf(a.T("未能删除 %s：%v"), run.Path, run.Err))
 			if rc := r.receipt; rc != nil {
 				rc.failed[run.Path] = true
 			}
@@ -405,18 +407,18 @@ func (a *App) reportSheet(c *ui.Context) {
 			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
 			ui.Column(c).Children(func() {
 				ui.Row(c).Height(64).Padding(0, 24).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, "清理完成").FontSize(20).FontWeight(600).TextColor(p.Ink)
+					ui.Text(c, a.T("清理完成")).FontSize(20).FontWeight(600).TextColor(p.Ink)
 				})
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 				ui.Column(c).Padding(24).Gap(16).Children(func() {
 					ui.Row(c).Gap(32).Children(func() {
-						a.stat(c, "释放", core.Bytes(r.freed))
-						a.stat(c, "耗时", r.elapsed.Round(time.Millisecond).String())
+						a.stat(c, a.T("释放"), core.Bytes(r.freed))
+						a.stat(c, a.T("耗时"), r.elapsed.Round(time.Millisecond).String())
 						if r.failed > 0 {
-							a.stat(c, "跳过", fmt.Sprint(r.failed))
+							a.stat(c, a.T("跳过"), fmt.Sprint(r.failed))
 						}
 						if r.gone > 0 {
-							a.stat(c, "已不存在", fmt.Sprint(r.gone))
+							a.stat(c, a.T("已不存在"), fmt.Sprint(r.gone))
 						}
 					})
 					a.receiptBlock(c, r)
@@ -434,7 +436,7 @@ func (a *App) reportSheet(c *ui.Context) {
 				})
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 				ui.Row(c).Height(64).Padding(0, 24).Justify(ui.End).AlignItems(ui.Center).Children(func() {
-					a.actionButton(c, "完成", true, true, a.dismiss)
+					a.actionButton(c, a.T("完成"), true, true, a.dismiss)
 				})
 			})
 		})
@@ -456,18 +458,18 @@ func (a *App) receiptBlock(c *ui.Context, r *report) {
 	if !rc.measured {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Spinner(c).Width(12).Shrink(0)
-			ui.Text(c, "正在重新扫描，核对清理结果…").FontSize(12).TextColor(p.Ink2)
+			ui.Text(c, a.T("正在重新扫描，核对清理结果…")).FontSize(12).TextColor(p.Ink2)
 		})
 		return
 	}
 	ui.Column(c).Gap(6).Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Baseline).Children(func() {
-			ui.Text(c, "清理前 → 清理后").FontSize(12).TextColor(p.Ink3).Grow(1)
+			ui.Text(c, a.T("清理前 → 清理后")).FontSize(12).TextColor(p.Ink3).Grow(1)
 			ui.Text(c, fmt.Sprintf("%s → %s", core.Bytes(rc.before), core.Bytes(rc.after))).
 				Font(core.Mono()).FontSize(12).TextColor(p.Ink).Shrink(0)
 		})
 		if rc.before > rc.after {
-			ui.Text(c, fmt.Sprintf("实际减少 %s", core.Bytes(rc.before-rc.after))).
+			ui.Text(c, fmt.Sprintf(a.T("实际减少 %s"), core.Bytes(rc.before-rc.after))).
 				FontSize(12).FontWeight(600).TextColor(p.Success)
 		}
 		// Only the families that moved: a row that reads 0 → 0 is noise.
@@ -482,11 +484,11 @@ func (a *App) receiptBlock(c *ui.Context, r *report) {
 			})
 		}
 		if rc.regenerated > 0 {
-			ui.Text(c, fmt.Sprintf("已重新生成 %d 项 · %s", rc.regenerated, core.Bytes(rc.regenBytes))).
+			ui.Text(c, fmt.Sprintf(a.T("已重新生成 %d 项 · %s"), rc.regenerated, core.Bytes(rc.regenBytes))).
 				FontSize(12).TextColor(p.Ink2)
 		}
 		if rc.still > 0 {
-			ui.Text(c, fmt.Sprintf("仍在 %d 项 · %s", rc.still, core.Bytes(rc.stillBytes))).
+			ui.Text(c, fmt.Sprintf(a.T("仍在 %d 项 · %s"), rc.still, core.Bytes(rc.stillBytes))).
 				FontSize(12).TextColor(p.Ink2)
 		}
 	})

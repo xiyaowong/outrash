@@ -163,15 +163,15 @@ func (a *App) presets(picks []core.Pick) []preset {
 	if len(picks) == 0 {
 		return nil
 	}
-	all := preset{label: "全部选中", pol: core.Policy{Now: a.now}, scope: picks, picks: picks}
+	all := preset{label: a.T("全部选中"), pol: core.Policy{Now: a.now}, scope: picks, picks: picks}
 	versioned := slices.DeleteFunc(slices.Clone(picks), func(p core.Pick) bool { return p.Package == "" })
 	if len(versioned) > 0 {
 		return []preset{
-			{label: "保留最新", pol: core.Policy{KeepNewest: true, Now: a.now}, scope: picks, picks: versioned},
+			{label: a.T("保留最新"), pol: core.Policy{KeepNewest: true, Now: a.now}, scope: picks, picks: versioned},
 			all,
 		}
 	}
-	return []preset{{label: fmt.Sprintf("%d 天未用", a.cfg.StaleDays), pol: core.Policy{StaleDays: a.cfg.StaleDays, Now: a.now}, scope: picks, picks: picks}, all}
+	return []preset{{label: fmt.Sprintf(a.T("%d 天未用"), a.cfg.StaleDays), pol: core.Policy{StaleDays: a.cfg.StaleDays, Now: a.now}, scope: picks, picks: picks}, all}
 }
 
 func (a *App) chip(c *ui.Context, act preset) {
@@ -220,10 +220,10 @@ func (a *App) familyRow(c *ui.Context, g groupState) {
 	row.Background(hoverFill(row, tint(p.Ink2, p.Surface, 0.03), p.Hover))
 	row.Children(func() {
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
-		ui.Text(c, g.group.Name).FontSize(13).FontWeight(600).TextColor(p.Ink).
+		ui.Text(c, core.GroupName(&g.group)).FontSize(13).FontWeight(600).TextColor(p.Ink).
 			SingleLine().Width(colName).Shrink(0)
 		ui.Spacer(c).Grow(1)
-		ui.Text(c, fmt.Sprintf("%d 项", len(picks))).Font(core.Mono()).FontSize(12).
+		ui.Text(c, fmt.Sprintf(a.T("%d 项"), len(picks))).Font(core.Mono()).FontSize(12).
 			TextColor(p.Ink3).Width(colCount).TextAlign(ui.End).Shrink(0)
 		ui.Text(c, core.Bytes(a.familySize(g))).Font(core.Mono()).FontSize(12).
 			TextColor(p.Ink).Width(colSize).TextAlign(ui.End).Shrink(0)
@@ -239,7 +239,7 @@ func (a *App) familyRow(c *ui.Context, g groupState) {
 	if acts := a.presets(picks); len(acts) > 0 {
 		ui.Row(c).Height(32).Padding(0, 24, 0, 24+colCheck+colGap+indentItem).Gap(8).
 			AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "选择方式").FontSize(11).TextColor(p.Ink3).Shrink(0)
+			ui.Text(c, a.T("选择方式")).FontSize(11).TextColor(p.Ink3).Shrink(0)
 			for _, act := range acts {
 				a.chip(c, act)
 			}
@@ -277,8 +277,8 @@ func (a *App) itemRow(c *ui.Context, it itemState) {
 	row.Children(func() {
 		indent(c, indentItem)
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
-		ui.Text(c, it.item.Name).FontSize(13).TextColor(p.Ink).SingleLine().
-			Width(colName - indentItem).Shrink(0).Tooltip(it.item.Note)
+		ui.Text(c, core.ItemName(&it.item)).FontSize(13).TextColor(p.Ink).SingleLine().
+			Width(colName - indentItem).Shrink(0).Tooltip(core.ItemNote(&it.item))
 		ui.Text(c, rootPathOf(roots)).Font(core.Mono()).FontSize(11).
 			TextColor(p.Ink3).SingleLine().Ellipsis("…").Grow(1).Tooltip(rootPathOf(roots))
 		ui.Text(c, countText(roots)).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).
@@ -314,7 +314,7 @@ func (a *App) familyName(it itemState) string {
 	for _, g := range a.groups {
 		for _, member := range g.items {
 			if member.item.ID == it.item.ID {
-				return g.group.Name
+				return core.GroupName(&g.group)
 			}
 		}
 	}
@@ -336,11 +336,11 @@ func (a *App) familyTag(c *ui.Context, g groupState) {
 	}
 	switch {
 	case failed:
-		tag(c, "读取不全", p.Danger, p.DangerSubtle)
+		tag(c, a.T("读取不全"), p.Danger, p.DangerSubtle)
 	case recent:
-		tag(c, "近期用过", p.Warning, p.WarningSubtle)
+		tag(c, a.T("近期用过"), p.Warning, p.WarningSubtle)
 	default:
-		tag(c, "可清理", p.Success, p.SuccessSubtle)
+		tag(c, a.T("可清理"), p.Success, p.SuccessSubtle)
 	}
 }
 
@@ -351,11 +351,11 @@ func (a *App) statusTag(c *ui.Context, res core.Result) {
 	p := a.pal
 	switch {
 	case res.Failed():
-		tag(c, "读取不全", p.Danger, p.DangerSubtle)
+		tag(c, a.T("读取不全"), p.Danger, p.DangerSubtle)
 	case a.recent(res):
-		tag(c, "近期用过", p.Warning, p.WarningSubtle)
+		tag(c, a.T("近期用过"), p.Warning, p.WarningSubtle)
 	default:
-		tag(c, "可清理", p.Success, p.SuccessSubtle)
+		tag(c, a.T("可清理"), p.Success, p.SuccessSubtle)
 	}
 }
 
@@ -406,9 +406,9 @@ func countText(roots []core.Root) string {
 	case versions > 0 && entries > 0:
 		return fmt.Sprintf("%d+%d", versions, entries)
 	case versions > 0:
-		return fmt.Sprintf("%d 版", versions)
+		return fmt.Sprintf(core.L("%d 版", "%d ver"), versions)
 	case entries > 0:
-		return fmt.Sprintf("%d 项", entries)
+		return fmt.Sprintf(core.L("%d 项", "%d items"), entries)
 	}
 	return "—"
 }
@@ -452,7 +452,7 @@ func (a *App) versioned(c *ui.Context, it itemState, ent core.Entry) {
 		indent(c, indentLeaf)
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
 		ui.Text(c, ent.Name).Font(core.Mono()).FontSize(12).TextColor(p.Ink).SingleLine().Grow(1)
-		ui.Text(c, fmt.Sprintf("%d 版", len(ent.Versions))).Font(core.Mono()).FontSize(12).
+		ui.Text(c, fmt.Sprintf(a.T("%d 版"), len(ent.Versions))).Font(core.Mono()).FontSize(12).
 			TextColor(p.Ink3).Width(colCount).TextAlign(ui.End).Shrink(0)
 		ui.Text(c, core.Bytes(ent.Size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).
 			Width(colSize).TextAlign(ui.End).Shrink(0)
@@ -526,7 +526,7 @@ func (a *App) leaf(c *ui.Context, it itemState, name, path string, size int64, m
 			Shrink(0).Width(colSize).TextAlign(ui.End)
 		ui.Box(c).Width(colStatus).Shrink(0).AlignItems(ui.Center).Children(func() {
 			if failed {
-				tag(c, "失败", p.Danger, p.DangerSubtle)
+				tag(c, a.T("失败"), p.Danger, p.DangerSubtle)
 			}
 		})
 		ui.Box(c).Width(24).Shrink(0)
@@ -600,13 +600,13 @@ func ageText(now, mod time.Time) string {
 	d := now.Sub(mod)
 	switch {
 	case d < 24*time.Hour:
-		return "今天"
+		return core.L("今天", "today")
 	case d < 30*24*time.Hour:
-		return fmt.Sprintf("%d 天前", int(d.Hours()/24))
+		return fmt.Sprintf(core.L("%d 天前", "%d days ago"), int(d.Hours()/24))
 	case d < 365*24*time.Hour:
-		return fmt.Sprintf("%d 个月前", int(d.Hours()/(24*30)))
+		return fmt.Sprintf(core.L("%d 个月前", "%d months ago"), int(d.Hours()/(24*30)))
 	}
-	return fmt.Sprintf("%d 年前", int(d.Hours()/(24*365)))
+	return fmt.Sprintf(core.L("%d 年前", "%d years ago"), int(d.Hours()/(24*365)))
 }
 
 func (a *App) selectedPlan() *core.Plan {
@@ -622,11 +622,12 @@ func (a *App) selectedPlan() *core.Plan {
 			if len(picks) == 0 {
 				continue
 			}
-			p.Add(g.group.Name, it.item.Name, it.item.Note, core.Select(picks, core.Policy{Now: a.now}).
-				Annotate(allPicks(it.res), a.cfg.StaleDays, a.now))
+			p.Add(core.GroupName(&g.group), core.ItemName(&it.item), core.ItemNote(&it.item),
+				core.Select(picks, core.Policy{Now: a.now}).
+					Annotate(allPicks(it.res), a.cfg.StaleDays, a.now))
 		}
 	}
-	p.Title = fmt.Sprintf("清理已选 %d 项", len(p.Steps))
+	p.Title = fmt.Sprintf(a.T("清理已选 %d 项"), len(p.Steps))
 	return p
 }
 

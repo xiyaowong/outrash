@@ -170,7 +170,7 @@ func (it Item) Roots(o Options) (dirs []string, source string) {
 				dirs = append(dirs, d)
 			}
 			if len(dirs) > 0 {
-				return dirs, "环境变量 " + name
+				return dirs, L("环境变量 ", "Environment variable ") + name
 			}
 		}
 	}
@@ -195,7 +195,7 @@ func (it Item) Roots(o Options) (dirs []string, source string) {
 	}
 	dirs = unique(dirs)
 	if anyExists(dirs) {
-		return dirs, "默认位置"
+		return dirs, L("默认位置", "Default location")
 	}
 	if it.Probe != nil && o.Run != nil {
 		if out, err := o.Run(it.Probe.Cmd, it.Probe.Args); err == nil {
@@ -206,7 +206,7 @@ func (it Item) Roots(o Options) (dirs []string, source string) {
 			}
 		}
 	}
-	return dirs, "默认位置"
+	return dirs, L("默认位置", "Default location")
 }
 
 // expand resolves ~ and %VAR% in a path template. It reports false when a

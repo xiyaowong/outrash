@@ -1,44 +1,53 @@
 # outrash
 
-一个 Windows 优先的缓存清理小工具。它扫一遍本机各程序留下的可重建缓存——下载过的依赖包、编译产物、浏览器存下的网页资源——按大小和最后使用时间列成一张表，你勾选，一次清掉。清掉的都会在下次使用时自动回来，所以清得放心。
+一个 Windows 优先的缓存清理小工具：扫描本机各程序留下的可重建缓存，勾选，一次清掉，清掉的下次使用时自动回来。
+A Windows-first cache cleaner: it scans the rebuildable caches your tools leave behind, you check, one pass clears them, and everything comes back the next time you use it.
 
-![扫描结果](docs/screenshot.png)
+![扫描结果 Screenshot](docs/screenshot.png)
 
-## 为什么是它
+## 为什么是它 Why
 
-- **纯离线。** 不联网，扫描与清理全部在本机完成。
-- **无后台常驻。** 用时打开，关掉即退；没有服务，没有托盘小图标。
-- **不产生杂物。** 无配置文件、无注册表、无日志、无历史记录；「清理记录」只存在内存里，关窗即消失。
-- **没有广告。** 没有升级提示，没有遥测，窗口里只有扫描结果。
+- **纯离线。** 扫描与清理全部在本机完成。
+  **Offline.** Scanning and cleaning never touch the network.
+- **无后台常驻。** 用时打开，关掉即退。
+  **No background process.** Open it when you need it; closing it ends it.
+- **不产生杂物。** 无配置文件、无注册表、无日志。
+  **Leaves nothing behind.** No config files, no registry, no logs.
+- **没有广告。** 窗口里只有扫描结果。
+  **No ads.** The window holds nothing but the scan results.
 
-## 它做什么
+## 它做什么 What it does
 
-1. **扫描**：按各工具自己的环境变量与默认位置逐个目录统计，扫不到的位置如实标出。
-2. **挑选**：近一周用过的缓存标着风险提示；有预设与建议泡泡帮忙勾选，也可以只看某个盘、只勾大头。
-3. **清理**：按一次按钮，逐项显示进度；每个缓存怎么回来，列表里写得清楚。
+1. **扫描**：按各工具的环境变量与默认位置逐个目录统计，读不到的位置如实标出。
+   **Scan**: measures each tool's cache where its environment variables and default locations say it lives, and flags what it could not read.
+2. **挑选**：风险提示、预设与建议泡泡帮忙勾选，也可以只看某个盘、只勾大头。
+   **Pick**: risk tags, presets and suggestion bubbles narrow the list; you can also look at one drive only.
+3. **清理**：一次按钮，逐项显示进度，每个缓存怎么回来写得清楚。
+   **Clean**: one button, per-item progress, and next to every path the sentence that says how it comes back.
 
-界面只有四页：概览、扫描结果、清理记录、规则。左边导航，中间一张表，右边汇总能清多少、已勾多少。
+界面四页：概览、扫描结果、清理记录、规则。界面语言中文、English 可随时切换。
+Four pages: Overview, Scan results, Cleanups, Rules. The interface speaks Chinese and English, switchable any time.
 
-## 它不会做的事
+## 它不会做的事 What it will not do
 
-删东西这件事上，宁可少做也不多做：
+- **列表就是计划。** 勾上的就是会被删的路径，没有第二份清单。
+  **The list is the plan.** The checked paths are the paths that get removed; there is no second list.
+- **只清能重新拿回来的。** 源码、项目目录、控制台一律不碰。
+  **Only what can be fetched back.** Sources, projects and consoles are never touched.
+- **不写任何东西。** 「清理记录」只存在内存里，关窗即消失。
+  **Writes nothing.** The cleanup log lives in memory and dies with the window.
 
-- **列表就是计划。** 勾上的就是会被删的路径，没有第二份清单，也没有「顺手一起清」的东西。
-- **只碰扫描时量到的东西。** 位于声明目录之下、且不是目录本身的路径才会进删除器；链接不跟，离盘符根太近的一律拒绝。
-- **只清能重新拿回来的东西。** 源码、项目目录、控制台一律不碰；与缓存住在一起但删了回不来的子目录，不进列表也不计入大小。
-- **不写任何东西。** 见上——这也是「不产生杂物」的另一半含义。
+收录范围是各类软件会自行重建的缓存，清单在应用的「规则」页随时可见。
+The catalog covers what software rebuilds on its own; it is on the app's Rules page.
 
-收录范围是各类软件会自行重建的缓存，具体清单在应用的「规则」页随时可见。
-
-## 构建与运行
+## 构建与运行 Build
 
 ```sh
-just build       # 输出到 build/
-just debug       # 不删除：把清理计划打印到终端，界面上可查看完整清单
-just safe        # 正常界面，但拒绝执行任何删除
-go run .         # 直接跑
+just build       # 输出到 build/ · into build/
+just debug       # 不删除，打印清理计划 · deletes nothing, prints the plan
+go run .         # 直接跑 · run as-is
 ```
 
-## 许可
+## 许可 Licence
 
-MIT，见 [LICENSE](LICENSE)。
+MIT，见 [LICENSE](LICENSE)。 · MIT, see [LICENSE](LICENSE).
