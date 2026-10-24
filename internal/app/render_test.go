@@ -24,6 +24,10 @@ func testApp(t *testing.T, debug bool) *App {
 
 func testAppWith(t *testing.T, so Options) *App {
 	t.Helper()
+	// The language is process-global, and the harness asserts the Chinese
+	// lines the product leads with; pin it so no earlier test's choice, and
+	// no runner's locale, can flip the fixture.
+	core.SetLang("zh")
 	cfg, err := core.Parse(core.Rules)
 	if err != nil {
 		t.Fatal(err)
