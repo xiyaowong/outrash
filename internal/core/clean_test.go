@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -141,5 +142,118 @@ func mkdir(t *testing.T, p string) {
 	t.Helper()
 	if err := os.MkdirAll(p, 0o755); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The walk is what makes the estimate honest: bytes must climb to exactly
+// what the scan measured, the entry must go, and its siblings must stay.
+func TestRemoveTreeReportsBytesAndCleans(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "cache")
+	entry := filepath.Join(root, "pkg", "1.0.0")
+	mkdir(t, entry)
+	files := []string{
+		filepath.Join(entry, "a.bin"),
+		filepath.Join(entry, "sub", "b.bin"),
+		filepath.Join(root, "pkg", "c.bin"),
+	}
+	mkdir(t, filepath.Join(entry, "sub"))
+	var want int64
+	for i, f := range files[:2] {
+		if err := os.WriteFile(f, make([]byte, 1000+i), 0o666); err != nil {
+			t.Fatal(err)
+		}
+		want += 1000 + int64(i)
+	}
+	if err := os.WriteFile(files[2], make([]byte, 10), 0o666); err != nil {
+		t.Fatal(err)
+	}
+
+	var last int64
+	if err := removeTree(entry, func(n int64) {
+		if n < last {
+			t.Errorf("progress went back: %d after %d", n, last)
+		}
+		last = n
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if last != want {
+		t.Fatalf("reported %d bytes, want %d", last, want)
+	}
+	if _, err := os.Stat(entry); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("entry still there: %v", err)
+	}
+	if _, err := os.Stat(files[2]); err != nil {
+		t.Fatalf("sibling lost: %v", err)
+	}
+}
+
+// A single-file step, as the extension caches are, goes the same way.
+func TestRemoveTreeRemovesSingleFile(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "cache")
+	f := filepath.Join(root, "x.vsix")
+	mkdir(t, root)
+	if err := os.WriteFile(f, make([]byte, 500), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	var got int64
+	if err := removeTree(f, func(n int64) { got = n }); err != nil {
+		t.Fatal(err)
+	}
+	if got != 500 {
+		t.Fatalf("reported %d bytes, want 500", got)
+	}
+	if _, err := os.Stat(f); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("file still there: %v", err)
+	}
+}
+
+// Caches mark files read-only; the walk clears the bit as RemoveAll does.
+func TestRemoveTreeClearsReadOnlyFiles(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "cache")
+	f := filepath.Join(root, "a.bin")
+	mkdir(t, root)
+	if err := os.WriteFile(f, make([]byte, 10), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(f, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeTree(root, nil); err != nil {
+		t.Fatalf("read-only file stopped the walk: %v", err)
+	}
+	if _, err := os.Stat(root); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("root still there: %v", err)
+	}
+}
+
+// A link inside the tree is unlinked where it sits; its target keeps its
+// files. This is the door the scan closes at check time, and the walk must
+// not reopen it from below.
+func TestRemoveTreeUnlinksLinkInsteadOfEntering(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "cache")
+	outside := filepath.Join(tmp, "outside")
+	mkdir(t, root)
+	mkdir(t, filepath.Join(root, "pkg"))
+	mkdir(t, outside)
+	keep := filepath.Join(outside, "keep.txt")
+	if err := os.WriteFile(keep, []byte("x"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "pkg", "link")
+	dirLink(t, outside, link)
+
+	if err := removeTree(root, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(link); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("link still there: %v", err)
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("link target lost its file: %v", err)
 	}
 }

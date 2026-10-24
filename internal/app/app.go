@@ -117,6 +117,13 @@ type progress struct {
 func (p *progress) set(done, total int64) {
 	p.mu.Lock()
 	p.done, p.total = done, total
+	p.mu.Unlock()
+}
+
+// stepDone counts one finished step, so the title bar can say where in the
+// plan the clean stands. Bytes come through set many times per step.
+func (p *progress) stepDone() {
+	p.mu.Lock()
 	p.finished++
 	p.mu.Unlock()
 }
@@ -125,6 +132,13 @@ func (p *progress) read() (done, total int64, elapsed time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.done, p.total, time.Since(p.start)
+}
+
+// count is where the clean stands in steps.
+func (p *progress) count() (finished, steps int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.finished, p.steps
 }
 
 // fxSpan is how long a finished row takes to strike through and fold: the
@@ -593,9 +607,9 @@ func (a *App) titleBar(c *ui.Context) {
 	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 }
 
-// cleanProgress is the estimate: how far the removal got, and how long the
-// rest should take at the rate so far. It sits in the title bar because that
-// is the one line every screen keeps.
+// cleanProgress is the estimate: which step the removal is on, how far the
+// bytes have gone, and how long the rest should take. It sits in the title
+// bar because that is the one line every screen keeps.
 func (a *App) cleanProgress(c *ui.Context) {
 	p := a.pal
 	pr := a.progress
@@ -603,7 +617,11 @@ func (a *App) cleanProgress(c *ui.Context) {
 		return
 	}
 	done, total, elapsed := pr.read()
-	ui.Text(c, estimate(done, total, elapsed)).Font(core.Mono()).
+	text := estimate(done, total, elapsed)
+	if finished, steps := pr.count(); steps > 1 {
+		text = fmt.Sprintf("%d/%d 项 · %s", finished, steps, text)
+	}
+	ui.Text(c, text).Font(core.Mono()).
 		FontSize(11).TextColor(p.Ink2).Shrink(0)
 	bar := ui.Box(c).Width(120).Height(4).Shrink(0).Background(p.RuleStrong)
 	frac := 0.0
