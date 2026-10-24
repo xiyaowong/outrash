@@ -170,7 +170,7 @@ func TestRemoveTreeReportsBytesAndCleans(t *testing.T) {
 	}
 
 	var last int64
-	if err := removeTree(entry, func(n int64) {
+	if _, err := removeTree(entry, func(n int64) {
 		if n < last {
 			t.Errorf("progress went back: %d after %d", n, last)
 		}
@@ -199,7 +199,7 @@ func TestRemoveTreeRemovesSingleFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got int64
-	if err := removeTree(f, func(n int64) { got = n }); err != nil {
+	if _, err := removeTree(f, func(n int64) { got = n }); err != nil {
 		t.Fatal(err)
 	}
 	if got != 500 {
@@ -222,7 +222,7 @@ func TestRemoveTreeClearsReadOnlyFiles(t *testing.T) {
 	if err := os.Chmod(f, 0o444); err != nil {
 		t.Fatal(err)
 	}
-	if err := removeTree(root, nil); err != nil {
+	if _, err := removeTree(root, nil); err != nil {
 		t.Fatalf("read-only file stopped the walk: %v", err)
 	}
 	if _, err := os.Stat(root); !errors.Is(err, fs.ErrNotExist) {
@@ -247,7 +247,7 @@ func TestRemoveTreeUnlinksLinkInsteadOfEntering(t *testing.T) {
 	link := filepath.Join(root, "pkg", "link")
 	dirLink(t, outside, link)
 
-	if err := removeTree(root, nil); err != nil {
+	if _, err := removeTree(root, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Lstat(link); !errors.Is(err, fs.ErrNotExist) {
@@ -255,5 +255,41 @@ func TestRemoveTreeUnlinksLinkInsteadOfEntering(t *testing.T) {
 	}
 	if _, err := os.Stat(keep); err != nil {
 		t.Fatalf("link target lost its file: %v", err)
+	}
+}
+
+// A step that fails partway through has still freed the bytes that left the
+// disk before the failure; the report's freed total has to match the walk.
+func TestRemoveTreeCountsBytesRemovedBeforeFailure(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("the stuck-file mechanism is a Windows sharing violation")
+	}
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "cache")
+	entry := filepath.Join(root, "pkg", "1.0.0")
+	mkdir(t, entry)
+	mkdir(t, filepath.Join(entry, "sub"))
+	gone := filepath.Join(entry, "sub", "gone.bin")
+	if err := os.WriteFile(gone, make([]byte, 100), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	stuck := filepath.Join(entry, "sub", "stay.bin")
+	if err := os.WriteFile(stuck, make([]byte, 200), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	// A handle without share-delete makes every os.Remove of the file fail,
+	// chmod retry included — a cache tool holding a lock on its own data.
+	held, err := os.OpenFile(stuck, os.O_RDONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+
+	removed, err := removeTree(entry, nil)
+	if err == nil {
+		t.Fatal("want the walk to fail on the held file")
+	}
+	if removed != 100 {
+		t.Fatalf("removed %d bytes, want only the first file's 100", removed)
 	}
 }

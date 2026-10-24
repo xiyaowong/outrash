@@ -78,14 +78,17 @@ func removePlan(p *Plan, roots []string, progress func(done, total int64), onSte
 			// One step can hold most of the plan's bytes on its own, so it
 			// goes file by file and the estimate follows the walk instead of
 			// sitting still until the whole step is over.
-			if err := removeTree(s.Path, func(n int64) {
+			if removed, err := removeTree(s.Path, func(n int64) {
 				if progress != nil {
 					progress(done+n, p.Bytes)
 				}
 			}); err != nil {
+				// The files that did leave the disk before the failure still
+				// count: the report's freed bytes must match what the walk did.
+				out.Freed += removed
 				r.Err = err
 			} else {
-				out.Freed += s.Bytes
+				out.Freed += removed
 			}
 		}
 		if r.Err != nil {
@@ -105,32 +108,32 @@ func removePlan(p *Plan, roots []string, progress func(done, total int64), onSte
 }
 
 // removeTree deletes the tree at root bottom-up, reporting the bytes gone so
-// far. It removes what os.RemoveAll would, with the same rule the cleaner is
-// built on: a link is unlinked, never entered.
-func removeTree(root string, report func(int64)) error {
+// far and returning how much actually left the disk, even on failure: a step
+// that stops halfway has still freed the bytes it got through.
+func removeTree(root string, report func(int64)) (int64, error) {
 	if report == nil {
 		report = func(int64) {}
 	}
 	info, err := os.Lstat(root)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil // the cache went away between the scan and the run
+			return 0, nil // the cache went away between the scan and the run
 		}
-		return err
+		return 0, err
 	}
 	if !info.IsDir() {
 		// A plan step can be one file, as the extension caches are.
 		if err := removePath(root); err != nil {
-			return err
+			return 0, err
 		}
 		report(info.Size())
-		return nil
+		return info.Size(), nil
 	}
 	var removed int64
 	if err := removeBelow(root, &removed, report); err != nil {
-		return err
+		return removed, err
 	}
-	return removePath(root)
+	return removed, removePath(root)
 }
 
 // removeBelow empties dir bottom-up. DirEntry.IsDir is false for links, so a
@@ -148,10 +151,13 @@ func removeBelow(dir string, removed *int64, report func(int64)) error {
 	for _, e := range entries {
 		p := filepath.Join(dir, e.Name())
 		// Files only: the scan measures file bytes, and on Linux a directory
-		// entry carries its own size that the estimate must not count.
+		// entry carries its own size that the estimate must not count. The
+		// size joins the total only after the removal succeeds, so a file
+		// that refuses to go is not reported as freed.
+		var size int64
 		if !e.IsDir() {
 			if info, err := e.Info(); err == nil {
-				*removed += info.Size()
+				size = info.Size()
 			}
 		}
 		if e.IsDir() {
@@ -162,6 +168,7 @@ func removeBelow(dir string, removed *int64, report func(int64)) error {
 		if err := removePath(p); err != nil {
 			return err
 		}
+		*removed += size
 		if !e.IsDir() {
 			report(*removed)
 		}
