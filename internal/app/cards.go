@@ -462,15 +462,15 @@ func indent(c *ui.Context, w float32) {
 	ui.Box(c).Width(w).Height(1).Shrink(0)
 }
 
-func (a *App) versioned(c *ui.Context, it itemState, ent core.Entry, env bool) {
+func (a *App) versioned(c *ui.Context, it itemState, ent core.Entry, fromEnv bool) {
 	p := a.pal
-	picks := versionPicks(ent, env)
+	picks := versionPicks(ent, fromEnv)
 	key := "p:" + ent.Path
 	open := a.open[key]
 	on, total := a.checkState(autoPicks(picks))
 	row := ui.Row(c).Height(32).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
-		ContextMenu(a.packageMenu(c, it, ent, env))
+		ContextMenu(a.packageMenu(c, it, ent, fromEnv))
 	row.Background(a.hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		indent(c, indentLeaf)

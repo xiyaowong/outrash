@@ -328,7 +328,7 @@ func compareVersion(a, b version) int {
 }
 
 func comparePre(a, b []string) int {
-	for i := 0; i < len(a) && i < len(b); i++ {
+	for i := range min(len(a), len(b)) {
 		an, aok := number(a[i])
 		bn, bok := number(b[i])
 		switch {

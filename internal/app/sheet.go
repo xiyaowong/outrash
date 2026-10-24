@@ -22,7 +22,7 @@ func (a *App) openPlan(p *core.Plan) {
 		a.msg = a.T("没有需要清理的内容")
 		return
 	}
-	if a.so.Debug {
+	if a.buildOpts.Debug {
 		a.printPlan(p)
 	}
 	a.shown = p
@@ -308,9 +308,9 @@ func abbrevPath(p string, max int) string {
 // delete, the quiet preview says what closing the sheet does next.
 func (a *App) planFooter() string {
 	switch {
-	case a.so.Debug:
+	case a.buildOpts.Debug:
 		return a.T("调试模式：只列出，不删除。")
-	case a.so.NoDelete:
+	case a.buildOpts.NoDelete:
 		return a.T("已禁用删除：只列出，不删除。")
 	}
 	return a.T("预览：回到窗口确认后才会删除。")

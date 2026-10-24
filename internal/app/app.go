@@ -43,7 +43,9 @@ type App struct {
 	Window *mygo.Window
 	cfg    *core.Config
 	opts   core.Options
-	so     Options
+	// buildOpts is how this binary was started: -debug and -no-delete gate
+	// the delete path and the plan sheet.
+	buildOpts Options
 
 	cache  *core.Cache
 	groups []groupState
@@ -79,9 +81,9 @@ type App struct {
 
 	// busy is set while a removal runs; no plan may be opened over one.
 	busy bool
-	// bar mirrors the taskbar indicator, so a test can read what the
+	// taskbarBusy mirrors the taskbar indicator, so a test can read what the
 	// window was told without a window.
-	bar bool
+	taskbarBusy bool
 	// remove runs a plan, and post lands an update on the UI thread. Tests
 	// replace them to observe the order.
 	remove func(*core.Plan, []string, func(done, total int64), func(core.Removal)) core.Outcome
@@ -280,18 +282,18 @@ type itemState struct {
 	res  core.Result
 }
 
-func New(cfg *core.Config, o core.Options, so Options) *App {
+func New(cfg *core.Config, o core.Options, buildOpts Options) *App {
 	return &App{
-		cfg:      cfg,
-		opts:     o,
-		so:       so,
-		page:     pageResults,
-		open:     map[string]bool{},
-		checked:  map[string]bool{},
-		now:      time.Now(),
-		remove:   core.RemoveSteps,
-		post:     nil,
-		progress: &progress{},
+		cfg:       cfg,
+		opts:      o,
+		buildOpts: buildOpts,
+		page:      pageResults,
+		open:      map[string]bool{},
+		checked:   map[string]bool{},
+		now:       time.Now(),
+		remove:    core.RemoveSteps,
+		post:      nil,
+		progress:  &progress{},
 	}
 }
 
@@ -343,7 +345,7 @@ func (a *App) Scan() {
 			a.recommend()
 			a.busyBar(false)
 			a.closeReceipt(cache)
-			if a.so.Debug {
+			if a.buildOpts.Debug {
 				a.printScanWarnings(cache)
 			}
 		})
@@ -514,10 +516,10 @@ func sizeOf(root core.Root, p string) (int64, time.Time) {
 // button on Windows, the dock on macOS, the launcher on Linux. Progress is
 // not measurable per step, so it spins rather than lies with a percentage.
 func (a *App) busyBar(on bool) {
-	if a.bar == on {
+	if a.taskbarBusy == on {
 		return
 	}
-	a.bar = on
+	a.taskbarBusy = on
 	if a.Window == nil {
 		return
 	}
@@ -627,7 +629,7 @@ func (a *App) startClean() {
 		return
 	}
 	pl := a.selectedPlan()
-	if a.so.Debug || a.so.NoDelete {
+	if a.buildOpts.Debug || a.buildOpts.NoDelete {
 		a.openPlan(pl)
 		return
 	}
@@ -664,7 +666,7 @@ func (a *App) titleBar(c *ui.Context) {
 		if a.busy {
 			a.cleanProgress(c)
 		}
-		if a.so.Debug || a.so.NoDelete {
+		if a.buildOpts.Debug || a.buildOpts.NoDelete {
 			ui.Text(c, a.modeNote()).FontSize(fz(11)).TextColor(p.Ink2).Shrink(0)
 		}
 		if a.phase == phaseScanning {
@@ -750,7 +752,7 @@ func fmtDuration(d time.Duration) string {
 // modeNote says the build cannot delete, wherever the user is looking: the
 // primary button changes meaning, so the title bar has to explain why.
 func (a *App) modeNote() string {
-	if a.so.Debug {
+	if a.buildOpts.Debug {
 		return a.T("调试：只列计划")
 	}
 	return a.T("已禁用删除")
@@ -1226,12 +1228,12 @@ func (a *App) actionBar(c *ui.Context) {
 			// A quiet preview next to the one action: the plan sheet, listing
 			// only. A build that refuses to delete does not need it — its
 			// primary button already opens the plan.
-			if n > 0 && !(a.so.Debug || a.so.NoDelete) {
+			if n > 0 && !(a.buildOpts.Debug || a.buildOpts.NoDelete) {
 				a.textButton(c, a.T("查看清理计划"), func() { a.openPlan(a.selectedPlan()) })
 			}
 			a.actionButton(c, a.T("重新扫描"), false, a.phase != phaseScanning, a.Scan)
 			label := a.T("开始清理")
-			if a.so.Debug || a.so.NoDelete {
+			if a.buildOpts.Debug || a.buildOpts.NoDelete {
 				label = a.T("查看清理计划")
 			}
 			a.actionButton(c, label, true, n > 0, a.startClean)
@@ -1703,7 +1705,7 @@ func (a *App) railNote() string {
 	switch {
 	case a.phase == phaseScanning:
 		return a.T("扫描中")
-	case a.so.Debug:
+	case a.buildOpts.Debug:
 		return a.T("调试：只列计划")
 	case a.cache == nil:
 		return ""

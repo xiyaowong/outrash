@@ -706,7 +706,7 @@ func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
 	if a.msg != "正在清理…" {
 		t.Fatalf("title says %q, want the cleaning notice", a.msg)
 	}
-	if !a.bar {
+	if !a.taskbarBusy {
 		t.Fatal("the taskbar indicator must be busy while cleaning")
 	}
 	if len(a.checked) != 0 {
@@ -722,7 +722,7 @@ func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
 	if a.phase != phaseReady {
 		t.Fatalf("phase = %v after the rescan, want ready", a.phase)
 	}
-	if a.bar {
+	if a.taskbarBusy {
 		t.Fatal("the taskbar indicator must clear once the rescan ends")
 	}
 }
@@ -1233,7 +1233,7 @@ func TestContextMenusByDepth(t *testing.T) {
 	revealed, opened := "", ""
 	prevReveal, prevOpen := revealPath, openPath
 	revealPath = func(p string) { revealed = p }
-	openPath = func(p string) { opened = p }
+	openPath = func(_ *App, p string) { opened = p }
 	t.Cleanup(func() { revealPath, openPath = prevReveal, prevOpen })
 
 	a := testAppWith(t, Options{})
@@ -1362,7 +1362,7 @@ func TestContextMenusByDepth(t *testing.T) {
 func TestContextMenuNamesEveryRoot(t *testing.T) {
 	opened := ""
 	prevOpen := openPath
-	openPath = func(p string) { opened = p }
+	openPath = func(_ *App, p string) { opened = p }
 	t.Cleanup(func() { openPath = prevOpen })
 
 	a := testAppWith(t, Options{})
