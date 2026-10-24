@@ -32,15 +32,28 @@ func picksOf(roots []core.Root) []core.Pick {
 				for _, v := range e.Versions {
 					picks = append(picks, core.Pick{
 						Path: v.Path, Name: e.Name + " " + v.Name, Bytes: v.Size,
-						ModTime: v.ModTime, Package: e.Name,
+						ModTime: v.ModTime, Package: e.Name, EnvSrc: root.EnvSrc,
 					})
 				}
 				continue
 			}
-			picks = append(picks, core.Pick{Path: e.Path, Name: e.Name, Bytes: e.Size, ModTime: e.ModTime})
+			picks = append(picks, core.Pick{Path: e.Path, Name: e.Name, Bytes: e.Size, ModTime: e.ModTime, EnvSrc: root.EnvSrc})
 		}
 	}
 	return picks
+}
+
+// autoPicks is what a one-click selection may act on. A root an environment
+// variable named is a claim to read, not a cache anything vouches for, so it
+// answers only to a check the user puts on a row that shows the path itself.
+func autoPicks(picks []core.Pick) []core.Pick {
+	var out []core.Pick
+	for _, p := range picks {
+		if !p.EnvSrc {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // volumeOf is the drive a Windows path sits on, read from the text itself so
@@ -137,6 +150,7 @@ func (a *App) checkState(picks []core.Pick) (on, total int) {
 }
 
 func (a *App) toggleChecks(picks []core.Pick) {
+	picks = autoPicks(picks)
 	on, total := a.checkState(picks)
 	for _, p := range picks {
 		if on == total {
@@ -160,6 +174,7 @@ type preset struct {
 // header keeps its air. 保留最新 never widens to caches without versions:
 // a plain entry has no newest, so the preset would just delete it all.
 func (a *App) presets(picks []core.Pick) []preset {
+	picks = autoPicks(picks)
 	if len(picks) == 0 {
 		return nil
 	}
@@ -218,7 +233,9 @@ func (a *App) familyRow(c *ui.Context, g groupState) {
 	key := "g:" + g.group.ID
 	open := a.open[key]
 	picks := a.familyPicks(g)
-	on, total := a.checkState(picks)
+	// The tri-state box speaks for the bulk toggle, and the bulk toggle skips
+	// env-sourced roots; the count column still counts what is on screen.
+	on, total := a.checkState(autoPicks(picks))
 	row := ui.Row(c).Height(38).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
 		ContextMenu(a.familyMenu(g))
@@ -270,7 +287,7 @@ func (a *App) itemRow(c *ui.Context, it itemState) {
 	}
 	key := "i:" + it.item.ID
 	open := a.open[key]
-	on, total := a.checkState(picks)
+	on, total := a.checkState(autoPicks(picks))
 	var size int64
 	for _, r := range roots {
 		size += r.Size
@@ -357,6 +374,11 @@ func (a *App) statusTag(c *ui.Context, res core.Result) {
 	switch {
 	case res.Failed():
 		tag(c, a.T("读取不全"), p.Danger, p.DangerSubtle)
+	case res.EnvSourced():
+		// The rows under this cache answer to leaf checks only, and the tag
+		// is why: the tool's own config named the place, nothing vouches for
+		// what it holds.
+		tag(c, a.T("环境变量指向"), p.Warning, p.WarningSubtle)
 	case a.recent(res):
 		tag(c, a.T("近期用过"), p.Warning, p.WarningSubtle)
 	default:
@@ -422,7 +444,7 @@ func (a *App) entries(c *ui.Context, it itemState) {
 	for _, root := range a.visibleRoots(it.res) {
 		for _, e := range root.Entries {
 			if len(e.Versions) > 0 {
-				a.versioned(c, it, e)
+				a.versioned(c, it, e, root.EnvSrc)
 				continue
 			}
 			a.leaf(c, it, e.Name, e.Path, e.Size, e.ModTime, indentLeaf)
@@ -443,15 +465,15 @@ func indent(c *ui.Context, w float32) {
 	ui.Box(c).Width(w).Height(1).Shrink(0)
 }
 
-func (a *App) versioned(c *ui.Context, it itemState, ent core.Entry) {
+func (a *App) versioned(c *ui.Context, it itemState, ent core.Entry, env bool) {
 	p := a.pal
-	picks := versionPicks(ent)
+	picks := versionPicks(ent, env)
 	key := "p:" + ent.Path
 	open := a.open[key]
-	on, total := a.checkState(picks)
+	on, total := a.checkState(autoPicks(picks))
 	row := ui.Row(c).Height(32).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
-		ContextMenu(a.packageMenu(c, it, ent))
+		ContextMenu(a.packageMenu(c, it, ent, env))
 	row.Background(hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		indent(c, indentLeaf)

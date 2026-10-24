@@ -53,11 +53,11 @@ type App struct {
 	sortBy sortMode
 	sizeUp bool
 	// seq and stop keep a rescan from racing the scan it replaced.
-	seq  int
+	seq int
 	// pendingReceipt is the receipt of the clean that just finished, waiting
 	// for the scan about to start to verify it.
 	pendingReceipt *receipt
-	stop context.CancelFunc
+	stop           context.CancelFunc
 
 	open    map[string]bool
 	checked map[string]bool
@@ -1417,6 +1417,8 @@ func (a *App) suggestions() []suggestion {
 			picks = append(picks, picksOf(a.visibleRoots(it.res))...)
 		}
 	}
+	// A suggestion is a one-click selection, so it picks from the bulk set.
+	picks = autoPicks(picks)
 	// A path the tool rewrote minutes after the last clean is the one thing
 	// not worth pointing at: skip it when picking the big ones.
 	live := make([]core.Pick, 0, len(picks))

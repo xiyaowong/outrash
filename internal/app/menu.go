@@ -71,12 +71,15 @@ func (a *App) leafMenu(c *ui.Context, it itemState, name, path string, size int6
 
 // packageMenu is a versioned package: several versions, one of which 保留最新
 // keeps, so the menu offers that policy rather than only check and uncheck.
-func (a *App) packageMenu(c *ui.Context, it itemState, ent core.Entry) func(m *ui.Menu) {
-	picks := versionPicks(ent)
+func (a *App) packageMenu(c *ui.Context, it itemState, ent core.Entry, env bool) func(m *ui.Menu) {
+	picks := versionPicks(ent, env)
+	// 仅旧版本 goes through setChecks, which does not filter: give it the
+	// bulk set, or a menu on an env-sourced package would check its versions.
+	bulk := autoPicks(picks)
 	return func(m *ui.Menu) {
 		a.selectItems(m, picks, func(m *ui.Menu) {
 			if m.Item(a.T("仅旧版本")).Chosen() {
-				a.setChecks(picks, core.Select(picks, core.Policy{KeepNewest: true, Now: a.now}).Steps)
+				a.setChecks(bulk, core.Select(bulk, core.Policy{KeepNewest: true, Now: a.now}).Steps)
 			}
 		})
 		m.Separator()
@@ -144,6 +147,9 @@ func (a *App) familyMenu(g groupState) func(m *ui.Menu) {
 // submenu keeps each label down to the word that differs, and keeps 选择 out
 // of every row of the parent menu, where it would read as the whole list.
 func (a *App) selectItems(m *ui.Menu, picks []core.Pick, extra func(m *ui.Menu)) {
+	// The menu's verbs are one-click selections, so they see the bulk set:
+	// env-sourced roots answer to a check on their own rows, not to 全选.
+	picks = autoPicks(picks)
 	m.Submenu(a.T("选择"), func(sub *ui.Menu) {
 		on, _ := a.checkState(picks)
 		if sub.Item(fmt.Sprintf(a.T("全选 %d 项"), len(picks))).Chosen() {
@@ -237,13 +243,13 @@ func (a *App) clearPicks(picks []core.Pick) {
 }
 
 // versionPicks is the leaves of one versioned package, in the order the scan
-// listed them.
-func versionPicks(ent core.Entry) []core.Pick {
+// listed them. env carries the root's source through to the picks.
+func versionPicks(ent core.Entry, env bool) []core.Pick {
 	picks := make([]core.Pick, 0, len(ent.Versions))
 	for _, v := range ent.Versions {
 		picks = append(picks, core.Pick{
 			Path: v.Path, Name: ent.Name + " " + v.Name, Bytes: v.Size,
-			ModTime: v.ModTime, Package: ent.Name,
+			ModTime: v.ModTime, Package: ent.Name, EnvSrc: env,
 		})
 	}
 	return picks

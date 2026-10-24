@@ -90,6 +90,18 @@ func (r Result) Failed() bool {
 	return roots > 0 || paths > 0
 }
 
+// EnvSourced reports whether any root of this result was named by an
+// environment variable. Such a root is a claim to read, not a cache
+// anything vouches for, which the window says where the status column does.
+func (r Result) EnvSourced() bool {
+	for _, root := range r.Roots {
+		if root.EnvSrc {
+			return true
+		}
+	}
+	return false
+}
+
 // Cache is everything one scan found, keyed by group and item.
 type Cache struct {
 	At      time.Time
@@ -163,8 +175,11 @@ func isLink(info fs.FileInfo) bool {
 	return m&fs.ModeSymlink != 0 || m&fs.ModeIrregular != 0
 }
 
-// covers reports whether dir is p itself or an ancestor of it.
+// covers reports whether dir is p itself or an ancestor of it. Both sides go
+// through longPath first: Windows keeps 8.3 aliases of real paths, and a
+// short-spelled root would lexically miss the home it really holds.
 func covers(dir, p string) bool {
+	dir, p = longPath(dir), longPath(p)
 	rel, err := filepath.Rel(dir, p)
 	if err != nil {
 		return false
