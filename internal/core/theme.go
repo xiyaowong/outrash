@@ -1,10 +1,11 @@
 // theme.go holds outrash's colors and type scale.
 //
-// The look is an IDE tool window: a cool, almost-white ground with the work
-// surface lifted off it, one saturated blue for the action and for what is
-// selected, and status colours that arrive as soft pills rather than as text
-// on a table. Depth comes from a barely-there vertical wash and from a shadow
-// under whatever floats, so the window reads as layered instead of drawn.
+// The look follows GitHub's Primer design language: a near-white canvas under
+// a white work surface, foregrounds in three stepped greys, one saturated blue
+// for the accent and for what is selected, a green reserved for the one
+// primary action, and status colours that arrive as Primer labels — dark text
+// on the token's subtle ground — rather than as text on the table. Depth comes
+// from a barely-there vertical wash and from a shadow under whatever floats.
 package core
 
 import "github.com/egoist/mygo/ui"
@@ -21,55 +22,74 @@ type Palette struct {
 	Ink3        ui.Color // column labels, captions
 	Rule        ui.Color // 1px separators
 	RuleStrong  ui.Color // control outlines, empty tracks
-	Accent      ui.Color // the one action, active nav marker
-	AccentHover ui.Color // the action under the pointer
+	Accent      ui.Color // the accent: links, active nav marker, check marks
+	AccentHover ui.Color // the accent under the pointer
 	AccentSoft  ui.Color // accent at a tint: a chip under the press
-	OnAccent    ui.Color // label on the accent
-	Danger      ui.Color
-	Success     ui.Color
-	Warning     ui.Color
-	Dark        bool
+	// Confirm is Primer's success emphasis: the one primary button, kept
+	// apart from the accent so the single destructive-ish action reads as
+	// the page's green, not as another link.
+	Confirm      ui.Color
+	ConfirmHover ui.Color
+	OnAccent     ui.Color // label on the accent and on confirm
+	Danger       ui.Color
+	Success      ui.Color
+	Warning      ui.Color
+	// The label grounds: status pills sit on their token's subtle colour.
+	DangerSubtle  ui.Color
+	SuccessSubtle ui.Color
+	WarningSubtle ui.Color
+	Dark          bool
 }
 
 var (
 	Light = Palette{
-		Canvas:      ui.Hex("#F1F4F8"),
-		Surface:     ui.Hex("#FFFFFF"),
-		Panel:       ui.Hex("#F8FAFC"),
-		Hover:       ui.Hex("#F1F4F8"),
-		Selected:    ui.Hex("#E7EFFD"),
-		Ink:         ui.Hex("#171B21"),
-		Ink2:        ui.Hex("#5A6472"),
-		Ink3:        ui.Hex("#8B94A1"),
-		Rule:        ui.Hex("#E6EAF0"),
-		RuleStrong:  ui.Hex("#CFD6E0"),
-		Accent:      ui.Hex("#3574F0"),
-		AccentHover: ui.Hex("#2A62D8"),
-		AccentSoft:  ui.Hex("#E7EFFD"),
-		OnAccent:    ui.Hex("#FFFFFF"),
-		Danger:      ui.Hex("#D93F3F"),
-		Success:     ui.Hex("#1E8E5A"),
-		Warning:     ui.Hex("#C27A0A"),
+		Canvas:        ui.Hex("#F6F8FA"), // canvas.subtle
+		Surface:       ui.Hex("#FFFFFF"), // canvas.default
+		Panel:         ui.Hex("#F6F8FA"),
+		Hover:         ui.Hex("#F3F4F6"),
+		Selected:      ui.Hex("#DDF4FF"), // accent.subtle
+		Ink:           ui.Hex("#1F2328"), // fg.default
+		Ink2:          ui.Hex("#59636E"), // fg.muted
+		Ink3:          ui.Hex("#818B98"), // fg.subtle
+		Rule:          ui.Hex("#D8DEE4"), // border.muted
+		RuleStrong:    ui.Hex("#D1D9E0"), // border.default
+		Accent:        ui.Hex("#0969DA"), // accent.emphasis
+		AccentHover:   ui.Hex("#0550AE"),
+		AccentSoft:    ui.Hex("#DDF4FF"),
+		Confirm:       ui.Hex("#1F883D"), // success.emphasis
+		ConfirmHover:  ui.Hex("#1A7F37"),
+		OnAccent:      ui.Hex("#FFFFFF"),
+		Danger:        ui.Hex("#D1242F"), // danger.fg
+		Success:       ui.Hex("#1A7F37"), // success.fg
+		Warning:       ui.Hex("#9A6700"), // attention.fg
+		DangerSubtle:  ui.Hex("#FFEBE9"),
+		SuccessSubtle: ui.Hex("#DAFBE1"),
+		WarningSubtle: ui.Hex("#FFF8C5"),
 	}
 	DarkPalette = Palette{
-		Canvas:      ui.Hex("#1B1D22"),
-		Surface:     ui.Hex("#22252B"),
-		Panel:       ui.Hex("#1F2227"),
-		Hover:       ui.Hex("#2A2E35"),
-		Selected:    ui.Hex("#2B3A57"),
-		Ink:         ui.Hex("#EDEFF3"),
-		Ink2:        ui.Hex("#A6AEBB"),
-		Ink3:        ui.Hex("#7B8492"),
-		Rule:        ui.Hex("#31353C"),
-		RuleStrong:  ui.Hex("#454B55"),
-		Accent:      ui.Hex("#6E9BF5"),
-		AccentHover: ui.Hex("#8AB0F8"),
-		AccentSoft:  ui.Hex("#2B3A57"),
-		OnAccent:    ui.Hex("#101317"),
-		Danger:      ui.Hex("#EB6A6A"),
-		Success:     ui.Hex("#5FC28D"),
-		Warning:     ui.Hex("#DDA353"),
-		Dark:        true,
+		Canvas:        ui.Hex("#0D1117"), // canvas.default
+		Surface:       ui.Hex("#161B22"), // canvas.subtle
+		Panel:         ui.Hex("#10161D"),
+		Hover:         ui.Hex("#21262D"),
+		Selected:      ui.Hex("#13376C"), // accent.muted on the canvas
+		Ink:           ui.Hex("#E6EDF3"), // fg.default
+		Ink2:          ui.Hex("#8B949E"), // fg.muted
+		Ink3:          ui.Hex("#6E7681"), // fg.subtle
+		Rule:          ui.Hex("#21262D"), // border.muted
+		RuleStrong:    ui.Hex("#30363D"), // border.default
+		Accent:        ui.Hex("#1F6FEB"), // accent.emphasis
+		AccentHover:   ui.Hex("#388BFD"),
+		AccentSoft:    ui.Hex("#13376C"),
+		Confirm:       ui.Hex("#238636"),
+		ConfirmHover:  ui.Hex("#2EA043"),
+		OnAccent:      ui.Hex("#FFFFFF"),
+		Danger:        ui.Hex("#F85149"),
+		Success:       ui.Hex("#3FB950"),
+		Warning:       ui.Hex("#D29922"),
+		DangerSubtle:  ui.Hex("#25171C"),
+		SuccessSubtle: ui.Hex("#12261E"),
+		WarningSubtle: ui.Hex("#272115"),
+		Dark:          true,
 	}
 )
 
@@ -77,9 +97,9 @@ var (
 // from here, so the title strip does not sit as a flat band on the page.
 func (p *Palette) Wash() ui.Color {
 	if p.Dark {
-		return ui.Hex("#232730")
+		return ui.Hex("#161B22")
 	}
-	return ui.Hex("#FAFBFD")
+	return ui.Hex("#F6F8FA")
 }
 
 // Mono is the family for paths, byte counts and versions: data reads as data.

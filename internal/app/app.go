@@ -1146,7 +1146,7 @@ func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, f
 		fg = p.Ink3
 		bg = ui.Transparent
 	case primary:
-		bg, fg, edge = p.Accent, p.OnAccent, ui.Transparent
+		bg, fg, edge = p.Confirm, p.OnAccent, ui.Transparent
 	}
 	if enabled {
 		btn.Cursor(ui.CursorPointer).OnClick(fn)
@@ -1156,7 +1156,7 @@ func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, f
 	switch {
 	case !enabled:
 	case primary && (btn.Pressed() || btn.Hovered()):
-		bg = p.AccentHover
+		bg = p.ConfirmHover
 	case btn.Pressed():
 		bg, edge = p.Selected, p.Accent
 	case btn.Hovered():
@@ -1169,7 +1169,7 @@ func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, f
 		btn.Border(1, edge)
 	}
 	if primary && enabled {
-		btn.Shadow(0, 2, 6, 0, tint(p.Accent, p.Surface, 0.24))
+		btn.Shadow(0, 2, 6, 0, tint(p.Confirm, p.Surface, 0.24))
 	}
 	btn.Children(func() { ui.Text(c, label).FontSize(12).FontWeight(600).TextColor(fg).SingleLine() })
 }

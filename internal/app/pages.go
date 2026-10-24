@@ -42,11 +42,11 @@ func (a *App) logBlock(c *ui.Context, r runRecord) {
 			ui.Spacer(c)
 			switch {
 			case r.failed > 0:
-				tag(c, fmt.Sprintf("%d 项失败", r.failed), p.Danger, p.Surface)
+				tag(c, fmt.Sprintf("%d 项失败", r.failed), p.Danger, p.DangerSubtle)
 			case r.freed == 0 && r.gone == 0:
-				tag(c, "无可删除", p.Warning, p.Surface)
+				tag(c, "无可删除", p.Warning, p.WarningSubtle)
 			default:
-				tag(c, "完成", p.Success, p.Surface)
+				tag(c, "完成", p.Success, p.SuccessSubtle)
 			}
 		})
 		for _, line := range r.lines {

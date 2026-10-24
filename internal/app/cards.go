@@ -336,11 +336,11 @@ func (a *App) familyTag(c *ui.Context, g groupState) {
 	}
 	switch {
 	case failed:
-		tag(c, "读取不全", p.Danger, p.Surface)
+		tag(c, "读取不全", p.Danger, p.DangerSubtle)
 	case recent:
-		tag(c, "近期用过", p.Warning, p.Surface)
+		tag(c, "近期用过", p.Warning, p.WarningSubtle)
 	default:
-		tag(c, "可清理", p.Success, p.Surface)
+		tag(c, "可清理", p.Success, p.SuccessSubtle)
 	}
 }
 
@@ -351,11 +351,11 @@ func (a *App) statusTag(c *ui.Context, res core.Result) {
 	p := a.pal
 	switch {
 	case res.Failed():
-		tag(c, "读取不全", p.Danger, p.Surface)
+		tag(c, "读取不全", p.Danger, p.DangerSubtle)
 	case a.recent(res):
-		tag(c, "近期用过", p.Warning, p.Surface)
+		tag(c, "近期用过", p.Warning, p.WarningSubtle)
 	default:
-		tag(c, "可清理", p.Success, p.Surface)
+		tag(c, "可清理", p.Success, p.SuccessSubtle)
 	}
 }
 
@@ -526,7 +526,7 @@ func (a *App) leaf(c *ui.Context, it itemState, name, path string, size int64, m
 			Shrink(0).Width(colSize).TextAlign(ui.End)
 		ui.Box(c).Width(colStatus).Shrink(0).AlignItems(ui.Center).Children(func() {
 			if failed {
-				tag(c, "失败", p.Danger, p.Surface)
+				tag(c, "失败", p.Danger, p.DangerSubtle)
 			}
 		})
 		ui.Box(c).Width(24).Shrink(0)
