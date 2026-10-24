@@ -15,8 +15,9 @@ import (
 // other test asserts, so this one restores it.
 func TestTogglesToEnglish(t *testing.T) {
 	defer core.SetLang("zh")
-	core.SetLang("en")
 	a := testApp(t, false)
+	// The harness pins Chinese, so English comes after the app exists.
+	core.SetLang("en")
 	a.now = fixedTime(0)
 	tt := ui.NewTester(a.view, 1200, 780)
 	a.page = pageResults
@@ -47,6 +48,10 @@ func TestTogglesToEnglish(t *testing.T) {
 // TestLangRoundTrip checks that a choice survives to the next run: written to
 // the temp file on toggle, read back before the window opens.
 func TestLangRoundTrip(t *testing.T) {
+	// The fallback path below runs the real detection, which answers en on a
+	// runner with no locale set — every test after this one asserts Chinese,
+	// so the language goes back before the test ends.
+	defer core.SetLang("zh")
 	dir := t.TempDir()
 	old := langFile
 	langFile = func() string { return filepath.Join(dir, "lang") }
