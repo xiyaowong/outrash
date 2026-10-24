@@ -23,10 +23,8 @@ func SetLang(l string) {
 	defer langMu.Unlock()
 	if l == "en" {
 		lang = "en"
-		ErrUnsafe = errUnsafeEn
 	} else {
 		lang = "zh"
-		ErrUnsafe = errUnsafeZh
 	}
 }
 
@@ -160,12 +158,21 @@ var noteEN = map[string]string{
 	"可用 npx cypress install 重新下载":    "Re-download with npx cypress install",
 }
 
-// unsafeErr is ErrUnsafe read under the language lock: the cleaner's
-// goroutines meet it while the window may be re-pointing it.
+// unsafeError carries the localized refusal sentence around the ErrUnsafe
+// sentinel. It wraps at creation, in the language of that moment: an error
+// already made keeps its words after a switch, which is what the report
+// sheet wants, while errors.Is matches the sentinel forever.
+type unsafeError struct{ msg string }
+
+func (e unsafeError) Error() string { return e.msg }
+func (e unsafeError) Unwrap() error { return ErrUnsafe }
+
+// unsafeErr is the cleaner's refusal, phrased in the current language. It is
+// read from scan and clean workers' goroutines; the sentence is built from
+// the locked language read, and ErrUnsafe itself never moves.
 func unsafeErr() error {
-	langMu.RLock()
-	defer langMu.RUnlock()
-	return ErrUnsafe
+	return unsafeError{msg: L("拒绝删除：不在扫描范围内，或路径过于靠近根目录",
+		"refusing to delete: outside the scanned roots, or too close to a drive root")}
 }
 
 // joinList joins names the way the current language reads.
