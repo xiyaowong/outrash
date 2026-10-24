@@ -24,7 +24,9 @@ func (a *App) logPage(c *ui.Context) {
 			})
 			return
 		}
-		ui.Column(c).Fill().AlignItems(ui.Start).Gap(16).Children(func() {
+		// Blocks stretch to the column: a separator that only spans its row's
+		// content reads as the error line's underline, not a table rule.
+		ui.Column(c).Fill().Gap(16).Children(func() {
 			for i := len(a.log) - 1; i >= 0; i-- {
 				a.logBlock(c, a.log[i])
 			}
