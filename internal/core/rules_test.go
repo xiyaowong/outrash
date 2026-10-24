@@ -55,7 +55,7 @@ func TestRootsPrefersEnvironment(t *testing.T) {
 		"NUGET_PACKAGES": packages,
 		"LOCALAPPDATA":   localAppData,
 	})}
-	dirs, source := it.Roots(o)
+	dirs, source, _ := it.Roots(o)
 	if len(dirs) != 1 || dirs[0] != packages {
 		t.Fatalf("dirs %v", dirs)
 	}
@@ -70,7 +70,7 @@ func TestRootsSkipsTemplateWithoutVariable(t *testing.T) {
 		"windows": {strings.Join([]string{"%UNSET%", "cache"}, sep()), "~" + sep() + "fallback"},
 	}}
 	o := Options{GOOS: "windows", Home: home, Getenv: env(nil)}
-	dirs, source := it.Roots(o)
+	dirs, source, _ := it.Roots(o)
 	if len(dirs) != 1 || dirs[0] != filepath.Join(home, "fallback") {
 		t.Fatalf("dirs %v", dirs)
 	}
@@ -90,7 +90,7 @@ func TestRootsProbesOnlyWhenNothingExists(t *testing.T) {
 		ran++
 		return real + "\n", nil
 	}}
-	dirs, source := it.Roots(o)
+	dirs, source, _ := it.Roots(o)
 	if ran != 1 || source != "tool config get cache" {
 		t.Fatalf("ran %d source %q", ran, source)
 	}
@@ -110,7 +110,7 @@ func TestRootsNeverProbesWhenDefaultExists(t *testing.T) {
 		t.Fatal("probe should not run")
 		return "", nil
 	}}
-	if _, source := it.Roots(o); source != "默认位置" {
+	if _, source, _ := it.Roots(o); source != "默认位置" {
 		t.Fatalf("source %q", source)
 	}
 }
@@ -146,7 +146,7 @@ func TestRootsExpandsWildcardToExistingProfiles(t *testing.T) {
 	}
 	o := Options{GOOS: "windows", Home: home, Getenv: env(map[string]string{"LOCALAPPDATA": home})}
 	roots := func(pattern ...string) []string {
-		dirs, _ := Item{Paths: map[string][]string{"windows": pattern}}.Roots(o)
+		dirs, _, _ := Item{Paths: map[string][]string{"windows": pattern}}.Roots(o)
 		return dirs
 	}
 

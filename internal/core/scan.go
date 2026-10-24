@@ -43,6 +43,11 @@ type Version struct {
 type Root struct {
 	Path   string
 	Source string
+	// EnvSrc marks a root an environment variable pointed at. It is scanned
+	// and listed, but the recommendation leaves it unchecked: a mis-set
+	// variable would otherwise turn one click into a sweep of whatever it
+	// names.
+	EnvSrc bool
 	Size   int64
 	Count  int
 	// Entries is what the root holds, largest first.
@@ -158,8 +163,17 @@ func isLink(info fs.FileInfo) bool {
 	return m&fs.ModeSymlink != 0 || m&fs.ModeIrregular != 0
 }
 
+// covers reports whether dir is p itself or an ancestor of it.
+func covers(dir, p string) bool {
+	rel, err := filepath.Rel(dir, p)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (!strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel))
+}
+
 func scanItem(groupID string, it Item, o Options, stop <-chan struct{}) Result {
-	dirs, source := it.Roots(o)
+	dirs, source, fromEnv := it.Roots(o)
 	r := Result{GroupID: groupID, ItemID: it.ID, Unit: it.Unit}
 	for _, d := range dirs {
 		select {
@@ -180,6 +194,13 @@ func scanItem(groupID string, it Item, o Options, stop <-chan struct{}) Result {
 		}
 		if isLink(info) {
 			r.Err = errors.Join(r.Err, fmt.Errorf(L("%s: 缓存根是链接，不扫描", "%s: cache root is a link; skipped"), d))
+			continue
+		}
+		// A root that covers the home directory itself is one mis-set
+		// environment variable away from sweeping everything the user owns.
+		// No catalog root may contain the home.
+		if o.Home != "" && covers(d, o.Home) {
+			r.Err = errors.Join(r.Err, fmt.Errorf(L("%s: 缓存根包含用户主目录，不扫描", "%s: cache root contains the home directory; skipped"), d))
 			continue
 		}
 		if !info.IsDir() {
@@ -204,7 +225,7 @@ func scanItem(groupID string, it Item, o Options, stop <-chan struct{}) Result {
 			}
 		}
 		root := Root{
-			Path: d, Source: source,
+			Path: d, Source: source, EnvSrc: fromEnv,
 			Entries: l.entries, Size: l.size, Count: l.count,
 			Skipped: l.bad, Err: l.err,
 		}

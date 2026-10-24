@@ -340,7 +340,20 @@ func (a *App) recommend() {
 	pol := core.Policy{StaleDays: a.cfg.StaleDays, KeepNewest: true, Now: a.now}
 	for _, g := range a.groups {
 		for _, it := range g.items {
-			picks := allPicks(it.res)
+			// A root an environment variable pointed at is trusted only as
+			// far as being listed: the tool's config names it, but nothing
+			// vouches for what the value is, and a mis-set variable must not
+			// turn one click into a sweep of whatever it holds. Its rows
+			// stay unchecked for the user to read and decide.
+			var picks []core.Pick
+			for _, r := range it.res.Roots {
+				if !r.EnvSrc {
+					picks = append(picks, picksOf([]core.Root{r})...)
+				}
+			}
+			if len(picks) == 0 {
+				continue
+			}
 			pol := pol
 			if !anyVersioned(picks) {
 				// A plain cache has no newest to keep: age alone decides.
