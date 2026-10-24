@@ -162,15 +162,18 @@ func runOnce(name string, args []string) (string, error) {
 }
 
 // Roots returns the directories this item may keep files in, existing or
-// not, in the order they should be tried.
-func (it Item) Roots(o Options) (dirs []string, source string) {
+// not, in the order they should be tried. fromEnv marks the roots an
+// environment variable named: the tool's own config says where to look, but
+// nothing vouches for what the value actually is, so callers treat those
+// roots as a claim to display, not as a verified cache.
+func (it Item) Roots(o Options) (dirs []string, source string, fromEnv bool) {
 	for _, name := range it.Env {
 		if v := strings.TrimSpace(o.Getenv(name)); v != "" {
 			if d, ok := clean(v, o); ok {
 				dirs = append(dirs, d)
 			}
 			if len(dirs) > 0 {
-				return dirs, L("环境变量 ", "Environment variable ") + name
+				return dirs, L("环境变量 ", "Environment variable ") + name, true
 			}
 		}
 	}
@@ -195,18 +198,18 @@ func (it Item) Roots(o Options) (dirs []string, source string) {
 	}
 	dirs = unique(dirs)
 	if anyExists(dirs) {
-		return dirs, L("默认位置", "Default location")
+		return dirs, L("默认位置", "Default location"), false
 	}
 	if it.Probe != nil && o.Run != nil {
 		if out, err := o.Run(it.Probe.Cmd, it.Probe.Args); err == nil {
 			if d, ok := clean(out, o); ok {
 				if exists(d) {
-					return append(dirs, d), it.Probe.Cmd + " " + strings.Join(it.Probe.Args, " ")
+					return append(dirs, d), it.Probe.Cmd + " " + strings.Join(it.Probe.Args, " "), false
 				}
 			}
 		}
 	}
-	return dirs, L("默认位置", "Default location")
+	return dirs, L("默认位置", "Default location"), false
 }
 
 // expand resolves ~ and %VAR% in a path template. It reports false when a

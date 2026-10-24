@@ -284,8 +284,8 @@ var en = map[string]string{
 	"English": "English",
 
 	// Theme toggle.
-	"切换主题":      "Theme",
-	"切换为浅色":     "Switch to light",
-	"切换为深色":     "Switch to dark",
-	"切换为跟随系统":   "Follow the system",
+	"切换主题":    "Theme",
+	"切换为浅色":   "Switch to light",
+	"切换为深色":   "Switch to dark",
+	"切换为跟随系统": "Follow the system",
 }
