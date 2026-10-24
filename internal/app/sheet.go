@@ -349,8 +349,12 @@ func (a *App) run() {
 	go func() {
 		out := a.remove(pl, roots, func(done, total int64) {
 			pr.set(done, total)
-			// The title bar shows the estimate, so the frame has to follow
-			// the removal rather than wait for it.
+			// The title bar carries the estimate; the taskbar, dock or
+			// launcher carries a bar of its own, on whichever surface the
+			// user turned away to.
+			if a.Window != nil {
+				a.Window.SetProgressBar(mygo.ProgressBar{Value: float64(done) / float64(total)})
+			}
 			a.repaint()
 		}, func(r core.Removal) {
 			a.fx.add(r)
@@ -368,6 +372,9 @@ func (a *App) run() {
 // the deletion would list paths that no longer exist.
 func (a *App) finish(out core.Outcome) {
 	a.busy = false
+	if a.Window != nil {
+		a.Window.SetProgressBar(mygo.ProgressBar{})
+	}
 	r := a.report
 	if r == nil {
 		r = &report{}

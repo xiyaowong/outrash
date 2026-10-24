@@ -53,6 +53,23 @@ jobs:
           pack linux amd64 ""
           pack linux arm64 ""
 
+      # The packaged forms on top of the plain binaries: a .app bundle for
+      # macOS, a deb and an installable tarball for Linux. mygo build
+      # cross-compiles them from this runner; signing and disk images are the
+      # parts that need macOS, so the bundle ships unsigned.
+      - name: Package
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          jq --arg v "$VERSION" '.version = $v' mygo.json > mygo.json.tmp && mv mygo.json.tmp mygo.json
+          go tool mygo build -skip-dmg -o out/pack \
+            -platform darwin/amd64,darwin/arm64,linux/amd64,linux/arm64
+          for d in out/pack/darwin-*; do
+            arch=${d##*/darwin-}
+            (cd "$d" && zip -qry "../../outrash-$VERSION-darwin-$arch.app.zip" outrash.app)
+          done
+          cp out/pack/linux-*/outrash_*.deb out/pack/linux-*/outrash-*.tar.gz out/
+
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true

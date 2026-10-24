@@ -102,11 +102,13 @@ func (p *Palette) Wash() ui.Color {
 	return ui.Hex("#F6F8FA")
 }
 
-// Mono is the family for paths, byte counts and versions: data reads as data.
-func Mono() string { return "Consolas" }
+// Mono is the family for paths, byte counts and versions: data reads as
+// data. The list walks each platform's monospaced face, ending at the
+// system's own, so no target ships a font it does not have.
+func Mono() string { return "Consolas, Menlo, monospace" }
 
 // Display is the family for the screen title.
-func Display() string { return "Segoe UI Variable Display" }
+func Display() string { return "Segoe UI Variable Display, system-ui" }
 
 // textZoom is a session-only multiplier on the type scale. Nothing in the
 // interface offers or explains it; it resets when the window closes.
