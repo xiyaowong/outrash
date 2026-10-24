@@ -69,7 +69,14 @@ func removePlan(p *Plan, roots []string, progress func(done, total int64), onSte
 		case err != nil:
 			r.Err = err
 		default:
-			if err := os.RemoveAll(s.Path); err != nil {
+			// One step can hold most of the plan's bytes on its own, so it
+			// goes file by file and the estimate follows the walk instead of
+			// sitting still until the whole step is over.
+			if err := removeTree(s.Path, func(n int64) {
+				if progress != nil {
+					progress(done+n, p.Bytes)
+				}
+			}); err != nil {
 				r.Err = err
 			} else {
 				out.Freed += s.Bytes
@@ -89,6 +96,84 @@ func removePlan(p *Plan, roots []string, progress func(done, total int64), onSte
 	}
 	out.Elapsed = time.Since(start)
 	return out
+}
+
+// removeTree deletes the tree at root bottom-up, reporting the bytes gone so
+// far. It removes what os.RemoveAll would, with the same rule the cleaner is
+// built on: a link is unlinked, never entered.
+func removeTree(root string, report func(int64)) error {
+	if report == nil {
+		report = func(int64) {}
+	}
+	info, err := os.Lstat(root)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil // the cache went away between the scan and the run
+		}
+		return err
+	}
+	if !info.IsDir() {
+		// A plan step can be one file, as the extension caches are.
+		if err := removePath(root); err != nil {
+			return err
+		}
+		report(info.Size())
+		return nil
+	}
+	var removed int64
+	if err := removeBelow(root, &removed, report); err != nil {
+		return err
+	}
+	return removePath(root)
+}
+
+// removeBelow empties dir bottom-up. DirEntry.IsDir is false for links, so a
+// junction or symlink inside the cache is unlinked where it sits rather than
+// walked through: the scan refuses a root behind a link, and the walk must
+// not reopen that door from inside the tree.
+func removeBelow(dir string, removed *int64, report func(int64)) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil // the cache went away under the walk
+		}
+		return err
+	}
+	for _, e := range entries {
+		p := filepath.Join(dir, e.Name())
+		if info, err := e.Info(); err == nil {
+			*removed += info.Size()
+		}
+		if e.IsDir() {
+			if err := removeBelow(p, removed, report); err != nil {
+				return err
+			}
+		}
+		if err := removePath(p); err != nil {
+			return err
+		}
+		if !e.IsDir() {
+			report(*removed)
+		}
+	}
+	return nil
+}
+
+// removePath is one unlink, with the retry RemoveAll does: caches mark files
+// read-only, and on Windows the bit clears with a chmod.
+func removePath(p string) error {
+	err := os.Remove(p)
+	if err == nil || errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if info, ierr := os.Lstat(p); ierr == nil {
+		if err := os.Chmod(p, info.Mode()|0o222); err == nil {
+			if err := os.Remove(p); err == nil || errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+		}
+	}
+	return err
 }
 
 func check(p string, roots []string) error {

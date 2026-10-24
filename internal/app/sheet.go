@@ -348,6 +348,7 @@ func (a *App) run() {
 			a.repaint()
 		}, func(r core.Removal) {
 			a.fx.add(r)
+			pr.stepDone()
 			a.repaint()
 		})
 		// The last rows need fxTail to finish their strike; the rescan
