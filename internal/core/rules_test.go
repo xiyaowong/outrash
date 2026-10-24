@@ -22,16 +22,42 @@ func TestParseFillsDefaults(t *testing.T) {
 
 func TestParseRejectsBadCatalog(t *testing.T) {
 	cases := map[string]string{
-		"no id":        `{"groups":[{"name":"G"}]}`,
-		"dup group":    `{"groups":[{"id":"g","name":"G"},{"id":"g","name":"H"}]}`,
-		"dup item":     `{"groups":[{"id":"g","name":"G","items":[{"id":"i","name":"I"},{"id":"i","name":"J"}]}]}`,
-		"unknown unit": `{"groups":[{"id":"g","name":"G","items":[{"id":"i","name":"I","unit":"files"}]}]}`,
-		"bad json":     `{`,
+		"no id":          `{"groups":[{"name":"G"}]}`,
+		"dup group":      `{"groups":[{"id":"g","name":"G"},{"id":"g","name":"H"}]}`,
+		"dup item":       `{"groups":[{"id":"g","name":"G","items":[{"id":"i","name":"I"},{"id":"i","name":"J"}]}]}`,
+		"unknown unit":   `{"groups":[{"id":"g","name":"G","items":[{"id":"i","name":"I","unit":"files"}]}]}`,
+		"deep too far":   `{"groups":[{"id":"g","name":"G","items":[{"id":"i","name":"I","depth":5}]}]}`,
+		"deep negative":  `{"groups":[{"id":"g","name":"G","items":[{"id":"i","name":"I","depth":-1}]}]}`,
+		"deep versioned": `{"groups":[{"id":"g","name":"G","items":[{"id":"i","name":"I","unit":"versioned","depth":2}]}]}`,
+		"bad json":       `{`,
 	}
 	for name, doc := range cases {
 		if _, err := Parse([]byte(doc)); err == nil {
 			t.Errorf("%s: expected an error", name)
 		}
+	}
+}
+
+// An unset depth reads as the old shallow listing; the catalog's own deep
+// entries must stay within the range Parse accepts.
+func TestParseDepthDefaultsToOne(t *testing.T) {
+	c, err := Parse(Rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deep := 0
+	for _, g := range c.Groups {
+		for _, it := range g.Items {
+			if it.Depth == 0 {
+				t.Errorf("%s/%s: Parse left depth unset", g.ID, it.ID)
+			}
+			if it.Depth > 1 {
+				deep++
+			}
+		}
+	}
+	if deep == 0 {
+		t.Error("the catalog no longer names any deep cache; the depth support is untested by the catalog itself")
 	}
 }
 

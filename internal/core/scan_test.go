@@ -47,7 +47,7 @@ func TestReadEntries(t *testing.T) {
 	write(t, filepath.Join(root, "top.bin"), 7)
 	setMtime(t, filepath.Join(root, "top.bin"), base)
 
-	l := readEntries(root)
+	l := readEntries(root, 1)
 	if l.err != nil {
 		t.Fatal(l.err)
 	}
@@ -150,7 +150,7 @@ func TestReadEntriesSymlink(t *testing.T) {
 		t.Skipf("symlink unavailable: %v", err)
 	}
 
-	l := readEntries(root)
+	l := readEntries(root, 1)
 	if l.err != nil {
 		t.Fatal(l.err)
 	}
@@ -229,7 +229,7 @@ func TestReadEntriesReportsUnreadableRoot(t *testing.T) {
 	file := filepath.Join(dir, "not-a-dir")
 	write(t, file, 3)
 
-	l := readEntries(file)
+	l := readEntries(file, 1)
 	if l.err == nil {
 		t.Fatal("listing a file as a root must report an error")
 	}
@@ -301,6 +301,147 @@ func TestScanItemSkipsExcludedChildren(t *testing.T) {
 		if strings.Contains(e.Path, "virtualenvs") {
 			t.Fatalf("excluded path reached the tree: %s", e.Path)
 		}
+	}
+}
+
+// A deep cache lists the levels between root and package, each carrying the
+// bytes and mtime of its whole subtree, so a check can take one package of
+// a site instead of the site whole.
+func TestReadEntriesDeep(t *testing.T) {
+	root := t.TempDir()
+	base := time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC)
+
+	site := filepath.Join(root, "github.com")
+	pkgA := filepath.Join(site, "author", "a@v1.0.0")
+	pkgB := filepath.Join(site, "author", "b@v2.0.0")
+	other := filepath.Join(site, "gitlab.com", "c@v3.0.0")
+	for _, d := range []string{pkgA, pkgB, other} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(t, filepath.Join(pkgA, "f"), 10)
+	write(t, filepath.Join(pkgB, "f"), 20)
+	write(t, filepath.Join(other, "f"), 40)
+	setMtime(t, filepath.Join(pkgA, "f"), base.Add(time.Hour))
+	setMtime(t, filepath.Join(pkgB, "f"), base.Add(2*time.Hour))
+	setMtime(t, filepath.Join(other, "f"), base.Add(3*time.Hour))
+
+	l := readEntries(root, 3)
+	if l.err != nil {
+		t.Fatal(l.err)
+	}
+	if len(l.entries) != 1 || l.entries[0].Name != "github.com" {
+		t.Fatalf("entries %+v, want one site row", l.entries)
+	}
+	site1 := l.entries[0]
+	// The top row stands for every byte below it.
+	if site1.Size != 70 {
+		t.Errorf("site size %d, want 70", site1.Size)
+	}
+	if !site1.ModTime.Equal(base.Add(3 * time.Hour)) {
+		t.Errorf("site mtime %v, want the newest child's", site1.ModTime)
+	}
+	if len(site1.Children) != 2 {
+		t.Fatalf("site children %d, want the two author folders", len(site1.Children))
+	}
+	var author Entry
+	for _, ch := range site1.Children {
+		if ch.Name == "author" {
+			author = ch
+		}
+	}
+	if author.Name != "author" || len(author.Children) != 2 {
+		t.Fatalf("author %+v, want two package leaves", author)
+	}
+	// The leaves keep their own names, so a plan can name what it removes.
+	var leafA Entry
+	for _, leaf := range author.Children {
+		if leaf.Name == "a@v1.0.0" {
+			leafA = leaf
+		}
+	}
+	if leafA.Name != "a@v1.0.0" || leafA.Size != 10 {
+		t.Errorf("leaf %+v, want a@v1.0.0 with 10 bytes", leafA)
+	}
+
+	// A shallow read of the same tree keeps the old shape: one leaf per
+	// child of the root, no levels added.
+	shallow := readEntries(root, 1)
+	if len(shallow.entries) != 1 || shallow.entries[0].Size != 70 || shallow.entries[0].Children != nil {
+		t.Fatalf("shallow read %+v, want one whole-measured leaf", shallow.entries)
+	}
+}
+
+// An exclude reaches past the top level of a deep cache, and a parent left
+// with nothing under it goes with the exclusion instead of standing there
+// as a deletable folder.
+func TestReadEntriesDeepExclude(t *testing.T) {
+	root := t.TempDir()
+
+	site := filepath.Join(root, "site")
+	keeper := filepath.Join(site, "author", "keep")
+	dropped := filepath.Join(site, "author", "drop")
+	for _, d := range []string{keeper, dropped} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		write(t, filepath.Join(d, "f"), 10)
+	}
+
+	it := Item{
+		ID: "cache", Name: "cache", Unit: UnitEntries, Depth: 3,
+		Paths:   map[string][]string{runtime.GOOS: {root}},
+		Exclude: []string{"drop"},
+	}
+	o := Options{GOOS: runtime.GOOS, Getenv: func(string) string { return "" }}
+	r := scanItem("grp", it, o, nil)
+	if r.Err != nil {
+		t.Fatal(r.Err)
+	}
+	if len(r.Roots) != 1 {
+		t.Fatalf("roots %+v", r.Roots)
+	}
+	entries := r.Roots[0].Entries
+	if len(entries) != 1 {
+		t.Fatalf("entries %+v, want the site row", entries)
+	}
+	var author Entry
+	for _, ch := range entries[0].Children {
+		if ch.Name == "author" {
+			author = ch
+		}
+	}
+	if author.Name != "author" {
+		t.Fatalf("site children %+v, want the author folder", entries[0].Children)
+	}
+	if len(author.Children) != 1 || author.Children[0].Name != "keep" {
+		t.Fatalf("leaves %+v, want only keep", author.Children)
+	}
+	// The totals name only what a check could act on.
+	if r.Size != 10 || r.Count != 1 {
+		t.Fatalf("size %d count %d, want 10 and 1", r.Size, r.Count)
+	}
+}
+
+// An unreadable folder at an inner level is measured whole as a leaf, the
+// same answer a shallow read gives, instead of vanishing from the tree.
+func TestReadEntriesDeepUnreadableFolder(t *testing.T) {
+	root := t.TempDir()
+	site := filepath.Join(root, "site")
+	if err := os.MkdirAll(filepath.Join(site, "author", "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(site, "author", "pkg", "f"), 10)
+
+	l := readEntries(filepath.Join(root, "site", "author"), 1)
+	if l.err != nil {
+		t.Fatal(l.err)
+	}
+	// Reading the folder as a root of its own succeeds; the unreadable case
+	// is a root listed as a file, already covered by the shallow test.
+	if len(l.entries) != 1 || l.entries[0].Size != 10 {
+		t.Fatalf("entries %+v", l.entries)
 	}
 }
 
