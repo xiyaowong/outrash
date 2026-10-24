@@ -296,6 +296,11 @@ func New(cfg *core.Config, o core.Options, so Options) *App {
 }
 
 func (a *App) Scan() {
+	// A clean in flight must not be walked while its paths are disappearing;
+	// finish clears busy before its own rescan.
+	if a.busy {
+		return
+	}
 	a.phase = phaseScanning
 	a.msg = ""
 	a.busyBar(true)
