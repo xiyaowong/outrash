@@ -1060,7 +1060,7 @@ func (a *App) sortLabel(c *ui.Context, label string, mode sortMode, width float3
 		fg = p.Ink2
 	}
 	row := ui.Row(c).Height(30).Width(width).Shrink(0).Justify(align).
-		AlignItems(ui.Center).Gap(4).Cursor(ui.CursorPointer).OnClick(func() {
+		AlignItems(ui.Center).Gap(4).Radius(6).Cursor(ui.CursorPointer).OnClick(func() {
 		if a.sortBy == mode && mode == sortSize {
 			a.sizeUp = !a.sizeUp
 			return
@@ -1068,6 +1068,7 @@ func (a *App) sortLabel(c *ui.Context, label string, mode sortMode, width float3
 		a.sortBy = mode
 		a.sizeUp = false
 	})
+	row.Background(hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		ui.Text(c, label).FontSize(fz(11)).FontWeight(600).TextColor(fg)
 		if active && mode == sortSize {
@@ -1206,6 +1207,10 @@ func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, f
 		Shrink(0).AlignItems(ui.Center)
 	bg, fg, edge := p.Surface, p.Ink, p.RuleStrong
 	switch {
+	case !enabled && primary:
+		// Primer's disabled primary keeps its fill, at half strength, rather
+		// than turning into a ghost of the quiet button beside it.
+		bg, fg, edge = tint(p.Confirm, p.Surface, 0.5), p.OnAccent, ui.Transparent
 	case !enabled:
 		fg = p.Ink3
 		bg = ui.Transparent

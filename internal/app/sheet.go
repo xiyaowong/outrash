@@ -108,7 +108,7 @@ func (a *App) detailSheet(c *ui.Context) {
 	w, _ := c.Size()
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
-		panel.Width(min(520, w-32)).Background(p.Surface).Radius(10).Border(1, p.RuleStrong).
+		panel.Width(min(520, w-32)).Background(p.Surface).Radius(12).Border(1, p.RuleStrong).
 			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
 			ui.Column(c).Children(func() {
 				ui.Row(c).Height(64).Padding(0, 24).Gap(12).AlignItems(ui.Center).Children(func() {
@@ -163,7 +163,7 @@ func (a *App) aboutSheet(c *ui.Context) {
 	w, _ := c.Size()
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
-		panel.Width(min(400, w-32)).Background(p.Surface).Radius(10).Border(1, p.RuleStrong).
+		panel.Width(min(400, w-32)).Background(p.Surface).Radius(12).Border(1, p.RuleStrong).
 			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
 			ui.Column(c).Children(func() {
 				ui.Column(c).Padding(24, 24, 18, 24).Gap(3).Children(func() {
@@ -237,7 +237,7 @@ func (a *App) planSheet(c *ui.Context) {
 	w, _ := c.Size()
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
-		panel.Width(min(720, w-32)).Background(p.Surface).Radius(10).Border(1, p.RuleStrong).
+		panel.Width(min(720, w-32)).Background(p.Surface).Radius(12).Border(1, p.RuleStrong).
 			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
 			ui.Column(c).Children(func() {
 				ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
@@ -407,7 +407,7 @@ func (a *App) reportSheet(c *ui.Context) {
 	w, _ := c.Size()
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
-		panel.Width(min(420, w-32)).Background(p.Surface).Radius(10).Border(1, p.RuleStrong).
+		panel.Width(min(420, w-32)).Background(p.Surface).Radius(12).Border(1, p.RuleStrong).
 			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
 			ui.Column(c).Children(func() {
 				ui.Row(c).Height(64).Padding(0, 24).AlignItems(ui.Center).Children(func() {
