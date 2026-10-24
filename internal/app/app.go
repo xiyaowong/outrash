@@ -660,7 +660,7 @@ func (a *App) cleanProgress(c *ui.Context) {
 		text = fmt.Sprintf(a.T("%d/%d 项 · %s"), finished, steps, text)
 	}
 	ui.Text(c, text).Font(core.Mono()).
-		FontSize(11).TextColor(p.Ink2).Shrink(0)
+		FontSize(fz(11)).TextColor(p.Ink2).Shrink(0)
 	bar := ui.Box(c).Width(120).Height(4).Shrink(0).Background(p.RuleStrong)
 	frac := 0.0
 	if total > 0 {
@@ -952,9 +952,9 @@ func (a *App) overviewPage(c *ui.Context) {
 		ui.Column(c).Gap(6).Children(func() {
 			ui.Text(c, a.T("清理可重建缓存")).FontSize(fz(16)).FontWeight(600).TextColor(p.Ink)
 			ui.Text(c, a.T("扫描本机留下的可重建缓存，勾选后一次清理。")).
-				FontSize(12).TextColor(p.Ink2)
+				FontSize(fz(12)).TextColor(p.Ink2)
 			ui.Text(c, a.T("只列出能重新下载或重新编译的内容，清理后各工具会在下次使用时自行恢复。")).
-				FontSize(12).TextColor(p.Ink2)
+				FontSize(fz(12)).TextColor(p.Ink2)
 		})
 		ui.Row(c).Height(1).Background(p.Rule)
 		ui.Column(c).Gap(10).Children(func() {
@@ -1022,24 +1022,26 @@ func (a *App) resultsPage(c *ui.Context) {
 	})
 }
 
+// scanning is the blankslate a scan fills in as it goes.
 func (a *App) scanning(c *ui.Context) {
 	p := a.pal
-	ui.Column(c).Padding(40, 24).Gap(10).Children(func() {
+	ui.Column(c).Padding(64, 24).Gap(10).AlignItems(ui.Center).Children(func() {
 		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 			ui.Spinner(c).Width(14).Shrink(0)
 			ui.Text(c, a.T("正在扫描缓存目录")).FontSize(fz(14)).FontWeight(600).TextColor(p.Ink)
 		})
 		ui.Text(c, a.T("按环境变量优先、默认位置兜底逐个目录统计；读不到的位置会在结果里标出来。")).
-			FontSize(12).TextColor(p.Ink3)
+			FontSize(fz(12)).TextColor(p.Ink3).Width(460).TextAlign(ui.Center)
 	})
 }
 
+// emptyResults is the blankslate for a machine with nothing to clean.
 func (a *App) emptyResults(c *ui.Context) {
 	p := a.pal
-	ui.Column(c).Padding(40, 24).Gap(6).Children(func() {
+	ui.Column(c).Padding(64, 24).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, a.T("没有找到可清理的缓存")).FontSize(fz(14)).FontWeight(600).TextColor(p.Ink)
 		ui.Text(c, a.T("已检查环境变量与各工具的默认位置。安装工具并运行一次后，它们的缓存会出现在这里。")).
-			FontSize(12).TextColor(p.Ink3)
+			FontSize(fz(12)).TextColor(p.Ink3).Width(460).TextAlign(ui.Center)
 		a.actionButton(c, a.T("重新扫描"), false, true, a.Scan)
 	})
 }
@@ -1238,7 +1240,7 @@ func (a *App) textButton(c *ui.Context, label string, fn func()) {
 // the only solid fill on screen, lifted by a shadow so it sits above the bar.
 func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, fn func()) {
 	p := a.pal
-	btn := ui.ButtonBase(c).Height(30).Radius(6).Padding(0, 14).
+	btn := ui.ButtonBase(c).Height(32).Radius(6).Padding(0, 14).
 		Shrink(0).AlignItems(ui.Center)
 	bg, fg, edge := p.Surface, p.Ink, p.RuleStrong
 	switch {

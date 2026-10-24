@@ -14,18 +14,20 @@ import (
 // window closes.
 func (a *App) logPage(c *ui.Context) {
 	p := a.pal
-	ui.Column(c).Padding(24, 24, 24, 24).Gap(16).Children(func() {
+	ui.Column(c).Padding(24, 24, 24, 24).Gap(16).AlignItems(ui.Center).Children(func() {
 		if len(a.log) == 0 {
-			ui.Column(c).Gap(6).Children(func() {
+			ui.Column(c).Padding(40, 0, 0, 0).Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, a.T("本次会话还没有清理记录")).FontSize(fz(14)).FontWeight(600).TextColor(p.Ink)
 				ui.Text(c, a.T("每次清理的结果只存在内存里，关闭窗口即消失。")).
-					FontSize(12).TextColor(p.Ink3)
+					FontSize(fz(12)).TextColor(p.Ink3)
 			})
 			return
 		}
-		for i := len(a.log) - 1; i >= 0; i-- {
-			a.logBlock(c, a.log[i])
-		}
+		ui.Column(c).Fill().AlignItems(ui.Start).Gap(16).Children(func() {
+			for i := len(a.log) - 1; i >= 0; i-- {
+				a.logBlock(c, a.log[i])
+			}
+		})
 	})
 }
 
@@ -38,7 +40,7 @@ func (a *App) logBlock(c *ui.Context, r runRecord) {
 			ui.Text(c, fmt.Sprintf(a.T("释放 %s"), core.Bytes(r.freed))).FontSize(fz(13)).
 				FontWeight(600).TextColor(p.Ink).Shrink(0)
 			ui.Text(c, fmt.Sprintf(a.T("%d 项 · 耗时 %s"), r.items, fmtDuration(r.elapsed))).
-				FontSize(12).TextColor(p.Ink3).Shrink(0)
+				FontSize(fz(12)).TextColor(p.Ink3).Shrink(0)
 			ui.Spacer(c)
 			switch {
 			case r.failed > 0:
