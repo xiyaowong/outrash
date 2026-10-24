@@ -323,7 +323,7 @@ func TestLogAndRulesPages(t *testing.T) {
 
 	a.page = pageRules
 	tt.Frame()
-	for _, want := range []string{"清理方式", "30 天", "不碰源码", "internal/core/rules.json"} {
+	for _, want := range []string{"清理方式", "30 天", "不碰源码", "%LOCALAPPDATA%"} {
 		if !tt.HasText(want) {
 			t.Fatalf("rules page missing %q; texts %v", want, tt.Texts())
 		}
