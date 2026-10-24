@@ -82,6 +82,22 @@ func (a *App) dismiss() {
 	}
 }
 
+// dialog is the chrome every sheet shares: the dimmed backdrop, the surface
+// panel at the given width, and dismissal when the backdrop closes it.
+func (a *App) dialog(c *ui.Context, width float32, body func()) {
+	p := a.pal
+	open := true
+	w, _ := c.Size()
+	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
+		backdrop.Background(ui.RGBA(31, 35, 40, 0.5))
+		panel.Width(min(width, w-32)).Background(p.Surface).Radius(12).Border(1, p.RuleStrong).
+			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(body)
+	})
+	if !open {
+		a.dismiss()
+	}
+}
+
 func (a *App) sheet(c *ui.Context) {
 	switch a.modal {
 	case modalPlan:
@@ -104,96 +120,78 @@ func (a *App) detailSheet(c *ui.Context) {
 		a.dismiss()
 		return
 	}
-	open := true
-	w, _ := c.Size()
-	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
-		backdrop.Background(ui.RGBA(31, 35, 40, 0.5))
-		panel.Width(min(520, w-32)).Background(p.Surface).Radius(12).Border(1, p.RuleStrong).
-			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
-			ui.Column(c).Children(func() {
-				ui.Row(c).Height(64).Padding(0, 24).Gap(12).AlignItems(ui.Center).Children(func() {
-					ui.Column(c).Grow(1).Gap(2).Children(func() {
-						ui.Text(c, d.title).FontSize(fz(18)).FontWeight(650).TextColor(p.Ink).SingleLine()
-						ui.Text(c, d.kicker).FontSize(fz(11)).TextColor(p.Ink3).SingleLine()
+	a.dialog(c, 520, func() {
+		ui.Column(c).Children(func() {
+			ui.Row(c).Height(64).Padding(0, 24).Gap(12).AlignItems(ui.Center).Children(func() {
+				ui.Column(c).Grow(1).Gap(2).Children(func() {
+					ui.Text(c, d.title).FontSize(fz(18)).FontWeight(650).TextColor(p.Ink).SingleLine()
+					ui.Text(c, d.kicker).FontSize(fz(11)).TextColor(p.Ink3).SingleLine()
+				})
+				ui.Spacer(c).Shrink(0)
+			})
+			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+			ui.Column(c).Padding(20, 24).Gap(10).Children(func() {
+				for _, line := range d.lines {
+					if line.value == "" {
+						continue
+					}
+					ui.Row(c).Gap(16).AlignItems(ui.Start).Children(func() {
+						ui.Text(c, line.label).FontSize(fz(12)).TextColor(p.Ink2).Width(64).Shrink(0)
+						ui.Text(c, line.value).Font(core.Mono()).FontSize(fz(12)).
+							TextColor(p.Ink).Grow(1)
 					})
-					ui.Spacer(c).Shrink(0)
-				})
-				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-				ui.Column(c).Padding(20, 24).Gap(10).Children(func() {
-					for _, line := range d.lines {
-						if line.value == "" {
-							continue
-						}
-						ui.Row(c).Gap(16).AlignItems(ui.Start).Children(func() {
-							ui.Text(c, line.label).FontSize(fz(12)).TextColor(p.Ink2).Width(64).Shrink(0)
-							ui.Text(c, line.value).Font(core.Mono()).FontSize(fz(12)).
-								TextColor(p.Ink).Grow(1)
-						})
-					}
-					if d.note != "" {
-						ui.Text(c, d.note).FontSize(fz(12)).TextColor(p.Ink2).Padding(0, 0, 2, 0)
-					}
-					if d.err != "" {
-						ui.Text(c, a.T("读取不全：")+d.err).Font(core.Mono()).FontSize(fz(11)).
-							TextColor(p.Danger)
-					}
-				})
-				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-				ui.Row(c).Height(60).Padding(0, 24).Gap(8).AlignItems(ui.Center).Children(func() {
-					if d.path != "" {
-						a.actionButton(c, a.T("复制路径"), false, true, func() { c.WriteClipboard(d.path) })
-						a.actionButton(c, a.T("在文件夹中显示"), false, true, func() { revealPath(d.path) })
-					}
-					ui.Spacer(c)
-					a.actionButton(c, a.T("关闭"), true, true, a.dismiss)
-				})
+				}
+				if d.note != "" {
+					ui.Text(c, d.note).FontSize(fz(12)).TextColor(p.Ink2).Padding(0, 0, 2, 0)
+				}
+				if d.err != "" {
+					ui.Text(c, a.T("读取不全：")+d.err).Font(core.Mono()).FontSize(fz(11)).
+						TextColor(p.Danger)
+				}
+			})
+			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+			ui.Row(c).Height(60).Padding(0, 24).Gap(8).AlignItems(ui.Center).Children(func() {
+				if d.path != "" {
+					a.actionButton(c, a.T("复制路径"), false, true, func() { c.WriteClipboard(d.path) })
+					a.actionButton(c, a.T("在文件夹中显示"), false, true, func() { revealPath(d.path) })
+				}
+				ui.Spacer(c)
+				a.actionButton(c, a.T("关闭"), true, true, a.dismiss)
 			})
 		})
 	})
-	if !open {
-		a.dismiss()
-	}
 }
 
 // aboutSheet is the one screen with nothing to decide: what this build is,
 // where it comes from, and the licence it comes under.
 func (a *App) aboutSheet(c *ui.Context) {
 	p := a.pal
-	open := true
-	w, _ := c.Size()
-	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
-		backdrop.Background(ui.RGBA(31, 35, 40, 0.5))
-		panel.Width(min(400, w-32)).Background(p.Surface).Radius(12).Border(1, p.RuleStrong).
-			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
-			ui.Column(c).Children(func() {
-				ui.Column(c).Padding(24, 24, 18, 24).Gap(3).Children(func() {
-					ui.Text(c, "Outrash").FontSize(fz(20)).FontWeight(650).TextColor(p.Ink).SingleLine()
-					ui.Text(c, a.T("版本 ")+appVersion()).Font(core.Mono()).FontSize(fz(12)).
-						TextColor(p.Ink3).SingleLine()
-					ui.Text(c, a.T("扫描并清理可重建的缓存")).FontSize(fz(12)).
-						TextColor(p.Ink2).SingleLine()
+	a.dialog(c, 400, func() {
+		ui.Column(c).Children(func() {
+			ui.Column(c).Padding(24, 24, 18, 24).Gap(3).Children(func() {
+				ui.Text(c, "Outrash").FontSize(fz(20)).FontWeight(650).TextColor(p.Ink).SingleLine()
+				ui.Text(c, a.T("版本 ")+appVersion()).Font(core.Mono()).FontSize(fz(12)).
+					TextColor(p.Ink3).SingleLine()
+				ui.Text(c, a.T("扫描并清理可重建的缓存")).FontSize(fz(12)).
+					TextColor(p.Ink2).SingleLine()
+			})
+			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+			ui.Column(c).Padding(20, 24).Gap(8).Children(func() {
+				a.aboutLine(c, a.T("作者"), "xiyaowong")
+				a.aboutLine(c, a.T("许可"), "MIT")
+				a.aboutLine(c, a.T("内置规则"), fmt.Sprintf(a.T("第 %d 版 · %d 项缓存"), a.cfg.Version, a.ruleCount()))
+				ui.Row(c).Gap(8).AlignItems(ui.Baseline).Children(func() {
+					ui.Text(c, a.T("项目主页")).FontSize(fz(12)).TextColor(p.Ink2).Grow(1)
+					ui.Link(c, "github.com/xiyaowong/outrash", "https://github.com/xiyaowong/outrash").
+						FontSize(fz(12)).TextColor(p.Accent)
 				})
-				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-				ui.Column(c).Padding(20, 24).Gap(8).Children(func() {
-					a.aboutLine(c, a.T("作者"), "xiyaowong")
-					a.aboutLine(c, a.T("许可"), "MIT")
-					a.aboutLine(c, a.T("内置规则"), fmt.Sprintf(a.T("第 %d 版 · %d 项缓存"), a.cfg.Version, a.ruleCount()))
-					ui.Row(c).Gap(8).AlignItems(ui.Baseline).Children(func() {
-						ui.Text(c, a.T("项目主页")).FontSize(fz(12)).TextColor(p.Ink2).Grow(1)
-						ui.Link(c, "github.com/xiyaowong/outrash", "https://github.com/xiyaowong/outrash").
-							FontSize(fz(12)).TextColor(p.Accent)
-					})
-				})
-				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-				ui.Row(c).Height(60).Padding(0, 24).Justify(ui.End).AlignItems(ui.Center).Children(func() {
-					a.actionButton(c, a.T("关闭"), true, true, a.dismiss)
-				})
+			})
+			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+			ui.Row(c).Height(60).Padding(0, 24).Justify(ui.End).AlignItems(ui.Center).Children(func() {
+				a.actionButton(c, a.T("关闭"), true, true, a.dismiss)
 			})
 		})
 	})
-	if !open {
-		a.dismiss()
-	}
 }
 
 func (a *App) aboutLine(c *ui.Context, label, value string) {
@@ -233,71 +231,62 @@ func (a *App) planSheet(c *ui.Context) {
 		a.dismiss()
 		return
 	}
-	open := true
-	w, _ := c.Size()
-	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
-		backdrop.Background(ui.RGBA(31, 35, 40, 0.5))
-		panel.Width(min(720, w-32)).Background(p.Surface).Radius(12).Border(1, p.RuleStrong).
-			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
-			ui.Column(c).Children(func() {
-				ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, pl.Title).FontSize(fz(20)).FontWeight(600).TextColor(p.Ink).Grow(1).SingleLine()
-					ui.Text(c, fmt.Sprintf(a.T("%d 个路径 · %s"), len(pl.Steps), core.Bytes(pl.Bytes))).
-						Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink2).Shrink(0)
-				})
-				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+	a.dialog(c, 720, func() {
+		ui.Column(c).Children(func() {
+			ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, pl.Title).FontSize(fz(20)).FontWeight(600).TextColor(p.Ink).Grow(1).SingleLine()
+				ui.Text(c, fmt.Sprintf(a.T("%d 个路径 · %s"), len(pl.Steps), core.Bytes(pl.Bytes))).
+					Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink2).Shrink(0)
+			})
+			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 
-				ui.Scroll(c).MaxHeight(400).Children(func() {
-					ui.Column(c).Padding(16, 24).Children(func() {
-						n := 0
-						for _, g := range pl.Groups() {
-							ui.Row(c).Height(32).Gap(8).AlignItems(ui.Center).Children(func() {
-								ui.Text(c, g.Name).FontSize(fz(12)).FontWeight(600).TextColor(p.Ink3).Grow(1)
-								ui.Text(c, core.Bytes(g.Bytes)).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink3)
-							})
-							// How each cache comes back is the promise the plan
-							// asks the user to believe, so it sits next to the
-							// paths rather than in a footer.
-							for _, it := range g.Items {
-								ui.Text(c, it.Name+" · "+it.Note).FontSize(fz(11)).TextColor(p.Ink3).
-									SingleLine().Padding(0, 0, 2, 0)
-							}
-							for _, s := range g.Steps {
-								n++
-								order := n
-								ui.Row(c).Height(32).Gap(12).AlignItems(ui.Center).Children(func() {
-									ui.Text(c, fmt.Sprintf("%03d", order)).Font(core.Mono()).
-										FontSize(fz(11)).TextColor(p.Ink3).Width(32).Shrink(0)
-									ui.Text(c, abbrevPath(s.Path, 72)).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink).
-										SingleLine().Grow(1).Tooltip(s.Path)
-									// Why this path is on the list; the long form
-									// waits on the tooltip and in -debug.
-									ui.Text(c, a.T(string(s.Mode))).FontSize(fz(11)).TextColor(p.Ink3).
-										Width(64).TextAlign(ui.End).Shrink(0).Tooltip(s.Reason)
-									ui.Text(c, core.Bytes(s.Bytes)).Font(core.Mono()).FontSize(fz(12)).
-										TextColor(p.Ink2).Width(88).TextAlign(ui.End).Shrink(0)
-								})
-							}
-							if len(g.Kept) > 0 {
-								ui.Text(c, a.T("保留 · ")+strings.Join(g.Kept, a.T("、"))).FontSize(fz(11)).
-									TextColor(p.Success).SingleLine().Padding(0, 0, 0, 0)
-							}
+			ui.Scroll(c).MaxHeight(400).Children(func() {
+				ui.Column(c).Padding(16, 24).Children(func() {
+					n := 0
+					for _, g := range pl.Groups() {
+						ui.Row(c).Height(32).Gap(8).AlignItems(ui.Center).Children(func() {
+							ui.Text(c, g.Name).FontSize(fz(12)).FontWeight(600).TextColor(p.Ink3).Grow(1)
+							ui.Text(c, core.Bytes(g.Bytes)).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink3)
+						})
+						// How each cache comes back is the promise the plan
+						// asks the user to believe, so it sits next to the
+						// paths rather than in a footer.
+						for _, it := range g.Items {
+							ui.Text(c, it.Name+" · "+it.Note).FontSize(fz(11)).TextColor(p.Ink3).
+								SingleLine().Padding(0, 0, 2, 0)
 						}
-					})
+						for _, s := range g.Steps {
+							n++
+							order := n
+							ui.Row(c).Height(32).Gap(12).AlignItems(ui.Center).Children(func() {
+								ui.Text(c, fmt.Sprintf("%03d", order)).Font(core.Mono()).
+									FontSize(fz(11)).TextColor(p.Ink3).Width(32).Shrink(0)
+								ui.Text(c, abbrevPath(s.Path, 72)).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink).
+									SingleLine().Grow(1).Tooltip(s.Path)
+								// Why this path is on the list; the long form
+								// waits on the tooltip and in -debug.
+								ui.Text(c, a.T(string(s.Mode))).FontSize(fz(11)).TextColor(p.Ink3).
+									Width(64).TextAlign(ui.End).Shrink(0).Tooltip(s.Reason)
+								ui.Text(c, core.Bytes(s.Bytes)).Font(core.Mono()).FontSize(fz(12)).
+									TextColor(p.Ink2).Width(88).TextAlign(ui.End).Shrink(0)
+							})
+						}
+						if len(g.Kept) > 0 {
+							ui.Text(c, a.T("保留 · ")+strings.Join(g.Kept, a.T("、"))).FontSize(fz(11)).
+								TextColor(p.Success).SingleLine().Padding(0, 0, 0, 0)
+						}
+					}
 				})
+			})
 
-				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-				ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, a.planFooter()).
-						FontSize(fz(12)).TextColor(p.Ink2).SingleLine().Grow(1)
-					a.actionButton(c, a.T("关闭"), true, true, a.dismiss)
-				})
+			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+			ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, a.planFooter()).
+					FontSize(fz(12)).TextColor(p.Ink2).SingleLine().Grow(1)
+				a.actionButton(c, a.T("关闭"), true, true, a.dismiss)
 			})
 		})
 	})
-	if !open {
-		a.dismiss()
-	}
 }
 
 // abbrevPath keeps both ends of a long path. The tail carries the version
@@ -421,51 +410,42 @@ func (a *App) reportSheet(c *ui.Context) {
 		a.dismiss()
 		return
 	}
-	open := true
-	w, _ := c.Size()
-	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
-		backdrop.Background(ui.RGBA(31, 35, 40, 0.5))
-		panel.Width(min(420, w-32)).Background(p.Surface).Radius(12).Border(1, p.RuleStrong).
-			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
-			ui.Column(c).Children(func() {
-				ui.Row(c).Height(64).Padding(0, 24).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, a.T("清理完成")).FontSize(fz(20)).FontWeight(600).TextColor(p.Ink)
-				})
-				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-				ui.Column(c).Padding(24).Gap(16).Children(func() {
-					ui.Row(c).Gap(32).Children(func() {
-						a.stat(c, a.T("释放"), core.Bytes(r.freed))
-						a.stat(c, a.T("耗时"), r.elapsed.Round(time.Millisecond).String())
-						if r.failed > 0 {
-							a.stat(c, a.T("跳过"), fmt.Sprint(r.failed))
-						}
-						if r.gone > 0 {
-							a.stat(c, a.T("已不存在"), fmt.Sprint(r.gone))
-						}
-					})
-					a.receiptBlock(c, r)
-					if len(r.lines) > 0 {
-						ui.Column(c).MaxHeight(160).Children(func() {
-							ui.Scroll(c).MaxHeight(160).Children(func() {
-								ui.Column(c).Gap(4).Children(func() {
-									for _, l := range r.lines {
-										ui.Text(c, l).Font(core.Mono()).FontSize(fz(11)).TextColor(p.Danger).SingleLine()
-									}
-								})
-							})
-						})
+	a.dialog(c, 420, func() {
+		ui.Column(c).Children(func() {
+			ui.Row(c).Height(64).Padding(0, 24).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, a.T("清理完成")).FontSize(fz(20)).FontWeight(600).TextColor(p.Ink)
+			})
+			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+			ui.Column(c).Padding(24).Gap(16).Children(func() {
+				ui.Row(c).Gap(32).Children(func() {
+					a.stat(c, a.T("释放"), core.Bytes(r.freed))
+					a.stat(c, a.T("耗时"), r.elapsed.Round(time.Millisecond).String())
+					if r.failed > 0 {
+						a.stat(c, a.T("跳过"), fmt.Sprint(r.failed))
+					}
+					if r.gone > 0 {
+						a.stat(c, a.T("已不存在"), fmt.Sprint(r.gone))
 					}
 				})
-				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-				ui.Row(c).Height(64).Padding(0, 24).Justify(ui.End).AlignItems(ui.Center).Children(func() {
-					a.actionButton(c, a.T("完成"), true, true, a.dismiss)
-				})
+				a.receiptBlock(c, r)
+				if len(r.lines) > 0 {
+					ui.Column(c).MaxHeight(160).Children(func() {
+						ui.Scroll(c).MaxHeight(160).Children(func() {
+							ui.Column(c).Gap(4).Children(func() {
+								for _, l := range r.lines {
+									ui.Text(c, l).Font(core.Mono()).FontSize(fz(11)).TextColor(p.Danger).SingleLine()
+								}
+							})
+						})
+					})
+				}
+			})
+			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+			ui.Row(c).Height(64).Padding(0, 24).Justify(ui.End).AlignItems(ui.Center).Children(func() {
+				a.actionButton(c, a.T("完成"), true, true, a.dismiss)
 			})
 		})
 	})
-	if !open {
-		a.dismiss()
-	}
 }
 
 // receiptBlock proves the clean with numbers: what the families held
