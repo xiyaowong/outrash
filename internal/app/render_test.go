@@ -320,11 +320,9 @@ func TestVolumeOf(t *testing.T) {
 	}
 }
 
-// The panel offers one bubble per drive the scan spans, the home drive first;
-// a click narrows the table to that drive and 全部条目 brings everything back.
-func TestPanelFiltersByVolume(t *testing.T) {
-	a := testApp(t, false)
-	// A cache with a second root on another drive, so the scan spans C: and D:.
+// addDonlyRoot gives npm a second cache on another drive, so the volume
+// filter has something to hide.
+func addDonlyRoot(a *App) {
 	res := a.cache.Results["node/npm"]
 	extra := core.Root{Path: `D:\cache\npm`, Size: 50_000_000, Count: 1}
 	extra.Entries = []core.Entry{{Name: "donly", Path: extra.Path + `\donly`, Size: 50_000_000, ModTime: fixedTime(10)}}
@@ -332,6 +330,13 @@ func TestPanelFiltersByVolume(t *testing.T) {
 	res.Size += extra.Size
 	a.cache.Results["node/npm"] = res
 	a.regroup()
+}
+
+// The panel offers one bubble per drive the scan spans, the home drive first;
+// a click narrows the table to that drive and 全部条目 brings everything back.
+func TestPanelFiltersByVolume(t *testing.T) {
+	a := testApp(t, false)
+	addDonlyRoot(a)
 
 	a.page = pageResults
 	a.open["g:node"] = true
@@ -375,13 +380,7 @@ func TestPanelFiltersByVolume(t *testing.T) {
 // on a hidden drive is still checked, and still counted, when it comes back.
 func TestFilterKeepsSelectionHidden(t *testing.T) {
 	a := testApp(t, false)
-	res := a.cache.Results["node/npm"]
-	extra := core.Root{Path: `D:\cache\npm`, Size: 50_000_000, Count: 1}
-	extra.Entries = []core.Entry{{Name: "donly", Path: extra.Path + `\donly`, Size: 50_000_000, ModTime: fixedTime(10)}}
-	res.Roots = append(res.Roots, extra)
-	res.Size += extra.Size
-	a.cache.Results["node/npm"] = res
-	a.regroup()
+	addDonlyRoot(a)
 
 	a.checked[`D:\cache\npm\donly`] = true
 	a.volume = "D:"
@@ -401,8 +400,58 @@ func TestFilterKeepsSelectionHidden(t *testing.T) {
 	a.volume = ""
 }
 
-// The log and the rules pages are the two read-only screens behind the rail;
-// they have to render from the same scan without a second data source.
+// Under the volume filter, the actions and the numbers on screen answer to
+// the table: 全选 never checks a hidden row, a suggestion chip replaces the
+// selection only inside the view, and the header numbers describe what the
+// reader sees. The plan itself stays whatever was checked.
+func TestFilterConfinesActionsAndNumbers(t *testing.T) {
+	a := testApp(t, false)
+	addDonlyRoot(a)
+	a.page = pageResults
+	a.open["g:node"] = true
+	a.open["i:npm"] = true
+	a.volume = "D:"
+	tt := ui.NewTester(a.view, 1200, 780)
+	tt.Frame()
+
+	// The scan's own recommendation already checked C: rows; 全选 under the
+	// filter must only add what is on screen.
+	a.clearChecks()
+	a.selectAllVisible()
+	if len(a.checked) == 0 {
+		t.Fatal("全选 checked nothing on the visible drive")
+	}
+	for p := range a.checked {
+		if !strings.HasPrefix(p, `D:\`) {
+			t.Fatalf("全选 checked a hidden row: %s", p)
+		}
+	}
+	var visible []core.Pick
+	for _, g := range a.groups {
+		if a.familyVisible(g) {
+			visible = append(visible, a.familyPicks(g)...)
+		}
+	}
+	if on, total := a.checkState(visible); on != total {
+		t.Fatalf("the bar's checkbox reads %d/%d of the visible rows", on, total)
+	}
+	_, sub := a.pageTitle()
+	vn, _ := a.visibleRecommended()
+	if !strings.Contains(sub, fmt.Sprintf("已推荐 %d 项", vn)) {
+		t.Fatalf("header sub %q does not carry the visible recommendation %d", sub, vn)
+	}
+
+	a.clearChecks()
+	for _, s := range a.suggestions() {
+		a.applySuggestion(s)
+		for p := range a.checked {
+			if !strings.HasPrefix(p, `D:\`) {
+				t.Fatalf("a suggestion checked a hidden row: %s", p)
+			}
+		}
+	}
+	a.volume = ""
+}
 func TestLogAndRulesPages(t *testing.T) {
 	a := testApp(t, false)
 	a.now = fixedTime(0)

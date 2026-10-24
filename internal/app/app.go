@@ -586,11 +586,15 @@ func (a *App) startClean() {
 }
 
 // selectAllVisible selects every leaf of the results table. The bar's 全选 is
-// the whole list, not the family the pointer happens to be over.
+// the whole list on screen, not the family the pointer happens to be over —
+// and under the volume filter, never a row the user cannot see.
 func (a *App) selectAllVisible() {
 	var picks []core.Pick
 	for _, g := range a.groups {
-		picks = append(picks, a.groupPicks(g)...)
+		if !a.familyVisible(g) {
+			continue
+		}
+		picks = append(picks, a.familyPicks(g)...)
 	}
 	a.toggleChecks(picks)
 }
@@ -855,8 +859,12 @@ func (a *App) pageHeader(c *ui.Context) {
 				ui.Text(c, sub).FontSize(fz(12)).TextColor(p.Ink3).SingleLine()
 			})
 			if a.page == pageResults || a.page == pageOverview {
+				total := a.totalSize()
+				if a.viewingResults() {
+					total = a.visibleTotal()
+				}
 				ui.Column(c).AlignItems(ui.End).Shrink(0).Children(func() {
-					ui.Text(c, core.Bytes(a.totalSize())).Font(core.Mono()).FontSize(fz(18)).
+					ui.Text(c, core.Bytes(total)).Font(core.Mono()).FontSize(fz(18)).
 						FontWeight(600).TextColor(p.Ink)
 					ui.Text(c, a.T("缓存总量")).FontSize(fz(11)).TextColor(p.Ink3)
 				})
@@ -875,7 +883,13 @@ func (a *App) pageTitle() (title, sub string) {
 			return a.T("可重建缓存"), a.T("正在扫描环境变量与各工具的默认位置")
 		}
 		n, failed := a.itemStats()
-		sub = fmt.Sprintf(a.T("%d 个缓存 · 已推荐 %d 项 · 可清理 %s"), n, a.recommendedCount(), core.Bytes(a.recommendedBytes()))
+		vn, vbytes := a.recommendedCount(), a.recommendedBytes()
+		if a.volume != "" {
+			// The filter narrows the table, so the numbers above it describe
+			// the table, not the machine.
+			vn, vbytes = a.visibleRecommended()
+		}
+		sub = fmt.Sprintf(a.T("%d 个缓存 · 已推荐 %d 项 · 可清理 %s"), n, vn, core.Bytes(vbytes))
 		if failed > 0 {
 			sub += fmt.Sprintf(a.T(" · %d 个读取失败"), failed)
 		}
@@ -1103,15 +1117,20 @@ func (a *App) statusRank(g groupState) int {
 func (a *App) actionBar(c *ui.Context) {
 	p := a.pal
 	n, chosen := a.checkedTotal()
-	all := 0
+	// The checkbox and its counts answer for the rows on screen; the text
+	// beside it answers for the plan, which spans every checked row.
+	var visible []core.Pick
 	for _, g := range a.groups {
-		all += len(a.groupPicks(g))
+		if a.familyVisible(g) {
+			visible = append(visible, a.familyPicks(g)...)
+		}
 	}
+	on, all := a.checkState(visible)
 	ui.Column(c).Shrink(0).Children(func() {
 		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 		ui.Row(c).Height(52).Padding(8, 24).Gap(12).AlignItems(ui.Center).Children(func() {
 			if a.page == pageResults && all > 0 {
-				a.check(c, stateOf(n, all), a.selectAllVisible)
+				a.check(c, stateOf(on, all), a.selectAllVisible)
 				ui.Text(c, a.T("全选")).FontSize(fz(12)).TextColor(p.Ink2).Shrink(0)
 				ui.Box(c).Width(1).Height(16).Shrink(0).Background(p.Rule)
 			}
@@ -1225,13 +1244,17 @@ func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, f
 func (a *App) panel(c *ui.Context) {
 	p := a.pal
 	n, bytes := a.checkedTotal()
+	recommended := a.recommendedBytes()
+	if a.viewingResults() {
+		_, recommended = a.visibleRecommended()
+	}
 	ui.Column(c).Width(268).FillHeight().Background(p.Panel).
 		BorderWidth(0, 0, 0, 1).BorderColor(p.Rule).
 		Children(func() {
 			ui.Column(c).Padding(20, 20).Gap(18).Children(func() {
 				a.panelBlock(c, a.T("清理概览"), func() {
 					ui.Column(c).Gap(8).Children(func() {
-						a.panelLine(c, a.T("可清理缓存总量"), core.Bytes(a.recommendedBytes()))
+						a.panelLine(c, a.T("可清理缓存总量"), core.Bytes(recommended))
 						a.panelLine(c, a.T("已选项目数量"), fmt.Sprintf(a.T("%d 项"), n))
 						a.panelLine(c, a.T("已选清理空间"), core.Bytes(bytes))
 					})
@@ -1315,7 +1338,10 @@ func (a *App) suggestions() []suggestion {
 	var picks []core.Pick
 	for _, g := range a.groups {
 		for _, it := range g.items {
-			picks = append(picks, allPicks(it.res)...)
+			// Under the volume filter the chips speak for the table: their
+			// numbers describe what is on screen, and clicking one must not
+			// check a row the reader cannot see.
+			picks = append(picks, picksOf(a.visibleRoots(it.res))...)
 		}
 	}
 	// A path the tool rewrote minutes after the last clean is the one thing
@@ -1674,4 +1700,45 @@ func (a *App) recommendedBytes() int64 {
 		}
 	}
 	return n
+}
+
+// visibleRecommended is the recommendation the reader can see: the checked
+// picks of the families and roots the filter leaves on screen. Plan numbers
+// (the action bar's confirmation, the plan itself) stay machine-wide; these
+// are view numbers, and they only ever answer "what does the table show".
+func (a *App) visibleRecommended() (int, int64) {
+	var n int
+	var bytes int64
+	for _, g := range a.groups {
+		if !a.familyVisible(g) {
+			continue
+		}
+		for _, it := range g.items {
+			for _, p := range picksOf(a.visibleRoots(it.res)) {
+				if a.checked[p.Path] {
+					n++
+					bytes += p.Bytes
+				}
+			}
+		}
+	}
+	return n, bytes
+}
+
+// visibleTotal is the bytes the visible families hold, for the header total
+// that crowns a filtered table.
+func (a *App) visibleTotal() int64 {
+	var n int64
+	for _, g := range a.groups {
+		if a.familyVisible(g) {
+			n += a.familySize(g)
+		}
+	}
+	return n
+}
+
+// viewingResults says the filter is shaping the table in front of the reader,
+// so view numbers should answer to it.
+func (a *App) viewingResults() bool {
+	return a.page == pageResults && a.volume != ""
 }
