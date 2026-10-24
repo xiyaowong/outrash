@@ -151,13 +151,10 @@ func (a *App) checkState(picks []core.Pick) (on, total int) {
 
 func (a *App) toggleChecks(picks []core.Pick) {
 	picks = autoPicks(picks)
-	on, total := a.checkState(picks)
-	for _, p := range picks {
-		if on == total {
-			delete(a.checked, p.Path)
-		} else {
-			a.checked[p.Path] = true
-		}
+	if on, total := a.checkState(picks); on == total {
+		a.clearPicks(picks)
+	} else {
+		a.checkAll(picks)
 	}
 }
 
