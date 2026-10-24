@@ -447,7 +447,7 @@ func (a *App) entries(c *ui.Context, it itemState) {
 				a.versioned(c, it, e, root.EnvSrc)
 				continue
 			}
-			a.leaf(c, it, e.Name, e.Path, e.Size, e.ModTime, indentLeaf)
+			a.leaf(c, it, core.Pick{Path: e.Path, Name: e.Name, Bytes: e.Size, ModTime: e.ModTime}, indentLeaf)
 		}
 	}
 }
@@ -488,13 +488,17 @@ func (a *App) versioned(c *ui.Context, it itemState, ent core.Entry, env bool) {
 	})
 	if open {
 		for _, v := range ent.Versions {
-			a.leaf(c, it, v.Name, v.Path, v.Size, v.ModTime, indentLeaf+16)
+			a.leaf(c, it, core.Pick{
+				Path: v.Path, Name: v.Name, Bytes: v.Size,
+				ModTime: v.ModTime, Package: ent.Name,
+			}, indentLeaf+16)
 		}
 	}
 }
 
-func (a *App) leaf(c *ui.Context, it itemState, name, path string, size int64, mod time.Time, ind float32) {
+func (a *App) leaf(c *ui.Context, it itemState, pick core.Pick, ind float32) {
 	p := a.pal
+	path, name, size, mod := pick.Path, pick.Name, pick.Bytes, pick.ModTime
 	on := a.checked[path]
 	m := markOff
 	if on {
@@ -516,7 +520,7 @@ func (a *App) leaf(c *ui.Context, it itemState, name, path string, size int64, m
 	}
 	row := ui.Row(c).Height(30).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.checked[path] = !on }).
-		ContextMenu(a.leafMenu(c, it, name, path, size, mod))
+		ContextMenu(a.leafMenu(c, it, pick))
 	t := row.Animate("fx", target, fxSpan)
 	strike, fold := min(2*t, 1), max(2*t-1, 0)
 	row.Height(30 * (1 - fold))
