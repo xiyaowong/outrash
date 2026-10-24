@@ -37,7 +37,10 @@ func shortName(t *testing.T, p string) string {
 // normalize to the same path before the comparison — installers and scripts
 // capture short names, and a short-spelled root would otherwise slip past.
 func TestCoversSeesThroughShortNames(t *testing.T) {
-	long := t.TempDir()
+	// The temp directory itself may be spelled with a short name (runner
+	// images put TEMP under RUNNER~1), so the baseline is the resolved path,
+	// not the one TempDir hands out.
+	long := longPath(t.TempDir())
 	short := shortName(t, long)
 	if got := longPath(short); !strings.EqualFold(got, long) {
 		t.Fatalf("longPath(%q) = %q, want %q", short, got, long)
