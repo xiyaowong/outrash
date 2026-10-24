@@ -164,11 +164,7 @@ func (a *App) aboutSheet(c *ui.Context) {
 		panel.Width(min(400, w-32)).Background(p.Surface).Radius(10).Border(1, p.RuleStrong).
 			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
 			ui.Column(c).Children(func() {
-				ui.Column(c).Padding(28, 24, 24, 24).Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Box(c).Size(40, 40).Radius(10).Background(p.Accent).AlignItems(ui.Center).
-						Justify(ui.Center).Children(func() {
-						ui.Text(c, "O").FontSize(20).FontWeight(700).TextColor(p.OnAccent)
-					})
+				ui.Column(c).Padding(24, 24, 18, 24).Gap(3).Children(func() {
 					ui.Text(c, "Outrash").FontSize(20).FontWeight(650).TextColor(p.Ink).SingleLine()
 					ui.Text(c, "版本 "+appVersion()).Font(core.Mono()).FontSize(12).
 						TextColor(p.Ink3).SingleLine()
