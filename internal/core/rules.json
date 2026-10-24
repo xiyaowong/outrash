@@ -266,6 +266,23 @@
       ]
     },
     {
+      "id": "ruby",
+      "name": "Ruby",
+      "items": [
+        {
+          "id": "gems",
+          "name": "RubyGems 缓存",
+          "note": "下次安装依赖时自动重新下载",
+          "paths": {
+            "windows": ["%USERPROFILE%/.gem"],
+            "darwin": ["~/.gem"],
+            "linux": ["~/.gem"]
+          },
+          "unit": "entries"
+        }
+      ]
+    },
+    {
       "id": "jvm",
       "name": "JVM",
       "items": [
@@ -277,6 +294,39 @@
             "windows": ["%GRADLE_USER_HOME%/caches", "%USERPROFILE%/.gradle/caches"],
             "darwin": ["%GRADLE_USER_HOME%/caches", "~/.gradle/caches"],
             "linux": ["%GRADLE_USER_HOME%/caches", "~/.gradle/caches"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "maven",
+          "name": "Maven 本地仓库",
+          "note": "构建时自动重新下载",
+          "paths": {
+            "windows": ["%USERPROFILE%/.m2/repository"],
+            "darwin": ["~/.m2/repository"],
+            "linux": ["~/.m2/repository"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "coursier",
+          "name": "Coursier 缓存",
+          "note": "构建时自动重新下载",
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/Coursier/cache"],
+            "darwin": ["~/Library/Caches/Coursier"],
+            "linux": ["~/.cache/coursier"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "ivy",
+          "name": "Ivy 缓存",
+          "note": "构建时自动重新下载",
+          "paths": {
+            "windows": ["%USERPROFILE%/.ivy2/cache"],
+            "darwin": ["~/.ivy2/cache"],
+            "linux": ["~/.ivy2/cache"]
           },
           "unit": "entries"
         }
@@ -366,6 +416,94 @@
             "linux": ["~/.cache/mozilla/firefox/*/cache2"]
           },
           "unit": "entries"
+        },
+        {
+          "id": "brave",
+          "name": "Brave 缓存",
+          "note": "下次打开网页时自动重新下载",
+          "paths": {
+            "windows": [
+              "%LOCALAPPDATA%/BraveSoftware/Brave-Browser/User Data/Default/Cache",
+              "%LOCALAPPDATA%/BraveSoftware/Brave-Browser/User Data/Profile */Cache",
+              "%LOCALAPPDATA%/BraveSoftware/Brave-Browser/User Data/Default/Code Cache",
+              "%LOCALAPPDATA%/BraveSoftware/Brave-Browser/User Data/Profile */Code Cache",
+              "%LOCALAPPDATA%/BraveSoftware/Brave-Browser/User Data/Default/GPUCache",
+              "%LOCALAPPDATA%/BraveSoftware/Brave-Browser/User Data/Profile */GPUCache",
+              "%LOCALAPPDATA%/BraveSoftware/Brave-Browser/User Data/Default/Service Worker/CacheStorage",
+              "%LOCALAPPDATA%/BraveSoftware/Brave-Browser/User Data/Profile */Service Worker/CacheStorage"
+            ],
+            "darwin": [
+              "~/Library/Application Support/BraveSoftware/Brave-Browser/Default/Cache",
+              "~/Library/Application Support/BraveSoftware/Brave-Browser/Profile */Cache",
+              "~/Library/Application Support/BraveSoftware/Brave-Browser/Default/Code Cache",
+              "~/Library/Application Support/BraveSoftware/Brave-Browser/Profile */Code Cache",
+              "~/Library/Application Support/BraveSoftware/Brave-Browser/Default/GPUCache",
+              "~/Library/Application Support/BraveSoftware/Brave-Browser/Profile */GPUCache"
+            ],
+            "linux": [
+              "~/.config/BraveSoftware/Brave-Browser/Default/Cache",
+              "~/.config/BraveSoftware/Brave-Browser/Profile */Cache",
+              "~/.config/BraveSoftware/Brave-Browser/Default/Code Cache",
+              "~/.config/BraveSoftware/Brave-Browser/Profile */Code Cache",
+              "~/.config/BraveSoftware/Brave-Browser/Default/GPUCache",
+              "~/.config/BraveSoftware/Brave-Browser/Profile */GPUCache"
+            ]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "vivaldi",
+          "name": "Vivaldi 缓存",
+          "note": "下次打开网页时自动重新下载",
+          "paths": {
+            "windows": [
+              "%LOCALAPPDATA%/Vivaldi/User Data/Default/Cache",
+              "%LOCALAPPDATA%/Vivaldi/User Data/Profile */Cache",
+              "%LOCALAPPDATA%/Vivaldi/User Data/Default/Code Cache",
+              "%LOCALAPPDATA%/Vivaldi/User Data/Profile */Code Cache",
+              "%LOCALAPPDATA%/Vivaldi/User Data/Default/GPUCache",
+              "%LOCALAPPDATA%/Vivaldi/User Data/Profile */GPUCache"
+            ],
+            "darwin": [
+              "~/Library/Application Support/Vivaldi/Default/Cache",
+              "~/Library/Application Support/Vivaldi/Profile */Cache",
+              "~/Library/Application Support/Vivaldi/Default/Code Cache",
+              "~/Library/Application Support/Vivaldi/Profile */Code Cache",
+              "~/Library/Application Support/Vivaldi/Default/GPUCache",
+              "~/Library/Application Support/Vivaldi/Profile */GPUCache"
+            ],
+            "linux": [
+              "~/.config/vivaldi/Default/Cache",
+              "~/.config/vivaldi/Profile */Cache",
+              "~/.config/vivaldi/Default/Code Cache",
+              "~/.config/vivaldi/Profile */Code Cache",
+              "~/.config/vivaldi/Default/GPUCache",
+              "~/.config/vivaldi/Profile */GPUCache"
+            ]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "opera",
+          "name": "Opera 缓存",
+          "note": "下次打开网页时自动重新下载",
+          "paths": {
+            "windows": [
+              "%LOCALAPPDATA%/Opera Software/Opera Stable/Cache",
+              "%LOCALAPPDATA%/Opera Software/Opera Stable/Code Cache",
+              "%LOCALAPPDATA%/Opera Software/Opera GX Stable/Cache",
+              "%LOCALAPPDATA%/Opera Software/Opera GX Stable/Code Cache"
+            ],
+            "darwin": [
+              "~/Library/Application Support/com.operasoftware.Opera/Cache",
+              "~/Library/Application Support/com.operasoftware.Opera/Code Cache"
+            ],
+            "linux": [
+              "~/.config/opera/Cache",
+              "~/.config/opera/Code Cache"
+            ]
+          },
+          "unit": "entries"
         }
       ]
     },
@@ -401,6 +539,17 @@
               "~/.config/Code/CachedData",
               "~/.config/Code/CachedExtensionVSIXs"
             ]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "jetbrains",
+          "name": "JetBrains IDE 索引",
+          "note": "打开项目时自动重建",
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/JetBrains/*/caches", "%LOCALAPPDATA%/JetBrains/*/index"],
+            "darwin": ["~/Library/Caches/JetBrains/*"],
+            "linux": ["~/.cache/JetBrains/*/caches", "~/.cache/JetBrains/*/index"]
           },
           "unit": "entries"
         }
@@ -540,6 +689,48 @@
             "windows": ["%LOCALAPPDATA%/vcpkg/archives"],
             "darwin": ["~/.cache/vcpkg/archives"],
             "linux": ["~/.cache/vcpkg/archives"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "conan",
+          "name": "Conan 包缓存",
+          "note": "构建时自动重新下载或重新编译",
+          "paths": {
+            "windows": ["%USERPROFILE%/.conan2/p"],
+            "darwin": ["~/.conan2/p"],
+            "linux": ["~/.conan2/p"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "hex",
+          "name": "Hex 包缓存",
+          "note": "下次安装依赖时自动重新下载",
+          "paths": {
+            "windows": ["%USERPROFILE%/.hex"],
+            "darwin": ["~/.hex"],
+            "linux": ["~/.hex"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "cabal",
+          "name": "Cabal 缓存",
+          "note": "构建时自动重新下载或重新编译",
+          "paths": {
+            "windows": ["%APPDATA%/cabal/packages", "%APPDATA%/cabal/store"],
+            "darwin": ["~/.cabal/packages", "~/.cabal/store"],
+            "linux": ["~/.cabal/packages", "~/.cabal/store"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "xcode",
+          "name": "Xcode 派生数据",
+          "note": "构建时自动重新编译",
+          "paths": {
+            "darwin": ["~/Library/Developer/Xcode/DerivedData"]
           },
           "unit": "entries"
         }
