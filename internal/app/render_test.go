@@ -454,8 +454,9 @@ func TestRecommendationChecksOnlySafeItems(t *testing.T) {
 	}
 }
 
-// A build that can delete cleans straight from the list; only a build that
-// refuses to delete opens the written-out plan.
+// A build that can delete cleans straight from the list, with a quiet preview
+// of the plan beside the button; only a build that refuses to delete opens the
+// written-out plan as its primary action.
 func TestPlanExecuteVisibleOnlyOutsideDebug(t *testing.T) {
 	a := testAppWith(t, Options{})
 	a.now = fixedTime(0)
@@ -464,9 +465,30 @@ func TestPlanExecuteVisibleOnlyOutsideDebug(t *testing.T) {
 	if !tt.HasText("开始清理") {
 		t.Fatalf("clean missing; texts %v", tt.Texts())
 	}
-	if tt.HasText("查看清理计划") {
-		t.Fatal("the list is the plan; a normal build must not detour through a sheet")
+	if err := tt.Click("查看清理计划"); err != nil {
+		t.Fatal(err)
 	}
+	if !tt.HasText("预览：回到窗口确认后才会删除。") {
+		t.Fatalf("preview note missing; texts %v", tt.Texts())
+	}
+	write(t, "plan-preview.png", tt.Image())
+	tt.Frame()
+	if a.modal != modalPlan {
+		t.Fatalf("preview opened modal %v", a.modal)
+	}
+	a.dismiss()
+	// The primary action still cleans straight from the list; the removal is
+	// stubbed, because a test must never delete.
+	started, release := make(chan struct{}), make(chan struct{})
+	a.remove = func(*core.Plan, []string, func(done, total int64), func(core.Removal)) core.Outcome {
+		close(started)
+		<-release
+		return core.Outcome{}
+	}
+	a.post = func(func()) {}
+	a.startClean()
+	<-started
+	close(release)
 
 	d := testApp(t, true)
 	d.now = fixedTime(0)

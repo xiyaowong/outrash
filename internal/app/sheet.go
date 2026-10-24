@@ -315,12 +315,16 @@ func abbrevPath(p string, max int) string {
 
 // planFooter names the build's refusal to delete the way it was started.
 // The sheet is the only path either build has to a written plan, so the
-// sentence has to match the flag the user passed.
+// sentence has to match the flag the user passed — and in a build that can
+// delete, the quiet preview says what closing the sheet does next.
 func (a *App) planFooter() string {
-	if a.so.Debug {
+	switch {
+	case a.so.Debug:
 		return a.T("调试模式：只列出，不删除。")
+	case a.so.NoDelete:
+		return a.T("已禁用删除：只列出，不删除。")
 	}
-	return a.T("已禁用删除：只列出，不删除。")
+	return a.T("预览：回到窗口确认后才会删除。")
 }
 
 // run deletes the shown plan in the background, then rescans.

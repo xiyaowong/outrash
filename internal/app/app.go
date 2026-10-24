@@ -1125,6 +1125,12 @@ func (a *App) actionBar(c *ui.Context) {
 				// as one pair, and neither can be mistaken for 开始清理.
 				a.textButton(c, a.T("全不选"), a.clearChecks)
 			}
+			// A quiet preview next to the one action: the plan sheet, listing
+			// only. A build that refuses to delete does not need it — its
+			// primary button already opens the plan.
+			if n > 0 && !(a.so.Debug || a.so.NoDelete) {
+				a.textButton(c, a.T("查看清理计划"), func() { a.openPlan(a.selectedPlan()) })
+			}
 			a.actionButton(c, a.T("重新扫描"), false, a.phase != phaseScanning, a.Scan)
 			label := a.T("开始清理")
 			if a.so.Debug || a.so.NoDelete {

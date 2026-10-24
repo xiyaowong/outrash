@@ -249,6 +249,7 @@ var en = map[string]string{
 	"、":           ", ",
 	"调试模式：只列出，不删除。":  "Debug mode: lists only, deletes nothing.",
 	"已禁用删除：只列出，不删除。": "Deletion disabled: lists only, deletes nothing.",
+	"预览：回到窗口确认后才会删除。": "Preview: nothing is deleted until you confirm it back in the window.",
 	"全部":        "All",
 	"旧版本":       "Old",
 	"陈旧":        "Stale",
