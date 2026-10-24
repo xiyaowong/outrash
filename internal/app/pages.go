@@ -108,8 +108,6 @@ func (a *App) rulesPage(c *ui.Context) {
 			}
 		})
 		ui.Column(c).Gap(4).Children(func() {
-			ui.Text(c, "目录定义在 internal/core/rules.json，随程序一起编译。").
-				FontSize(11).TextColor(p.Ink3)
 			ui.Text(c, "可以设置环境变量把缓存放到别处，程序会优先读取它。").FontSize(11).TextColor(p.Ink3)
 		})
 	})
