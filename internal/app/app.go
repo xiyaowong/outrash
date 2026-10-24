@@ -601,7 +601,7 @@ func (a *App) titleBar(c *ui.Context) {
 	h := max(bar.Height, 34)
 	ui.Row(c).Height(h).DragWindow().Gradient(p.Wash(), p.Canvas, 180).
 		Padding(0, bar.Right+12, 0, bar.Left+14).AlignItems(ui.Center).Gap(10).Children(func() {
-		ui.Box(c).Size(10, 10).Shrink(0).Radius(2).Background(p.Accent)
+		a.mark(c, 12)
 		ui.Text(c, "Outrash").FontSize(12).FontWeight(600).TextColor(p.Ink).Shrink(0)
 		ui.Box(c).Width(1).Height(14).Shrink(0).Background(p.RuleStrong)
 		ui.Text(c, a.summary()).FontSize(12).TextColor(p.Ink3).SingleLine().Grow(1)
@@ -616,6 +616,27 @@ func (a *App) titleBar(c *ui.Context) {
 		}
 	})
 	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+}
+
+// mark draws the app mark (assets/icon.svg) at title-bar size: the accent
+// plate, the three ledger rows, and the strike. The painter knows only
+// axis-aligned rects, so the strike is a row of discs stepped along the
+// diagonal; at 12px they read as one stroke.
+func (a *App) mark(c *ui.Context, size float32) {
+	p := a.pal
+	ui.Box(c).Size(size, size).Shrink(0).Draw(func(pt *ui.Painter, r ui.Rect) {
+		s := size / 256
+		pt.Fill(r, p.Accent, 58*s)
+		for _, row := range [][4]float32{{60, 66, 136, 18}, {60, 118, 104, 18}, {60, 170, 80, 18}} {
+			pt.Fill(ui.Rect{X: r.X + row[0]*s, Y: r.Y + row[1]*s, W: row[2] * s, H: row[3] * s},
+				p.OnAccent, row[3]*s/2)
+		}
+		for i := 0; i <= 10; i++ {
+			t := float32(i) / 10
+			x, y := (46+(210-46)*t)*s, (188+(72-188)*t)*s
+			pt.Fill(ui.Rect{X: r.X + x - 10*s, Y: r.Y + y - 10*s, W: 20 * s, H: 20 * s}, p.OnAccent, 10*s)
+		}
+	})
 }
 
 // cleanProgress is the estimate: which step the removal is on, how far the
