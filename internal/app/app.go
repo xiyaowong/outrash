@@ -818,7 +818,7 @@ func (a *App) navItem(c *ui.Context, pg page, label string, icon navIcon) {
 	if active {
 		resting = p.Selected
 	}
-	row.Background(hoverFill(row, resting, p.Hover)).Radius(6)
+	row.Background(a.hoverFill(row, resting, p.Hover)).Radius(6)
 	// The marker is painted on the row rather than laid out in it: a child
 	// would shift the icon of whichever item is active.
 	row.Draw(func(pt *ui.Painter, r ui.Rect) {
@@ -915,7 +915,7 @@ func (a *App) footerIcon(c *ui.Context, label, tooltip string, kind navIcon, fn 
 	b := ui.ButtonBase(c).Size(28, 28).AlignItems(ui.Center).Justify(ui.Center).
 		Label(label).Tooltip(tooltip)
 	b.Cursor(ui.CursorPointer).OnClick(fn)
-	b.Background(hoverFill(b, ui.Transparent, p.Hover)).Radius(6)
+	b.Background(a.hoverFill(b, ui.Transparent, p.Hover)).Radius(6)
 	b.Children(func() { a.icon(c, kind, p.Ink2) })
 }
 
@@ -1030,7 +1030,7 @@ func (a *App) overviewPage(c *ui.Context) {
 					a.page = pageResults
 					a.open["g:"+it.gid] = true
 				})
-				row.Background(hoverFill(row, ui.Transparent, p.Hover))
+				row.Background(a.hoverFill(row, ui.Transparent, p.Hover))
 				row.Children(func() {
 					ui.Text(c, it.name).FontSize(fz(12)).TextColor(p.Ink).SingleLine().Grow(1)
 					ui.Text(c, core.Bytes(it.size)).Font(core.Mono()).FontSize(fz(12)).
@@ -1115,7 +1115,7 @@ func (a *App) tableHead(c *ui.Context) {
 			ui.Text(c, a.T("文件数量")).FontSize(fz(11)).FontWeight(600).TextColor(p.Ink3).
 				Width(colCount).TextAlign(ui.End).Shrink(0)
 			a.sortLabel(c, a.T("缓存大小"), sortSize, colSize, ui.End)
-			a.sortLabel(c, a.T("风险状态"), sortStatus, colStatus, ui.Start)
+			a.sortLabel(c, a.T("风险状态"), sortStatus, colStatus, ui.Center)
 			ui.Box(c).Width(24).Shrink(0)
 		})
 		ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
@@ -1140,7 +1140,7 @@ func (a *App) sortLabel(c *ui.Context, label string, mode sortMode, width float3
 		a.sortBy = mode
 		a.sizeUp = false
 	})
-	row.Background(hoverFill(row, ui.Transparent, p.Hover))
+	row.Background(a.hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		ui.Text(c, label).FontSize(fz(11)).FontWeight(600).TextColor(fg)
 		if active && mode == sortSize {
@@ -1148,7 +1148,7 @@ func (a *App) sortLabel(c *ui.Context, label string, mode sortMode, width float3
 			if a.sizeUp {
 				arrow = "▴"
 			}
-			ui.Text(c, arrow).FontSize(fz(9)).TextColor(fg)
+			ui.Text(c, arrow).FontSize(fz(11)).TextColor(fg)
 		}
 	})
 }
@@ -1276,7 +1276,7 @@ func (a *App) textButton(c *ui.Context, label string, fn func()) {
 	p := a.pal
 	b := ui.ButtonBase(c).Height(28).Radius(6).Padding(0, 8).Shrink(0).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(fn)
-	b.Background(hoverFill(b, ui.Transparent, p.Hover))
+	b.Background(a.hoverFill(b, ui.Transparent, p.Hover))
 	b.Children(func() { ui.Text(c, label).FontSize(fz(12)).TextColor(p.Ink2) })
 }
 
@@ -1313,7 +1313,7 @@ func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, f
 	case btn.Hovered():
 		bg = p.Hover
 	}
-	btn.Background(btn.AnimateColor("bg", bg, hoverAnim))
+	btn.Background(btn.AnimateColor(a.themeKey("bg"), bg, hoverAnim))
 	if primary {
 		btn.Border(0, ui.Transparent)
 	} else {
@@ -1348,7 +1348,9 @@ func (a *App) panel(c *ui.Context) {
 				})
 				if opts := a.volumeOptions(); len(opts) > 1 || a.volume != "" {
 					a.panelBlock(c, a.T("筛选"), func() {
-						ui.Column(c).Gap(6).Children(func() {
+						// Start: the chips are pills sized to their label; a
+						// stretched pill reads as a button.
+						ui.Column(c).Gap(6).AlignItems(ui.Start).Children(func() {
 							if a.volume != "" {
 								a.volumeChip(c, volumeOpt{}, false)
 							}
@@ -1360,7 +1362,7 @@ func (a *App) panel(c *ui.Context) {
 				}
 				if sugg := a.suggestions(); len(sugg) > 0 {
 					a.panelBlock(c, a.T("建议"), func() {
-						ui.Column(c).Gap(6).Children(func() {
+						ui.Column(c).Gap(6).AlignItems(ui.Start).Children(func() {
 							for _, s := range sugg {
 								a.suggestChip(c, s)
 							}
@@ -1545,7 +1547,7 @@ func (a *App) suggestChip(c *ui.Context, s suggestion) {
 	row := ui.ButtonBase(c).Height(26).Radius(13).Padding(0, 10).Shrink(0).
 		AlignItems(ui.Center).Border(1, p.RuleStrong).Tooltip(s.note)
 	row.Cursor(ui.CursorPointer).OnClick(func() { a.applySuggestion(s) })
-	row.Background(hoverFill(row, ui.Transparent, p.Hover))
+	row.Background(a.hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		ui.Text(c, s.label).FontSize(fz(11)).TextColor(p.Ink).SingleLine()
 	})
@@ -1629,7 +1631,7 @@ func (a *App) volumeChip(c *ui.Context, o volumeOpt, active bool) {
 	if active {
 		bg, border = p.Selected, p.Accent
 	}
-	row.Background(hoverFill(row, bg, p.Hover)).Border(1, border).Tooltip(note)
+	row.Background(a.hoverFill(row, bg, p.Hover)).Border(1, border).Tooltip(note)
 	row.Children(func() {
 		ui.Text(c, label).FontSize(fz(11)).TextColor(p.Ink).SingleLine()
 	})
@@ -1731,12 +1733,23 @@ func fz(v float32) float32 { return core.Zoomed(v) }
 // hoverFill is the row's background under the pointer, eased rather than
 // snapped. It is read while the row is built, which is also what asks mygo
 // for a frame when the pointer enters or leaves.
-func hoverFill(row ui.Element, resting, over ui.Color) ui.Color {
+// themeKey names both the palette a color motion belongs to and its role on
+// the element. A theme flip lands on a fresh key, so fills snap to the new
+// palette instead of easing from the old one under text that already
+// switched; within a palette, the same key eases hover and press as before.
+type themeKey struct {
+	kind string
+	pal  ui.Color
+}
+
+func (a *App) themeKey(kind string) themeKey { return themeKey{kind, a.pal.Canvas} }
+
+func (a *App) hoverFill(row ui.Element, resting, over ui.Color) ui.Color {
 	target := resting
 	if row.Hovered() {
 		target = over
 	}
-	return row.AnimateColor("hover", target, hoverAnim)
+	return row.AnimateColor(a.themeKey("hover"), target, hoverAnim)
 }
 
 // hoverAnim is the ease every pointer state change takes: short enough to

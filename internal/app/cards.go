@@ -211,7 +211,7 @@ func (a *App) chip(c *ui.Context, act preset) {
 	case row.Hovered():
 		bg = p.Hover
 	}
-	row.Background(row.AnimateColor("hover", bg, hoverAnim))
+	row.Background(row.AnimateColor(a.themeKey("chip"), bg, hoverAnim))
 	row.Children(func() {
 		ui.Text(c, act.label).FontSize(fz(11)).TextColor(fg).SingleLine()
 		if n > 0 {
@@ -219,7 +219,7 @@ func (a *App) chip(c *ui.Context, act preset) {
 			// and the number never read as one word.
 			ui.Box(c).Height(16).Radius(8).Padding(0, 6).Shrink(0).AlignItems(ui.Center).
 				Background(tint(p.Ink3, p.Surface, 0.18)).Children(func() {
-				ui.Text(c, fmt.Sprintf("%d", n)).Font(core.Mono()).FontSize(fz(10)).TextColor(p.Ink2)
+				ui.Text(c, fmt.Sprintf("%d", n)).Font(core.Mono()).FontSize(fz(11)).TextColor(p.Ink2)
 			})
 		}
 	})
@@ -239,7 +239,7 @@ func (a *App) familyRow(c *ui.Context, g groupState) {
 	row := ui.Row(c).Height(38).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
 		ContextMenu(a.familyMenu(g))
-	row.Background(hoverFill(row, tint(p.Ink2, p.Surface, 0.03), p.Hover))
+	row.Background(a.hoverFill(row, tint(p.Ink2, p.Surface, 0.03), p.Hover))
 	row.Children(func() {
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
 		ui.Text(c, core.GroupName(&g.group)).FontSize(fz(13)).FontWeight(600).TextColor(p.Ink).
@@ -295,7 +295,7 @@ func (a *App) itemRow(c *ui.Context, it itemState) {
 	row := ui.Row(c).Height(44).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
 		ContextMenu(a.itemMenu(c, it, a.familyName(it)))
-	row.Background(hoverFill(row, ui.Transparent, p.Hover))
+	row.Background(a.hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		indent(c, indentItem)
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
@@ -474,7 +474,7 @@ func (a *App) versioned(c *ui.Context, it itemState, ent core.Entry, env bool) {
 	row := ui.Row(c).Height(32).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
 		ContextMenu(a.packageMenu(c, it, ent, env))
-	row.Background(hoverFill(row, ui.Transparent, p.Hover))
+	row.Background(a.hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		indent(c, indentLeaf)
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
@@ -533,7 +533,7 @@ func (a *App) leaf(c *ui.Context, it itemState, name, path string, size int64, m
 	if on {
 		resting = p.Selected
 	}
-	row.Background(hoverFill(row, resting, p.Hover))
+	row.Background(a.hoverFill(row, resting, p.Hover))
 	row.Children(func() {
 		indent(c, ind)
 		a.check(c, m, nil)
@@ -598,8 +598,8 @@ func (a *App) check(c *ui.Context, m mark, flip func()) {
 	case m != markOff && box.Pressed():
 		fill = p.AccentHover
 	}
-	box.Background(box.AnimateColor("fill", fill, hoverAnim)).
-		Border(1, box.AnimateColor("edge", border, hoverAnim))
+	box.Background(box.AnimateColor(a.themeKey("fill"), fill, hoverAnim)).
+		Border(1, box.AnimateColor(a.themeKey("edge"), border, hoverAnim))
 	box.Draw(func(pt *ui.Painter, r ui.Rect) {
 		if m == markOff {
 			return
