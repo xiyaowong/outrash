@@ -141,8 +141,12 @@ func removeBelow(dir string, removed *int64, report func(int64)) error {
 	}
 	for _, e := range entries {
 		p := filepath.Join(dir, e.Name())
-		if info, err := e.Info(); err == nil {
-			*removed += info.Size()
+		// Files only: the scan measures file bytes, and on Linux a directory
+		// entry carries its own size that the estimate must not count.
+		if !e.IsDir() {
+			if info, err := e.Info(); err == nil {
+				*removed += info.Size()
+			}
 		}
 		if e.IsDir() {
 			if err := removeBelow(p, removed, report); err != nil {
