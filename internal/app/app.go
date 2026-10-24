@@ -1184,10 +1184,20 @@ func (a *App) barSub() string {
 	case a.phase == phaseScanning:
 		return a.T("结果会随扫描逐步出现")
 	case a.cache == nil:
-		return a.T("按 Ctrl+R 或点「重新扫描」开始")
+		return fmt.Sprintf(a.T("按 %s+R 或点「重新扫描」开始"), modKey())
 	}
 	return fmt.Sprintf(a.T("共 %d 个缓存 · %s · 推荐 %s"), a.totalCount(), core.Bytes(a.totalSize()),
 		core.Bytes(a.recommendedBytes()))
+}
+
+// modKey names the shortcut modifier the way the platform prints it, for
+// the one line of help that mentions it. The shortcuts themselves are
+// registered with ui.Cmd, which is already the right modifier everywhere.
+func modKey() string {
+	if runtime.GOOS == "darwin" {
+		return "⌘"
+	}
+	return "Ctrl"
 }
 
 func (a *App) textButton(c *ui.Context, label string, fn func()) {

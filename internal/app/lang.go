@@ -122,7 +122,7 @@ var en = map[string]string{
 	"未选择任何项目":               "Nothing selected",
 	"已选 %d 项 · 预计释放 %s":     "%d selected · about %s freed",
 	"结果会随扫描逐步出现":            "Results appear as the scan goes",
-	"按 Ctrl+R 或点「重新扫描」开始":   "Press Ctrl+R or click Rescan",
+	"按 %s+R 或点「重新扫描」开始":     "Press %s+R or click Rescan",
 	"共 %d 个缓存 · %s · 推荐 %s": "%d caches · %s · %s recommended",
 
 	// Title bar.
@@ -247,8 +247,8 @@ var en = map[string]string{
 	"%d 个路径 · %s": "%d paths · %s",
 	"保留 · ":       "Kept · ",
 	"、":           ", ",
-	"调试模式：只列出，不删除。":  "Debug mode: lists only, deletes nothing.",
-	"已禁用删除：只列出，不删除。": "Deletion disabled: lists only, deletes nothing.",
+	"调试模式：只列出，不删除。":   "Debug mode: lists only, deletes nothing.",
+	"已禁用删除：只列出，不删除。":  "Deletion disabled: lists only, deletes nothing.",
 	"预览：回到窗口确认后才会删除。": "Preview: nothing is deleted until you confirm it back in the window.",
 	"全部":        "All",
 	"旧版本":       "Old",
