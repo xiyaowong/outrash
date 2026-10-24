@@ -303,6 +303,104 @@ func TestWidths(t *testing.T) {
 	}
 }
 
+// volumeOf is the drive a Windows path sits on, read from the text itself so
+// it behaves the same on every OS the tests run on.
+func TestVolumeOf(t *testing.T) {
+	cases := map[string]string{
+		`C:\Users\me`:      "C:",
+		`c:/temp`:          "c:",
+		`\server\share`:    "",
+		"/home/me":         "",
+		`D:\cache\npm\one`: "D:",
+	}
+	for p, want := range cases {
+		if got := volumeOf(p); got != want {
+			t.Errorf("volumeOf(%q) = %q, want %q", p, got, want)
+		}
+	}
+}
+
+// The panel offers one bubble per drive the scan spans, the home drive first;
+// a click narrows the table to that drive and 全部条目 brings everything back.
+func TestPanelFiltersByVolume(t *testing.T) {
+	a := testApp(t, false)
+	// A cache with a second root on another drive, so the scan spans C: and D:.
+	res := a.cache.Results["node/npm"]
+	extra := core.Root{Path: `D:\cache\npm`, Size: 50_000_000, Count: 1}
+	extra.Entries = []core.Entry{{Name: "donly", Path: extra.Path + `\donly`, Size: 50_000_000, ModTime: fixedTime(10)}}
+	res.Roots = append(res.Roots, extra)
+	res.Size += extra.Size
+	a.cache.Results["node/npm"] = res
+	a.regroup()
+
+	a.page = pageResults
+	a.open["g:node"] = true
+	a.open["i:npm"] = true
+	tt := ui.NewTester(a.view, 1200, 780)
+	tt.Frame()
+	if !tt.HasText("donly") {
+		t.Fatal("the D: leaf is missing before any filter")
+	}
+	if !tt.HasText("筛选") || !tt.HasText("只看 C 盘") || !tt.HasText("只看 D 盘") {
+		t.Fatalf("panel missing the volume bubbles; texts %v", tt.Texts())
+	}
+	if err := tt.Click("只看 C 盘"); err != nil {
+		t.Fatal(err)
+	}
+	if a.volume != "C:" {
+		t.Fatalf("volume = %q, want C:", a.volume)
+	}
+	tt.Frame()
+	if tt.HasText("donly") {
+		t.Fatal("a D: entry survived the C: filter")
+	}
+	if _, sub := a.pageTitle(); !strings.Contains(sub, "只看 C 盘") {
+		t.Fatalf("header sub %q does not name the filter", sub)
+	}
+	// The C: rows keep their own numbers: npm now counts one cache root.
+	tt.Frame()
+	if !tt.HasText("只看 C 盘") {
+		t.Fatal("the active bubble vanished")
+	}
+	if err := tt.Click("全部条目"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("donly") {
+		t.Fatal("the D: entry did not come back with 全部条目")
+	}
+}
+
+// The filter narrows rows without touching the selection: what stays checked
+// on a hidden drive is still checked, and still counted, when it comes back.
+func TestFilterKeepsSelectionHidden(t *testing.T) {
+	a := testApp(t, false)
+	res := a.cache.Results["node/npm"]
+	extra := core.Root{Path: `D:\cache\npm`, Size: 50_000_000, Count: 1}
+	extra.Entries = []core.Entry{{Name: "donly", Path: extra.Path + `\donly`, Size: 50_000_000, ModTime: fixedTime(10)}}
+	res.Roots = append(res.Roots, extra)
+	res.Size += extra.Size
+	a.cache.Results["node/npm"] = res
+	a.regroup()
+
+	a.checked[`D:\cache\npm\donly`] = true
+	a.volume = "D:"
+	a.page = pageResults
+	a.open["g:node"] = true
+	a.open["i:npm"] = true
+	tt := ui.NewTester(a.view, 1200, 780)
+	tt.Frame()
+	if !tt.HasText("donly") {
+		t.Fatal("the D: leaf is missing under its own filter")
+	}
+	for _, g := range a.groups {
+		if g.group.ID == "go" && a.familyVisible(g) {
+			t.Fatal("an all-C: family shows under a D: filter")
+		}
+	}
+	a.volume = ""
+}
+
 // The log and the rules pages are the two read-only screens behind the rail;
 // they have to render from the same scan without a second data source.
 func TestLogAndRulesPages(t *testing.T) {

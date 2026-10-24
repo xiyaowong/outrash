@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -58,6 +59,9 @@ type App struct {
 	open    map[string]bool
 	checked map[string]bool
 	now     time.Time
+	// volume narrows the results table to one drive, the way the panel's
+	// filter bubbles set it. Empty means every volume shows.
+	volume string
 	// expandedOnce keeps the scan's one automatic expansion from fighting
 	// the user on later rescans.
 	expandedOnce bool
@@ -836,6 +840,9 @@ func (a *App) pageTitle() (title, sub string) {
 		if failed > 0 {
 			sub += fmt.Sprintf(" · %d 个读取失败", failed)
 		}
+		if a.volume != "" {
+			sub += fmt.Sprintf(" · 只看 %s", volName(a.volume))
+		}
 		return "可重建缓存", sub
 	case pageLog:
 		return "清理记录", "本次会话的清理结果；记录只存在内存里，退出即消失"
@@ -925,7 +932,7 @@ func (a *App) resultsPage(c *ui.Context) {
 		}
 		n := 0
 		for _, g := range a.sortedGroups() {
-			if !g.visible() {
+			if !a.familyVisible(g) {
 				continue
 			}
 			n++
@@ -1184,6 +1191,18 @@ func (a *App) panel(c *ui.Context) {
 						a.panelLine(c, "已选清理空间", core.Bytes(bytes))
 					})
 				})
+				if opts := a.volumeOptions(); len(opts) > 1 || a.volume != "" {
+					a.panelBlock(c, "筛选", func() {
+						ui.Column(c).Gap(6).Children(func() {
+							if a.volume != "" {
+								a.volumeChip(c, volumeOpt{}, false)
+							}
+							for _, o := range opts {
+								a.volumeChip(c, o, a.volume == o.vol)
+							}
+						})
+					})
+				}
 				if sugg := a.suggestions(); len(sugg) > 0 {
 					a.panelBlock(c, "建议", func() {
 						ui.Column(c).Gap(6).Children(func() {
@@ -1372,6 +1391,81 @@ func (a *App) applySuggestion(s suggestion) {
 	}
 	a.clearChecks()
 	a.checkAll(s.pick)
+}
+
+// volumeOpt is one drive the scan found bytes on, as the filter offers it.
+// The home drive comes first: on Windows that is C:, the one most users are
+// trying to relieve.
+type volumeOpt struct {
+	vol   string
+	bytes int64
+	home  bool
+}
+
+// volumeOptions reads this scan for the drives it spans. A volume with no
+// bytes is not worth a bubble, and a scan confined to one drive offers
+// nothing to filter.
+func (a *App) volumeOptions() []volumeOpt {
+	if a.phase != phaseReady {
+		return nil
+	}
+	byVol := map[string]int64{}
+	for _, g := range a.groups {
+		for _, pk := range a.groupPicks(g) {
+			byVol[volumeOf(pk.Path)] += pk.Bytes
+		}
+	}
+	home := volumeOf(a.opts.Home)
+	var opts []volumeOpt
+	for vol, n := range byVol {
+		if vol == "" || n <= 0 {
+			continue // no drive letter: nothing to filter on
+		}
+		opts = append(opts, volumeOpt{vol: vol, bytes: n, home: vol == home})
+	}
+	slices.SortStableFunc(opts, func(x, y volumeOpt) int { return cmp.Compare(y.bytes, x.bytes) })
+	for i, o := range opts {
+		if o.home && i != 0 {
+			opts[0], opts[i] = opts[i], opts[0]
+		}
+	}
+	return opts
+}
+
+// volName says a drive the way a person does: "C:" reads as C 盘.
+func volName(vol string) string {
+	return strings.TrimSuffix(vol, ":") + " 盘"
+}
+
+// volumeChip is one filter bubble. The bubble for the drive on screen is the
+// way off again, so a filter never strands the user without an exit.
+func (a *App) volumeChip(c *ui.Context, o volumeOpt, active bool) {
+	p := a.pal
+	row := ui.ButtonBase(c).Height(26).Radius(13).Padding(0, 10).Shrink(0).
+		AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	label, note := "全部条目", "不再按盘筛选，显示每个位置的条目"
+	if o.vol != "" {
+		label = "只看 " + volName(o.vol)
+		note = fmt.Sprintf("列表收窄到 %s 上的条目，其他盘先收起来", volName(o.vol))
+		if o.home {
+			note = "系统盘。" + note
+		}
+	}
+	row.OnClick(func() {
+		if a.volume == o.vol {
+			a.volume = ""
+			return
+		}
+		a.volume = o.vol
+	})
+	bg, border := ui.Transparent, p.RuleStrong
+	if active {
+		bg, border = p.Selected, p.Accent
+	}
+	row.Background(hoverFill(row, bg, p.Hover)).Border(1, border).Tooltip(note)
+	row.Children(func() {
+		ui.Text(c, label).FontSize(11).TextColor(p.Ink).SingleLine()
+	})
 }
 
 func (a *App) bullet(c *ui.Context, line string) {
