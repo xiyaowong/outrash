@@ -85,7 +85,7 @@ func fixture() *core.Cache {
 
 	var gocache core.Result
 	gocache.GroupID, gocache.ItemID, gocache.Unit = "go", "go-build", core.UnitEntries
-	goRoot := core.Root{Path: `C:\Users\tester\AppData\Local\go-build`, Source: "环境变量 GOCACHE"}
+	goRoot := core.Root{Path: `C:\Users\tester\AppData\Local\go-build`, Source: "环境变量 GOCACHE", EnvSrc: true}
 	for _, n := range []string{"00", "1a", "7f", "c3"} {
 		goRoot.Entries = append(goRoot.Entries, core.Entry{
 			Name: n, Path: goRoot.Path + `\` + n, Size: 310_000_000, ModTime: fixedTime(3),
@@ -758,23 +758,53 @@ func TestCleanedRowsStrikeThrough(t *testing.T) {
 
 // The panel's advice must come from the scan's own numbers: the size target
 // names what the biggest entries actually add up to, and the pareto line
-// stays silent when no such concentration exists.
+// stays silent when no such concentration exists. The target is a one-click
+// selection, so it reaches past no root an environment variable named — even
+// when those hold the biggest entries of all.
 func TestPanelSuggestsSizeTarget(t *testing.T) {
 	a := testAppWith(t, Options{})
 	a.now = fixedTime(0)
+	stale := fixedTime(40)
+	// Six verified entries spread evenly, so the target advice has a goal to
+	// reach without taking everything (greed that ends in 全选 is no advice)
+	// and no three entries dominate, and an env-sourced root holding entries
+	// twice as big: if the target ever reached past it, the click below would
+	// not land on the go-build entries.
+	res := core.Result{GroupID: "go", ItemID: "go-build", Unit: core.UnitEntries}
+	verified := core.Root{Path: `C:\cache\go-build`, Size: 6 * 248_000_000, Count: 6}
+	for _, n := range []string{"a", "b", "c", "d", "e", "f"} {
+		verified.Entries = append(verified.Entries, core.Entry{
+			Name: n, Path: verified.Path + `\` + n, Size: 248_000_000, ModTime: stale,
+		})
+	}
+	env := core.Root{Path: `C:\dumps`, EnvSrc: true, Size: 2 * 500_000_000, Count: 2}
+	for _, n := range []string{"big", "bigger"} {
+		env.Entries = append(env.Entries, core.Entry{
+			Name: n, Path: env.Path + `\` + n, Size: 500_000_000, ModTime: stale,
+		})
+	}
+	res.Roots = []core.Root{verified, env}
+	res.Size = verified.Size + env.Size
+	res.Count = verified.Count + env.Count
+	a.cache = &core.Cache{Results: map[string]core.Result{"go/go-build": res}}
+	a.regroup()
+	a.recommend()
 	tt := ui.NewTester(a.view, 1200, 780)
 	tt.Frame()
-	if !tt.HasText("凑够 1.0 GB · 勾 4 项") {
+	if !tt.HasText("凑够 1.0 GB · 勾 5 项") {
 		t.Fatalf("panel missing the size target; texts %v", tt.Texts())
 	}
 	if tt.HasText("就够了") {
 		t.Fatal("an evenly spread scan must not get the pareto advice")
 	}
-	if err := tt.Click("凑够 1.0 GB · 勾 4 项"); err != nil {
+	if err := tt.Click("凑够 1.0 GB · 勾 5 项"); err != nil {
 		t.Fatal(err)
 	}
-	if n, bytes := a.checkedTotal(); n != 4 || bytes != 4*310_000_000 {
-		t.Fatalf("the target selected %d items, %d bytes; want the four go-build entries", n, bytes)
+	if n, bytes := a.checkedTotal(); n != 5 || bytes != 5*248_000_000 {
+		t.Fatalf("the target selected %d items, %d bytes; want the five verified go-build entries", n, bytes)
+	}
+	if a.checked[`C:\dumps\big`] || a.checked[`C:\dumps\bigger`] {
+		t.Error("the size target checked a root an environment variable named")
 	}
 }
 

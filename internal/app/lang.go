@@ -174,6 +174,7 @@ var en = map[string]string{
 	"选择方式":   "Presets",
 	"读取不全":   "Partial read",
 	"近期用过":   "Used this week",
+	"环境变量指向": "Named by env var",
 	"可清理":    "Cleanable",
 	"失败":     "Failed",
 	"今天":     "today",
