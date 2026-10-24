@@ -54,6 +54,9 @@ type App struct {
 	sizeUp bool
 	// seq and stop keep a rescan from racing the scan it replaced.
 	seq  int
+	// pendingReceipt is the receipt of the clean that just finished, waiting
+	// for the scan about to start to verify it.
+	pendingReceipt *receipt
 	stop context.CancelFunc
 
 	open    map[string]bool
@@ -238,6 +241,10 @@ type receipt struct {
 	still       int
 	stillBytes  int64
 	measured    bool
+	// scanSeq is the rescan that may settle this receipt: the one finish
+	// started for it. A scan wearing any other number arrived after a newer
+	// clean replaced the report, and must leave the receipt alone.
+	scanSeq int
 }
 
 type delta struct {
@@ -296,6 +303,12 @@ func (a *App) Scan() {
 	}
 	a.seq++
 	seq := a.seq
+	// A receipt waiting for verification belongs to this scan and no other;
+	// stamping it here keeps the number and the hand-off on one thread.
+	if a.pendingReceipt != nil {
+		a.pendingReceipt.scanSeq = seq
+		a.pendingReceipt = nil
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a.stop = cancel
 	go func() {
@@ -406,6 +419,11 @@ func (a *App) closeReceipt(cache *core.Cache) {
 		return
 	}
 	r := a.report.receipt
+	if r.scanSeq != a.seq {
+		// The scan that finished was on its way when a newer clean replaced
+		// the report; its numbers belong to the receipt it was started for.
+		return
+	}
 	r.measured = true
 	r.after = 0
 	at := map[string]int{}

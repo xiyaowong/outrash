@@ -188,17 +188,17 @@ func removePath(p string) error {
 
 func check(p string, roots []string) error {
 	if !filepath.IsAbs(p) {
-		return ErrUnsafe
+		return unsafeErr()
 	}
 	p = filepath.Clean(p)
 	if filepath.Dir(p) == p {
-		return ErrUnsafe
+		return unsafeErr()
 	}
 	// An entry always sits at least two levels under a drive: never the
 	// drive itself or a folder directly under it.
 	rest := strings.Trim(strings.TrimPrefix(p, filepath.VolumeName(p)), `/\`)
 	if len(strings.Split(rest, string(filepath.Separator))) < 2 {
-		return ErrUnsafe
+		return unsafeErr()
 	}
 	for _, root := range roots {
 		rel, err := filepath.Rel(filepath.Clean(root), p)
@@ -213,7 +213,7 @@ func check(p string, roots []string) error {
 		}
 		return nil
 	}
-	return ErrUnsafe
+	return unsafeErr()
 }
 
 // noLinks fails if the root itself or any component of p below it is a
@@ -224,7 +224,7 @@ func check(p string, roots []string) error {
 func noLinks(root, p string) error {
 	rel, err := filepath.Rel(root, p)
 	if err != nil {
-		return ErrUnsafe
+		return unsafeErr()
 	}
 	dir := root
 	if err := linkCheck(dir); err != nil {
@@ -245,7 +245,7 @@ func linkCheck(p string) error {
 		return err
 	}
 	if isLink(info) {
-		return fmt.Errorf(L("%w：%s 是链接", "%w: %s is a link"), ErrUnsafe, p)
+		return fmt.Errorf(L("%w：%s 是链接", "%w: %s is a link"), unsafeErr(), p)
 	}
 	return nil
 }
