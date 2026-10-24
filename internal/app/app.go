@@ -65,6 +65,10 @@ type App struct {
 	// log is this session's clean history. Nothing is written to disk: the
 	// record dies with the window, which is what "no persistence" means.
 	log []runRecord
+	// regen is what the last clean saw written straight back: paths whose
+	// files reappeared after the removal ended. Cleaning them again buys
+	// nothing, so the suggestions leave them out and offer to drop them.
+	regen map[string]bool
 
 	// busy is set while a removal runs; no plan may be opened over one.
 	busy bool
@@ -399,6 +403,7 @@ func (a *App) closeReceipt(cache *core.Cache) {
 		r.groups[i].after += g.size
 		r.after += g.size
 	}
+	regen := map[string]bool{}
 	for _, res := range cache.Results {
 		for _, root := range res.Roots {
 			for _, p := range treePaths(root) {
@@ -409,6 +414,7 @@ func (a *App) closeReceipt(cache *core.Cache) {
 				if mtime.After(r.end) {
 					r.regenerated++
 					r.regenBytes += n
+					regen[p] = true
 					continue
 				}
 				r.still++
@@ -416,6 +422,7 @@ func (a *App) closeReceipt(cache *core.Cache) {
 			}
 		}
 	}
+	a.regen = regen
 }
 
 // treePaths lists every removable path a root holds, which is what a plan
@@ -1177,6 +1184,15 @@ func (a *App) panel(c *ui.Context) {
 						a.panelLine(c, "已选清理空间", core.Bytes(bytes))
 					})
 				})
+				if sugg := a.suggestions(); len(sugg) > 0 {
+					a.panelBlock(c, "建议", func() {
+						ui.Column(c).Gap(6).Children(func() {
+							for _, s := range sugg {
+								a.suggestChip(c, s)
+							}
+						})
+					})
+				}
 				a.panelBlock(c, "风险提示", func() {
 					for _, line := range a.riskNotes() {
 						a.bullet(c, line)
@@ -1209,6 +1225,153 @@ func (a *App) panelLine(c *ui.Context, label, value string) {
 		ui.Text(c, label).FontSize(12).TextColor(p.Ink2).Grow(1)
 		ui.Text(c, value).Font(core.Mono()).FontSize(12).TextColor(p.Ink).Shrink(0)
 	})
+}
+
+// suggestion is one piece of advice the panel offers as a click: either a
+// selection to put in place, or paths to drop from the current one. The
+// numbers it names come from this scan, and clicking it only pre-checks —
+// the list is still the plan, and nothing is decided until 开始清理.
+type suggestion struct {
+	label string
+	note  string // the why, on the tooltip
+	// pick replaces the selection; drop removes paths from it.
+	pick []core.Pick
+	drop []core.Pick
+}
+
+// suggestions reads this scan for what one pass can say: that a few entries
+// hold most of the reclaimable bytes, that a target is reachable with the
+// biggest entries alone, and that the last clean saw some paths written
+// straight back.
+func (a *App) suggestions() []suggestion {
+	if a.phase != phaseReady {
+		return nil
+	}
+	var picks []core.Pick
+	for _, g := range a.groups {
+		for _, it := range g.items {
+			picks = append(picks, allPicks(it.res)...)
+		}
+	}
+	// A path the tool rewrote minutes after the last clean is the one thing
+	// not worth pointing at: skip it when picking the big ones.
+	live := make([]core.Pick, 0, len(picks))
+	for _, pk := range picks {
+		if !a.regen[pk.Path] {
+			live = append(live, pk)
+		}
+	}
+	var out []suggestion
+	if s, ok := paretoSuggestion(live); ok {
+		out = append(out, s)
+	}
+	if s, ok := targetSuggestion(live); ok {
+		out = append(out, s)
+	}
+	if s, ok := a.regenSuggestion(picks); ok {
+		out = append(out, s)
+	}
+	return out
+}
+
+// paretoSuggestion names the few entries that hold most of the space, when
+// such a concentration exists: almost the same win for a fraction of the
+// list, which is the better deal whenever it is on offer.
+func paretoSuggestion(picks []core.Pick) (suggestion, bool) {
+	const top = 3
+	if len(picks) <= top {
+		return suggestion{}, false
+	}
+	total := pickBytes(picks)
+	head := core.Greedy(picks, total)[:top]
+	headBytes := pickBytes(head)
+	if headBytes*10 < total*7 {
+		return suggestion{}, false
+	}
+	return suggestion{
+		label: fmt.Sprintf("清这 %d 项就够了 · %s", top, core.Bytes(headBytes)),
+		note:  fmt.Sprintf("它们占可清理总量的 %d%%，其余的加起来也不多", headBytes*100/max(total, 1)),
+		pick:  head,
+	}, true
+}
+
+// targetSuggestion reaches a byte goal with the biggest entries alone, for
+// the user who just wants some space back rather than a clean sweep.
+func targetSuggestion(picks []core.Pick) (suggestion, bool) {
+	total := pickBytes(picks)
+	goal := int64(0)
+	switch {
+	case total >= 1<<30:
+		goal = 1 << 30
+	case total >= 500<<20:
+		goal = 500 << 20
+	default:
+		return suggestion{}, false
+	}
+	got := core.Greedy(picks, goal)
+	if len(got) == 0 || len(got) == len(picks) {
+		// Greed that ends in 全选 is no advice.
+		return suggestion{}, false
+	}
+	return suggestion{
+		label: fmt.Sprintf("凑够 %s · 勾 %d 项", core.Bytes(goal), len(got)),
+		note:  fmt.Sprintf("从最大的开始，共 %s，够数即停", core.Bytes(pickBytes(got))),
+		pick:  got,
+	}, true
+}
+
+// regenSuggestion offers to drop what the last clean watched come straight
+// back. It only speaks when those paths are on the list now: otherwise there
+// is nothing for it to skip.
+func (a *App) regenSuggestion(picks []core.Pick) (suggestion, bool) {
+	if len(a.regen) == 0 {
+		return suggestion{}, false
+	}
+	var drop []core.Pick
+	var bytes int64
+	for _, pk := range picks {
+		if a.regen[pk.Path] && a.checked[pk.Path] {
+			drop = append(drop, pk)
+			bytes += pk.Bytes
+		}
+	}
+	if len(drop) == 0 {
+		return suggestion{}, false
+	}
+	return suggestion{
+		label: fmt.Sprintf("跳过马上回信的 %d 项 · %s", len(drop), core.Bytes(bytes)),
+		note:  "上次清理后立刻被工具写回，现在清了也会一样",
+		drop:  drop,
+	}, true
+}
+
+func pickBytes(picks []core.Pick) (sum int64) {
+	for _, p := range picks {
+		sum += p.Bytes
+	}
+	return sum
+}
+
+// suggestChip is the pill a suggestion is clicked on. The label carries the
+// numbers; the why rides on the tooltip.
+func (a *App) suggestChip(c *ui.Context, s suggestion) {
+	p := a.pal
+	row := ui.ButtonBase(c).Height(26).Radius(13).Padding(0, 10).Shrink(0).
+		AlignItems(ui.Center).Border(1, p.RuleStrong).Tooltip(s.note)
+	row.Cursor(ui.CursorPointer).OnClick(func() { a.applySuggestion(s) })
+	row.Background(hoverFill(row, ui.Transparent, p.Hover))
+	row.Children(func() {
+		ui.Text(c, s.label).FontSize(11).TextColor(p.Ink).SingleLine()
+	})
+}
+
+func (a *App) applySuggestion(s suggestion) {
+	if s.drop != nil {
+		a.clearPicks(s.drop)
+		return
+	}
+	a.clearChecks()
+	a.checkAll(s.pick)
 }
 
 func (a *App) bullet(c *ui.Context, line string) {
