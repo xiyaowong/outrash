@@ -21,6 +21,10 @@ const (
 	// root/<package>/<version>. Old versions are what a "keep latest"
 	// pass removes.
 	UnitVersioned = "versioned"
+
+	// MaxDepth is how deep a root's tree may be listed. It bounds both the
+	// scan's recursion and the table's indentation.
+	MaxDepth = 4
 )
 
 // Config is rules.json.
@@ -50,6 +54,11 @@ type Item struct {
 	// Poetry keeps project virtualenvs inside its cache directory, and a
 	// venv is not rebuilt by the tool the way a downloaded package is.
 	Exclude []string `json:"exclude"`
+	// Depth is how many levels below a root the scan lists, 1 by default.
+	// A cache shaped like pkg/mod — site, author, package — needs the
+	// levels between root and package, or the site row is all one click
+	// could act on.
+	Depth int `json:"depth"`
 }
 
 // Probe asks a tool where it keeps its cache, for the paths a user moved
@@ -94,6 +103,15 @@ func Parse(data []byte) (*Config, error) {
 			case UnitEntries, UnitVersioned:
 			default:
 				return nil, fmt.Errorf("rules: %s/%s: unknown unit %q", g.ID, it.ID, it.Unit)
+			}
+			if it.Depth == 0 {
+				it.Depth = 1
+			}
+			if it.Depth < 0 || it.Depth > MaxDepth {
+				return nil, fmt.Errorf("rules: %s/%s: depth %d out of range 1..%d", g.ID, it.ID, it.Depth, MaxDepth)
+			}
+			if it.Depth > 1 && it.Unit == UnitVersioned {
+				return nil, fmt.Errorf("rules: %s/%s: a versioned unit cannot add depth", g.ID, it.ID)
 			}
 		}
 	}

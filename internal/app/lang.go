@@ -191,6 +191,7 @@ var en = map[string]string{
 	"仅旧版本":       "Old versions only",
 	"复制包路径":      "Copy package path",
 	"打开包目录":      "Open package folder",
+	"打开目录":       "Open folder",
 	"展开":         "Expand",
 	"折叠":         "Collapse",
 	"选择":         "Select",
@@ -203,6 +204,7 @@ var en = map[string]string{
 	// Details sheet.
 	"缓存条目":           "Cache entry",
 	"软件包":            "Package",
+	"目录":             "Folder",
 	"缓存":             "Cache",
 	"缓存分组":           "Cache family",
 	"路径":             "Path",
@@ -241,6 +243,7 @@ var en = map[string]string{
 	"位置与变量": "Location & variables",
 	"按子项":   "entries",
 	"按版本":   "versions",
+	"%d 层":  "%d levels",
 	"可以设置环境变量把缓存放到别处，程序会优先读取它。": "An environment variable can move a cache elsewhere; the app reads it first.",
 
 	// Sheets.

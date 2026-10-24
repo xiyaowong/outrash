@@ -24,23 +24,40 @@ func allPicks(res core.Result) []core.Pick {
 	return picksOf(res.Roots)
 }
 
+// picksOf is every leaf of a root: versions first, then entries, then the
+// leaves an entry's children end in.
 func picksOf(roots []core.Root) []core.Pick {
 	var picks []core.Pick
 	for _, root := range roots {
 		for _, e := range root.Entries {
-			if len(e.Versions) > 0 {
-				for _, v := range e.Versions {
-					picks = append(picks, core.Pick{
-						Path: v.Path, Name: e.Name + " " + v.Name, Bytes: v.Size,
-						ModTime: v.ModTime, Package: e.Name, EnvSrc: root.EnvSrc,
-					})
-				}
-				continue
-			}
-			picks = append(picks, core.Pick{Path: e.Path, Name: e.Name, Bytes: e.Size, ModTime: e.ModTime, EnvSrc: root.EnvSrc})
+			picks = append(picks, entryPicks(e, root.EnvSrc)...)
 		}
 	}
 	return picks
+}
+
+// entryPicks is the leaves of one entry. A deep entry is not itself a pick:
+// the folder stands for the leaves under it, and a check on its row acts on
+// those.
+func entryPicks(e core.Entry, envSrc bool) []core.Pick {
+	if len(e.Versions) > 0 {
+		picks := make([]core.Pick, 0, len(e.Versions))
+		for _, v := range e.Versions {
+			picks = append(picks, core.Pick{
+				Path: v.Path, Name: e.Name + " " + v.Name, Bytes: v.Size,
+				ModTime: v.ModTime, Package: e.Name, EnvSrc: envSrc,
+			})
+		}
+		return picks
+	}
+	if len(e.Children) > 0 {
+		var picks []core.Pick
+		for _, ch := range e.Children {
+			picks = append(picks, entryPicks(ch, envSrc)...)
+		}
+		return picks
+	}
+	return []core.Pick{{Path: e.Path, Name: e.Name, Bytes: e.Size, ModTime: e.ModTime, EnvSrc: envSrc}}
 }
 
 // autoPicks is what a one-click selection may act on. A root an environment
@@ -307,15 +324,15 @@ func (a *App) itemRow(c *ui.Context, it itemState) {
 		ui.Box(c).Width(colStatus).Shrink(0).AlignItems(ui.Center).Children(func() {
 			a.statusTag(c, it.res)
 		})
-		hasVersions := false
+		deep := false
 		for _, root := range roots {
 			for _, e := range root.Entries {
-				if len(e.Versions) > 0 {
-					hasVersions = true
+				if len(e.Versions) > 0 || len(e.Children) > 0 {
+					deep = true
 				}
 			}
 		}
-		if hasVersions {
+		if deep {
 			a.expander(c, open)
 		} else {
 			ui.Box(c).Width(24).Shrink(0)
@@ -397,6 +414,9 @@ func (a *App) recent(res core.Result) bool {
 					newest = v.ModTime
 				}
 			}
+			if n := entryNewest(e); n.After(newest) {
+				newest = n
+			}
 		}
 	}
 	return !newest.IsZero() && a.now.Sub(newest) < 7*24*time.Hour
@@ -422,7 +442,7 @@ func countText(roots []core.Root) string {
 			if len(e.Versions) > 0 {
 				versions += len(e.Versions)
 			} else {
-				entries++
+				entries += leafCount(e)
 			}
 		}
 	}
@@ -437,6 +457,19 @@ func countText(roots []core.Root) string {
 	return "—"
 }
 
+// leafCount is the leaves an entry ends in: itself, or the ends of its
+// children.
+func leafCount(e core.Entry) int {
+	if len(e.Children) == 0 {
+		return 1
+	}
+	n := 0
+	for _, ch := range e.Children {
+		n += leafCount(ch)
+	}
+	return n
+}
+
 func (a *App) entries(c *ui.Context, it itemState) {
 	for _, root := range a.visibleRoots(it.res) {
 		for _, e := range root.Entries {
@@ -444,8 +477,54 @@ func (a *App) entries(c *ui.Context, it itemState) {
 				a.versioned(c, it, e, root.EnvSrc)
 				continue
 			}
+			if len(e.Children) > 0 {
+				a.deepRow(c, it, e, root.EnvSrc, indentLeaf)
+				continue
+			}
 			a.leaf(c, it, core.Pick{Path: e.Path, Name: e.Name, Bytes: e.Size, ModTime: e.ModTime}, indentLeaf)
 		}
+	}
+}
+
+// deepRow is one level of a deep cache: a folder whose check stands for the
+// leaves under it, expandable into the next level. A folder whose children
+// are already leaves opens onto leaf rows; one deeper opens onto more
+// folder rows.
+func (a *App) deepRow(c *ui.Context, it itemState, ent core.Entry, fromEnv bool, ind float32) {
+	p := a.pal
+	picks := entryPicks(ent, fromEnv)
+	key := "d:" + ent.Path
+	open := a.open[key]
+	on, total := a.checkState(autoPicks(picks))
+	row := ui.Row(c).Height(32).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
+		ContextMenu(a.folderMenu(c, it, ent, fromEnv))
+	row.Background(a.hoverFill(row, ui.Transparent, p.Hover))
+	row.Children(func() {
+		indent(c, ind)
+		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
+		nameColor := p.Ink2
+		if on > 0 {
+			nameColor = p.Ink
+		}
+		ui.Text(c, ent.Name).Font(core.Mono()).FontSize(fz(12)).TextColor(nameColor).SingleLine().Grow(1).
+			Tooltip(ent.Path)
+		ui.Text(c, fmt.Sprintf(a.T("%d 项"), leafCount(ent))).Font(core.Mono()).FontSize(fz(12)).
+			TextColor(p.Ink3).Width(colCount).TextAlign(ui.End).Shrink(0)
+		ui.Text(c, core.Bytes(ent.Size)).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink2).
+			Width(colSize).TextAlign(ui.End).Shrink(0)
+		ui.Box(c).Width(colStatus).Shrink(0)
+		a.expander(c, open)
+	})
+	if !open {
+		return
+	}
+	for _, ch := range ent.Children {
+		if len(ch.Children) > 0 {
+			a.deepRow(c, it, ch, fromEnv, ind+16)
+			continue
+		}
+		a.leaf(c, it, core.Pick{Path: ch.Path, Name: ch.Name, Bytes: ch.Size, ModTime: ch.ModTime, EnvSrc: fromEnv}, ind+16)
 	}
 }
 

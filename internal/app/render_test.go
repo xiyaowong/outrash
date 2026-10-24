@@ -765,6 +765,80 @@ func TestCleanedRowsStrikeThrough(t *testing.T) {
 // stays silent when no such concentration exists. The target is a one-click
 // selection, so it reaches past no root an environment variable named — even
 // when those hold the biggest entries of all.
+// A deep cache renders its levels: the site row opens onto folder rows, a
+// folder row's check acts on the leaves under it, and a check on a leaf
+// inside one folder leaves the folder's tri-state partial.
+func TestDeepCacheRowsExpandAndCheck(t *testing.T) {
+	a := testApp(t, false)
+	a.now = fixedTime(0)
+	// Give go-build a deep tree: site -> author -> package leaves.
+	res := a.cache.Results["go/go-build"]
+	root := res.Roots[0]
+	site := core.Entry{Name: "github.com", Path: root.Path + `\github.com`, IsDir: true}
+	author := core.Entry{Name: "author", Path: root.Path + `\github.com\author`, IsDir: true}
+	stale := fixedTime(40)
+	for _, n := range []string{"a@v1.0.0", "b@v2.0.0"} {
+		leaf := core.Entry{Name: n, Path: author.Path + `\` + n, Size: 40_000_000, ModTime: stale}
+		author.Size += leaf.Size
+		author.Children = append(author.Children, leaf)
+	}
+	site.Children = []core.Entry{author}
+	site.Size = author.Size
+	site.ModTime = stale
+	author.ModTime = stale
+	root.Entries = append(root.Entries, site)
+	root.Size += site.Size
+	root.Count += 2
+	res.Roots[0] = root
+	res.Size += site.Size
+	a.cache.Results["go/go-build"] = res
+	a.regroup()
+	a.recommend()
+
+	a.page = pageResults
+	a.open["g:go"] = true
+	a.open["i:go-build"] = true
+	tt := ui.NewTester(a.view, 1200, 780)
+	if err := tt.Click("github.com"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("author") {
+		t.Fatalf("site row did not open onto the author folder; texts %v", tt.Texts())
+	}
+	if err := tt.Click("author"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("a@v1.0.0") {
+		t.Fatalf("folder row did not open onto the leaves; texts %v", tt.Texts())
+	}
+
+	// Checking the site row selects every leaf under it; the checked paths
+	// are the leaves, never the folder itself. The checkbox has no label for
+	// the tester to find, so the test drives the same call the check makes.
+	a.clearChecks()
+	a.toggleChecks(entryPicks(site, false))
+	n, bytes := a.checkedTotal()
+	if n != 2 || bytes != 80_000_000 {
+		t.Fatalf("site check selected %d items, %d bytes", n, bytes)
+	}
+	for _, p := range []string{author.Path + `\a@v1.0.0`, author.Path + `\b@v2.0.0`} {
+		if !a.checked[p] {
+			t.Errorf("leaf %q is not checked", p)
+		}
+	}
+	if a.checked[site.Path] || a.checked[author.Path] {
+		t.Error("a folder path itself reached the selection")
+	}
+
+	// A leaf check of its own leaves the folders above it partial, not on.
+	a.clearChecks()
+	a.checked[author.Path+`\a@v1.0.0`] = true
+	tt.Frame()
+	if !tt.HasText("github.com") {
+		t.Fatal("site row missing after the leaf check")
+	}
+}
+
 func TestPanelSuggestsSizeTarget(t *testing.T) {
 	a := testAppWith(t, Options{})
 	a.now = fixedTime(0)

@@ -96,6 +96,26 @@ func (a *App) packageMenu(c *ui.Context, it itemState, ent core.Entry, fromEnv b
 	}
 }
 
+// folderMenu is one level of a deep cache: a folder a check stands for
+// whole through the leaves under it.
+func (a *App) folderMenu(c *ui.Context, it itemState, ent core.Entry, fromEnv bool) func(m *ui.Menu) {
+	picks := entryPicks(ent, fromEnv)
+	return func(m *ui.Menu) {
+		a.selectItems(m, picks, nil)
+		m.Separator()
+		if m.Item(a.T("复制路径")).Chosen() {
+			c.WriteClipboard(ent.Path)
+		}
+		if m.Item(a.T("打开目录")).Chosen() {
+			openPath(a, ent.Path)
+		}
+		m.Separator()
+		if m.Item(a.T("详细信息")).Chosen() {
+			a.showDetail(a.folderDetail(it, ent))
+		}
+	}
+}
+
 // itemMenu is one cache: the whole thing, across every root the scan found.
 // Its paths are a submenu because naming only the first would be a lie.
 func (a *App) itemMenu(c *ui.Context, it itemState, family string) func(m *ui.Menu) {
@@ -309,6 +329,20 @@ func (a *App) packageDetail(it itemState, ent core.Entry) detail {
 	return d
 }
 
+// folderDetail is a deep row's sheet: what the folder holds and when
+// anything under it was last written.
+func (a *App) folderDetail(it itemState, ent core.Entry) detail {
+	d := detail{title: ent.Name, kicker: a.T("目录"), path: ent.Path, note: core.ItemNote(&it.item)}
+	d.lines = []kv{
+		{a.T("路径"), ent.Path},
+		{a.T("条目"), fmt.Sprintf(a.T("%d 项"), leafCount(ent))},
+		{a.T("合计"), core.Bytes(ent.Size)},
+		{a.T("最后写入"), stamp(a.now, ent.ModTime)},
+		{a.T("所属缓存"), core.ItemName(&it.item)},
+	}
+	return d
+}
+
 func (a *App) itemDetail(it itemState, family string) detail {
 	d := detail{title: core.ItemName(&it.item), kicker: a.T("缓存"), path: rootPath(it.res), note: core.ItemNote(&it.item)}
 	d.lines = []kv{
@@ -355,6 +389,22 @@ func newestOf(res core.Result) (newest time.Time) {
 					newest = v.ModTime
 				}
 			}
+			if n := entryNewest(e); n.After(newest) {
+				newest = n
+			}
+		}
+	}
+	return newest
+}
+
+// entryNewest is the newest write below an entry's children.
+func entryNewest(e core.Entry) (newest time.Time) {
+	for _, ch := range e.Children {
+		if ch.ModTime.After(newest) {
+			newest = ch.ModTime
+		}
+		if n := entryNewest(ch); n.After(newest) {
+			newest = n
 		}
 	}
 	return newest

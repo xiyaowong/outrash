@@ -27,6 +27,10 @@ type Entry struct {
 	Package string
 	// Versions is set for a versioned unit, oldest first.
 	Versions []Version
+	// Children lists the levels below an entry of a deep catalog, each
+	// already measured with the bytes and mtime of its whole subtree. A
+	// check on the entry acts on the leaves the children end in.
+	Children []Entry
 	// IsDir marks a folder, which an entry listing can show as such.
 	IsDir bool
 }
@@ -223,19 +227,12 @@ func scanItem(groupID string, it Item, o Options, stop <-chan struct{}) Result {
 		if it.Unit == UnitVersioned {
 			l = readVersioned(d)
 		} else {
-			l = readEntries(d)
+			l = readEntries(d, it.Depth)
 		}
 		if len(it.Exclude) > 0 {
-			l.entries = without(l.entries, it.Exclude)
+			l.entries, _ = excludeTree(l.entries, it.Exclude)
 			l.size, l.count = 0, 0
-			for _, e := range l.entries {
-				l.size += e.Size
-				if n := len(e.Versions); n > 0 {
-					l.count += n
-				} else {
-					l.count++
-				}
-			}
+			countEntries(l.entries, &l.size, &l.count)
 		}
 		root := Root{
 			Path: d, Source: source, EnvSrc: fromEnv,
@@ -258,14 +255,19 @@ type listing struct {
 	entries []Entry
 	size    int64
 	count   int
+	// newest is the latest write in the listing, folded up from the levels
+	// below it.
+	newest time.Time
 	// bad counts paths that could not be measured; err means the root
 	// itself could not be listed.
 	bad int
 	err error
 }
 
-// readEntries measures each child of dir as one entry.
-func readEntries(dir string) listing {
+// readEntries lists the removable entries of dir, depth levels of folder
+// below it. A folder past the last level is a leaf: it is measured whole,
+// and a check on it removes it whole.
+func readEntries(dir string, depth int) listing {
 	children, err := os.ReadDir(dir)
 	if err != nil {
 		return listing{err: err}
@@ -273,6 +275,35 @@ func readEntries(dir string) listing {
 	var l listing
 	for _, ch := range children {
 		p := filepath.Join(dir, ch.Name())
+		if depth > 1 && ch.IsDir() {
+			sub := readEntries(p, depth-1)
+			l.bad += sub.bad
+			if sub.err != nil || len(sub.entries) == 0 {
+				// The folder could not be listed, or holds nothing at the
+				// levels below: measure it whole, as a leaf.
+				sz, mt, bad, ok := measure(p, ch)
+				l.bad += bad
+				if !ok {
+					l.bad++
+					continue
+				}
+				l.entries = append(l.entries, Entry{Name: ch.Name(), Path: p, Size: sz, ModTime: mt, IsDir: true})
+				l.size += sz
+				if mt.After(l.newest) {
+					l.newest = mt
+				}
+				continue
+			}
+			l.entries = append(l.entries, Entry{
+				Name: ch.Name(), Path: p, Size: sub.size, ModTime: sub.newest,
+				IsDir: true, Children: sub.entries,
+			})
+			l.size += sub.size
+			if sub.newest.After(l.newest) {
+				l.newest = sub.newest
+			}
+			continue
+		}
 		sz, mt, bad, ok := measure(p, ch)
 		l.bad += bad
 		if !ok {
@@ -281,6 +312,9 @@ func readEntries(dir string) listing {
 		}
 		l.entries = append(l.entries, Entry{Name: ch.Name(), Path: p, Size: sz, ModTime: mt, IsDir: ch.IsDir()})
 		l.size += sz
+		if mt.After(l.newest) {
+			l.newest = mt
+		}
 	}
 	sortEntries(l.entries)
 	l.count = len(l.entries)
@@ -409,20 +443,62 @@ func measure(p string, ch fs.DirEntry) (size int64, mod time.Time, bad int, ok b
 	return size, newest, bad, true
 }
 
-// without drops entries named in exclude and takes their bytes out of the
-// root's total, so an excluded child can never reach a plan.
-func without(entries []Entry, exclude []string) []Entry {
-	if len(exclude) == 0 {
-		return entries
-	}
-	out := entries[:0]
+// countEntries re-derives a listing's totals from its tree: the bytes of
+// the top level, each of which already names its whole subtree, and the
+// leaves — a version counts one, a childless entry counts one.
+func countEntries(entries []Entry, size *int64, count *int) {
 	for _, e := range entries {
+		*size += e.Size
+		if len(e.Versions) > 0 {
+			*count += len(e.Versions)
+		} else if len(e.Children) > 0 {
+			countLeaves(e.Children, count)
+		} else {
+			*count++
+		}
+	}
+}
+
+func countLeaves(entries []Entry, count *int) {
+	for _, e := range entries {
+		if len(e.Versions) > 0 {
+			*count += len(e.Versions)
+		} else if len(e.Children) > 0 {
+			countLeaves(e.Children, count)
+		} else {
+			*count++
+		}
+	}
+}
+
+// excludeTree strips named children from every level and folds their bytes
+// out of the parents above, so an excluded folder is unreachable however
+// deep the catalog lists and no total still names its bytes. A folder whose
+// children all went is dropped with them: keeping it whole would delete the
+// excluded content, which is exactly what the exclusion is there to prevent.
+func excludeTree(entries []Entry, exclude []string) ([]Entry, int64) {
+	out := entries[:0]
+	var cut int64
+	for _, e := range entries {
+		if e.Children != nil {
+			var gone int64
+			e.Children, gone = excludeTree(e.Children, exclude)
+			e.Size -= gone
+			cut += gone
+		}
 		if slices.Contains(exclude, e.Name) {
+			cut += e.Size
+			continue
+		}
+		if e.Children != nil && len(e.Children) == 0 {
+			// The folder stands empty above its exclusion; nothing rebuildable
+			// is left inside it to offer.
+			cut += e.Size
 			continue
 		}
 		out = append(out, e)
 	}
-	return out
+	return out, cut
 }
 
 func sortEntries(in []Entry) {

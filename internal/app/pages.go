@@ -100,6 +100,9 @@ func (a *App) rulesPage(c *ui.Context) {
 					if it.Unit == core.UnitVersioned {
 						unit = a.T("按版本")
 					}
+					if it.Depth > 1 {
+						unit += " · " + fmt.Sprintf(a.T("%d 层"), it.Depth)
+					}
 					ui.Row(c).Height(32).Gap(colGap).AlignItems(ui.Center).Children(func() {
 						ui.Text(c, name).FontSize(fz(12)).FontWeight(600).TextColor(p.Ink).
 							Width(120).Shrink(0).SingleLine()

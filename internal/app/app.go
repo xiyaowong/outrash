@@ -482,19 +482,33 @@ func (a *App) closeReceipt(cache *core.Cache) {
 }
 
 // treePaths lists every removable path a root holds, which is what a plan
-// names: entries, or versions of a package.
+// names: entries, or versions of a package, or the leaves a deep entry
+// ends in.
 func treePaths(root core.Root) []string {
 	var out []string
 	for _, e := range root.Entries {
-		if len(e.Versions) > 0 {
-			for _, v := range e.Versions {
-				out = append(out, v.Path)
-			}
-			continue
-		}
-		out = append(out, e.Path)
+		out = append(out, entryPaths(e)...)
 	}
 	return out
+}
+
+// entryPaths is the leaves one entry ends in.
+func entryPaths(e core.Entry) []string {
+	if len(e.Versions) > 0 {
+		out := make([]string, 0, len(e.Versions))
+		for _, v := range e.Versions {
+			out = append(out, v.Path)
+		}
+		return out
+	}
+	if len(e.Children) > 0 {
+		var out []string
+		for _, ch := range e.Children {
+			out = append(out, entryPaths(ch)...)
+		}
+		return out
+	}
+	return []string{e.Path}
 }
 
 // sizeOf returns an entry's bytes and newest modification time.

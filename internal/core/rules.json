@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "staleDays": 30,
   "groups": [
     {
@@ -160,7 +160,8 @@
             "darwin": ["%GOPATH%/pkg/mod", "~/go/pkg/mod"],
             "linux": ["%GOPATH%/pkg/mod", "~/go/pkg/mod"]
           },
-          "unit": "entries"
+          "unit": "entries",
+          "depth": 3
         }
       ]
     },
@@ -177,7 +178,8 @@
             "darwin": ["%CARGO_HOME%/registry", "~/.cargo/registry"],
             "linux": ["%CARGO_HOME%/registry", "~/.cargo/registry"]
           },
-          "unit": "entries"
+          "unit": "entries",
+          "depth": 3
         },
         {
           "id": "cargo-git",
@@ -188,7 +190,8 @@
             "darwin": ["%CARGO_HOME%/git", "~/.cargo/git"],
             "linux": ["%CARGO_HOME%/git", "~/.cargo/git"]
           },
-          "unit": "entries"
+          "unit": "entries",
+          "depth": 2
         }
       ]
     },
@@ -300,7 +303,8 @@
             "darwin": ["%GRADLE_USER_HOME%/caches", "~/.gradle/caches"],
             "linux": ["%GRADLE_USER_HOME%/caches", "~/.gradle/caches"]
           },
-          "unit": "entries"
+          "unit": "entries",
+          "depth": 4
         },
         {
           "id": "maven",
@@ -333,7 +337,8 @@
             "darwin": ["~/.ivy2/cache"],
             "linux": ["~/.ivy2/cache"]
           },
-          "unit": "entries"
+          "unit": "entries",
+          "depth": 3
         }
       ]
     },
@@ -698,7 +703,8 @@
             "darwin": ["%PUB_CACHE%/hosted", "%PUB_CACHE%/git", "~/.pub-cache/hosted", "~/.pub-cache/git"],
             "linux": ["%PUB_CACHE%/hosted", "%PUB_CACHE%/git", "~/.pub-cache/hosted", "~/.pub-cache/git"]
           },
-          "unit": "entries"
+          "unit": "entries",
+          "depth": 2
         },
         {
           "id": "composer",
