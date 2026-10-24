@@ -200,7 +200,12 @@ func (a *App) chip(c *ui.Context, act preset) {
 	row.Children(func() {
 		ui.Text(c, act.label).FontSize(fz(11)).TextColor(fg).SingleLine()
 		if n > 0 {
-			ui.Text(c, fmt.Sprintf(" %d", n)).Font(core.Mono()).FontSize(fz(11)).TextColor(p.Ink3).SingleLine()
+			// The count is Primer's counter: its own little pill, so the label
+			// and the number never read as one word.
+			ui.Box(c).Height(16).Radius(8).Padding(0, 6).Shrink(0).AlignItems(ui.Center).
+				Background(tint(p.Ink3, p.Surface, 0.18)).Children(func() {
+				ui.Text(c, fmt.Sprintf("%d", n)).Font(core.Mono()).FontSize(fz(10)).TextColor(p.Ink2)
+			})
 		}
 	})
 }
@@ -553,16 +558,26 @@ func stateOf(on, total int) mark {
 
 // check draws a tri-state box: accent fill for included, a bar for partly
 // included. Clicking it flips the whole set; the row around it expands.
+// The states follow Primer's checkbox: a white ground that darkens its
+// outline under the pointer, and a fill that deepens under the press.
 func (a *App) check(c *ui.Context, m mark, flip func()) {
 	p := a.pal
-	border := p.RuleStrong
+	fill, border := p.Surface, p.RuleStrong
 	if m != markOff {
-		border = p.Accent
+		fill, border = p.Accent, p.Accent
 	}
-	box := ui.Box(c).Size(16, 16).Shrink(0).Background(ui.Transparent).Border(1, border).Radius(4)
+	box := ui.Box(c).Size(16, 16).Shrink(0).Radius(3)
 	if flip != nil {
 		box.Cursor(ui.CursorPointer).OnClick(flip)
 	}
+	switch {
+	case m == markOff && box.Hovered():
+		border = p.Ink2
+	case m != markOff && box.Pressed():
+		fill = p.AccentHover
+	}
+	box.Background(box.AnimateColor("fill", fill, hoverAnim)).
+		Border(1, box.AnimateColor("edge", border, hoverAnim))
 	box.Draw(func(pt *ui.Painter, r ui.Rect) {
 		if m == markOff {
 			return
@@ -580,16 +595,26 @@ func (a *App) check(c *ui.Context, m mark, flip func()) {
 	})
 }
 
-// expander is the +/− at the row's end. It is not clickable: the row is,
+// expander is the caret at the row's end: a chevron that eases from pointing
+// right to pointing down as the row opens. It is not clickable: the row is,
 // and the hit test gives the click to it.
 func (a *App) expander(c *ui.Context, open bool) {
 	p := a.pal
-	ui.Box(c).Size(24, 24).Shrink(0).Draw(func(pt *ui.Painter, r ui.Rect) {
+	box := ui.Box(c).Size(24, 24).Shrink(0)
+	target := float32(0)
+	if open {
+		target = 1
+	}
+	t := box.Animate("expander", target, hoverAnim.Duration)
+	box.Draw(func(pt *ui.Painter, r ui.Rect) {
 		cx, cy := r.X+r.W/2, r.Y+r.H/2
-		pt.Fill(ui.Rect{X: cx - 4, Y: cy - 0.5, W: 8, H: 1}, p.Ink2, 0)
-		if !open {
-			pt.Fill(ui.Rect{X: cx - 0.5, Y: cy - 4, W: 1, H: 8}, p.Ink2, 0)
-		}
+		ease := t * t * (3 - 2*t)
+		lerp := func(a, b float32) float32 { return a + (b-a)*ease }
+		pt.StrokePolyline([][2]float32{
+			{lerp(cx-2.2, cx-3.8), lerp(cy-3.8, cy-2.2)},
+			{lerp(cx+1.6, cx), lerp(cy, cy+1.6)},
+			{lerp(cx-2.2, cx+3.8), lerp(cy+3.8, cy-2.2)},
+		}, 1.4, p.Ink2)
 	})
 }
 
