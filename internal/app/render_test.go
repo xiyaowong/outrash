@@ -505,7 +505,7 @@ func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	posted := make(chan struct{}, 4)
-	a.remove = func(*core.Plan, []string, func(done, total int64)) core.Outcome {
+	a.remove = func(*core.Plan, []string, func(done, total int64), func(core.Removal)) core.Outcome {
 		close(started)
 		<-release
 		return core.Outcome{Freed: 4096}
@@ -543,6 +543,39 @@ func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
 	}
 	if a.bar {
 		t.Fatal("the taskbar indicator must clear once the rescan ends")
+	}
+}
+
+// A step that is over strikes its row off the table, and a step that failed
+// keeps its row with the failure named: a vanished row reads as nothing
+// happened, which is a lie the table must not tell.
+func TestCleanedRowsStrikeThrough(t *testing.T) {
+	a := testAppWith(t, Options{})
+	a.now = fixedTime(0)
+	a.page = pageResults
+	onlyOpen(a, "node")
+	a.open["i:npm"] = true
+	tt := ui.NewTester(a.view, 1200, 780)
+	tt.Frame()
+	logsBefore, ok := tt.Find("_logs")
+	if !ok {
+		t.Fatal("fixture lost the _logs row")
+	}
+
+	cacache := `C:\Users\tester\AppData\Local\npm-cache\_cacache`
+	logs := `C:\Users\tester\AppData\Local\npm-cache\_logs`
+	a.fx = &cleanFx{steps: map[string]core.Removal{
+		cacache: {Path: cacache, Bytes: 21_000_000},
+		logs:    {Path: logs, Bytes: 21_000_000, Err: os.ErrPermission},
+	}}
+	tt.Frame()
+	tt.Advance(2 * fxSpan)
+	logsAfter, ok := tt.Find("_logs")
+	if !ok || logsAfter.Y > logsBefore.Y-20 {
+		t.Fatalf("the cleaned row must strike through and fold away; _logs at %v, was %v", logsAfter, logsBefore)
+	}
+	if !tt.HasText("_logs") || !tt.HasText("失败") {
+		t.Fatal("a failed row must stay with its failure named")
 	}
 }
 

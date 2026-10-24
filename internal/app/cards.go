@@ -397,9 +397,35 @@ func (a *App) leaf(c *ui.Context, it itemState, name, path string, size int64, m
 	if on {
 		m = markOn
 	}
+	// A step that is over strikes its row off like a ledger line and folds
+	// it shut; one that failed keeps its height and says so in the status
+	// column, because a row that vanishes reads as nothing happened. The
+	// animation is armed on every row from its first frame, so a row that
+	// turns finished mid-run moves from 0 instead of appearing there.
+	target := float32(0)
+	failed := false
+	if r, over := a.fx.at(path); over {
+		if r.Err == nil {
+			target = 1
+		} else {
+			failed = true
+		}
+	}
 	row := ui.Row(c).Height(30).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.checked[path] = !on }).
 		ContextMenu(a.leafMenu(c, it, name, path, size, mod))
+	t := row.Animate("fx", target, fxSpan)
+	strike, fold := min(2*t, 1), max(2*t-1, 0)
+	row.Height(30 * (1 - fold))
+	if fold > 0 {
+		row.Clip()
+	}
+	if strike > 0 {
+		row.Opacity(1 - 0.45*strike)
+		row.DrawOver(func(pt *ui.Painter, r ui.Rect) {
+			pt.Fill(ui.Rect{X: r.X + 2, Y: r.Y + r.H/2, W: (r.W - 4) * strike, H: 1.5}, p.Ink2, 0)
+		})
+	}
 	resting := ui.Transparent
 	if on {
 		resting = p.Selected
@@ -422,7 +448,11 @@ func (a *App) leaf(c *ui.Context, it itemState, name, path string, size int64, m
 		ui.Box(c).Width(colCount).Shrink(0)
 		ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink3).
 			Shrink(0).Width(colSize).TextAlign(ui.End)
-		ui.Box(c).Width(colStatus).Shrink(0)
+		ui.Box(c).Width(colStatus).Shrink(0).AlignItems(ui.Center).Children(func() {
+			if failed {
+				tag(c, "失败", p.Danger, p.Surface)
+			}
+		})
 		ui.Box(c).Width(24).Shrink(0)
 	})
 }

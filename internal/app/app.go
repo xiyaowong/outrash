@@ -73,11 +73,14 @@ type App struct {
 	bar bool
 	// remove runs a plan, and post lands an update on the UI thread. Tests
 	// replace them to observe the order.
-	remove func(*core.Plan, []string, func(done, total int64)) core.Outcome
+	remove func(*core.Plan, []string, func(done, total int64), func(core.Removal)) core.Outcome
 	post   func(func())
 	// progress is the clean's byte cursor, written by the removal goroutine
 	// and read by the frame that shows the estimate.
 	progress *progress
+	// fx is the ledger of the running clean: each step lands in it the
+	// moment the removal is done with it, and its row strikes itself off.
+	fx *cleanFx
 
 	modal  modal
 	shown  *core.Plan
@@ -122,6 +125,40 @@ func (p *progress) read() (done, total int64, elapsed time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.done, p.total, time.Since(p.start)
+}
+
+// fxSpan is how long a finished row takes to strike through and fold: the
+// line draws across over the first half, the height closes over the second.
+const fxSpan = 460 * time.Millisecond
+
+// fxTail is how long the clean waits past the last step before the report
+// opens, so the final rows finish their strike in view instead of under the
+// rescan that rebuilds the table.
+const fxTail = fxSpan + 60*time.Millisecond
+
+// cleanFx is that ledger. Guarded like progress, because the removal writes
+// it from its goroutine while every frame reads it.
+type cleanFx struct {
+	mu    sync.Mutex
+	steps map[string]core.Removal
+}
+
+func (f *cleanFx) add(r core.Removal) {
+	f.mu.Lock()
+	f.steps[r.Path] = r
+	f.mu.Unlock()
+}
+
+// at reports whether a path's step is over. A nil ledger means no clean has
+// run, and every row reads as unfinished.
+func (f *cleanFx) at(path string) (core.Removal, bool) {
+	if f == nil {
+		return core.Removal{}, false
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	r, ok := f.steps[path]
+	return r, ok
 }
 
 type Options struct {
@@ -221,7 +258,7 @@ func New(cfg *core.Config, o core.Options, so Options) *App {
 		open:     map[string]bool{},
 		checked:  map[string]bool{},
 		now:      time.Now(),
-		remove:   core.RemoveWith,
+		remove:   core.RemoveSteps,
 		post:     nil,
 		progress: &progress{},
 	}
