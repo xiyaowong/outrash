@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "staleDays": 30,
   "groups": [
     {
@@ -638,6 +638,53 @@
             "windows": ["%LOCALAPPDATA%/Spotify/Storage"],
             "darwin": ["~/Library/Caches/com.spotify.client/Data"],
             "linux": ["~/.cache/spotify/Storage"]
+          },
+          "unit": "entries"
+        }
+      ]
+    },
+    {
+      "id": "cn",
+      "name": "国产软件",
+      "items": [
+        {
+          "id": "qqnt",
+          "name": "QQ 临时文件",
+          "note": "使用时自动重建",
+          "paths": {
+            "windows": ["%APPDATA%/Tencent/QQNT/STemp"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "baidunetdisk",
+          "name": "百度网盘缓存",
+          "note": "重新打开时自动重新下载",
+          "paths": {
+            "windows": [
+              "%APPDATA%/baidunetdisk/Cache",
+              "%APPDATA%/baidunetdisk/Code Cache",
+              "%APPDATA%/baidunetdisk/GPUCache",
+              "%APPDATA%/baidunetdisk/DawnCache"
+            ]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "wps",
+          "name": "WPS 缓存",
+          "note": "使用时自动重建",
+          "paths": {
+            "windows": ["%APPDATA%/kingsoft/office6/cache"]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "netease-music",
+          "name": "网易云音乐缓存",
+          "note": "下次播放时自动重新下载",
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/NetEase/CloudMusic/Cache"]
           },
           "unit": "entries"
         }
