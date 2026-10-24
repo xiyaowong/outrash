@@ -36,7 +36,7 @@
           "note": "下次安装依赖时自动重新下载",
           "env": ["YARN_CACHE_FOLDER"],
           "paths": {
-            "windows": ["%LOCALAPPDATA%/Yarn/Cache", "%LOCALAPPDATA%/Yarn/Berry/cache"],
+            "windows": ["%LOCALAPPDATA%/Yarn/Cache", "%USERPROFILE%/.yarn/berry/cache"],
             "darwin": ["~/Library/Caches/Yarn", "~/.yarn/berry/cache"],
             "linux": ["~/.cache/yarn", "~/.yarn/berry/cache"]
           },
@@ -237,10 +237,15 @@
           "id": "conda",
           "name": "Conda 包缓存",
           "note": "下次安装时自动重新下载",
+          "env": ["CONDA_PKGS_DIRS"],
           "paths": {
-            "windows": ["%USERPROFILE%/.conda/pkgs"],
-            "darwin": ["~/.conda/pkgs"],
-            "linux": ["~/.conda/pkgs"]
+            "windows": [
+              "%USERPROFILE%/miniconda3/pkgs",
+              "%USERPROFILE%/anaconda3/pkgs",
+              "%USERPROFILE%/.conda/pkgs"
+            ],
+            "darwin": ["~/miniconda3/pkgs", "~/anaconda3/pkgs", "~/.conda/pkgs"],
+            "linux": ["~/miniconda3/pkgs", "~/anaconda3/pkgs", "~/.conda/pkgs"]
           },
           "unit": "entries"
         }
@@ -274,9 +279,9 @@
           "name": "RubyGems 缓存",
           "note": "下次安装依赖时自动重新下载",
           "paths": {
-            "windows": ["%USERPROFILE%/.gem"],
-            "darwin": ["~/.gem"],
-            "linux": ["~/.gem"]
+            "windows": ["%USERPROFILE%/.gem/ruby/*/cache"],
+            "darwin": ["~/.gem/ruby/*/cache"],
+            "linux": ["~/.gem/ruby/*/cache"]
           },
           "unit": "entries"
         }
@@ -523,7 +528,8 @@
               "%APPDATA%/Code/CachedData",
               "%APPDATA%/Code/DawnGraphiteCache",
               "%APPDATA%/Code/DawnWebGPUCache",
-              "%APPDATA%/Code/CachedExtensionVSIXs"
+              "%APPDATA%/Code/CachedExtensionVSIXs",
+              "%LOCALAPPDATA%/Microsoft/vscode-cpptools/ipch"
             ],
             "darwin": [
               "~/Library/Application Support/Code/Cache",
@@ -539,6 +545,15 @@
               "~/.config/Code/CachedData",
               "~/.config/Code/CachedExtensionVSIXs"
             ]
+          },
+          "unit": "entries"
+        },
+        {
+          "id": "visual-studio",
+          "name": "Visual Studio 缓存",
+          "note": "打开时自动重建",
+          "paths": {
+            "windows": ["%LOCALAPPDATA%/Microsoft/VisualStudio/*/ComponentModelCache"]
           },
           "unit": "entries"
         },
@@ -621,14 +636,14 @@
           "note": "重新打开时自动重新下载",
           "paths": {
             "windows": [
-              "%APPDATA%/Microsoft/Teams/Cache",
-              "%APPDATA%/Microsoft/Teams/Code Cache",
-              "%APPDATA%/Microsoft/Teams/GPUCache"
+              "%LOCALAPPDATA%/Packages/MSTeams_8wekyb3d8bbwe/LocalCache/Microsoft/MSTeams/Cache",
+              "%LOCALAPPDATA%/Packages/MSTeams_8wekyb3d8bbwe/LocalCache/Microsoft/MSTeams/Code Cache",
+              "%LOCALAPPDATA%/Packages/MSTeams_8wekyb3d8bbwe/LocalCache/Microsoft/MSTeams/GPUCache"
             ],
             "darwin": [
-              "~/Library/Application Support/Microsoft/Teams/Cache",
-              "~/Library/Application Support/Microsoft/Teams/Code Cache",
-              "~/Library/Application Support/Microsoft/Teams/GPUCache"
+              "~/Library/Containers/com.microsoft.teams2/Data/Library/Application Support/Microsoft/MSTeams/Cache",
+              "~/Library/Containers/com.microsoft.teams2/Data/Library/Application Support/Microsoft/MSTeams/Code Cache",
+              "~/Library/Containers/com.microsoft.teams2/Data/Library/Application Support/Microsoft/MSTeams/GPUCache"
             ]
           },
           "unit": "entries"
