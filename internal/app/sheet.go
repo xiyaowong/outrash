@@ -500,7 +500,7 @@ func (a *App) receiptBlock(c *ui.Context, r *report) {
 				continue
 			}
 			ui.Row(c).Gap(8).Children(func() {
-				ui.Text(c, d.name).FontSize(fz(11)).TextColor(p.Ink3).Grow(1)
+				ui.Text(c, a.groupName(d.id)).FontSize(fz(11)).TextColor(p.Ink3).Grow(1)
 				ui.Text(c, fmt.Sprintf("%s → %s", core.Bytes(d.before), core.Bytes(d.after))).
 					Font(core.Mono()).FontSize(fz(11)).TextColor(p.Ink3).Shrink(0)
 			})

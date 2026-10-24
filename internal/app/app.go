@@ -248,7 +248,9 @@ type receipt struct {
 }
 
 type delta struct {
-	name          string
+	// id is the catalog key, not the display name: a language toggle during
+	// a long clean must not break the lookups that prove what it freed.
+	id            string
 	before, after int64
 }
 
@@ -396,12 +398,24 @@ func anyVersioned(picks []core.Pick) bool {
 	return false
 }
 
+// groupName looks a family's display name up in the catalog by its stable
+// ID, in the language this frame speaks; a group the catalog no longer has
+// answers with its ID.
+func (a *App) groupName(id string) string {
+	for i := range a.cfg.Groups {
+		if a.cfg.Groups[i].ID == id {
+			return core.GroupName(&a.cfg.Groups[i])
+		}
+	}
+	return id
+}
+
 // openReceipt snapshots what the families hold before a clean, and which
 // paths the plan will remove, so the rescan can prove both numbers.
 func (a *App) openReceipt(pl *core.Plan) *receipt {
 	r := &receipt{planned: map[string]bool{}, failed: map[string]bool{}, after: -1}
 	for _, g := range a.groups {
-		r.groups = append(r.groups, delta{name: core.GroupName(&g.group), before: g.size})
+		r.groups = append(r.groups, delta{id: g.group.ID, before: g.size})
 		r.before += g.size
 	}
 	for _, s := range pl.Steps {
@@ -428,10 +442,10 @@ func (a *App) closeReceipt(cache *core.Cache) {
 	r.after = 0
 	at := map[string]int{}
 	for i, d := range r.groups {
-		at[d.name] = i
+		at[d.id] = i
 	}
 	for _, g := range a.groups {
-		i, ok := at[core.GroupName(&g.group)]
+		i, ok := at[g.group.ID]
 		if !ok {
 			continue
 		}
@@ -1449,7 +1463,13 @@ func (a *App) paretoSuggestion(picks []core.Pick) (suggestion, bool) {
 		return suggestion{}, false
 	}
 	total := pickBytes(picks)
-	head := core.Greedy(picks, total)[:top]
+	head := core.Greedy(picks, total)
+	if len(head) < top {
+		// Fewer paying picks than the headline names: empty directories are
+		// legal entries, and there is no top three to sell.
+		return suggestion{}, false
+	}
+	head = head[:top]
 	headBytes := pickBytes(head)
 	if headBytes*10 < total*7 {
 		return suggestion{}, false

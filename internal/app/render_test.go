@@ -845,6 +845,39 @@ func topHeavyCache() *core.Cache {
 	}}
 }
 
+// Empty directories are legal entries — a fresh install or the scan right
+// after a clean produces them — and Greedy pays nothing past a zero-byte
+// pick. A scan whose paying entries are fewer than three has no top three
+// to name; it must silence the pareto line, not slice past its end on the
+// UI thread.
+func TestPanelSurvivesEmptyEntries(t *testing.T) {
+	a := testAppWith(t, Options{})
+	a.now = fixedTime(0)
+	stale := fixedTime(40)
+	res := core.Result{GroupID: "node", ItemID: "npm", Unit: core.UnitEntries}
+	root := core.Root{Path: `C:\Users\tester\AppData\Local\npm-cache`, Size: 2 * 600_000_000, Count: 5}
+	for _, n := range []string{"a", "b"} {
+		root.Entries = append(root.Entries, core.Entry{
+			Name: n, Path: root.Path + `\` + n, Size: 600_000_000, ModTime: stale,
+		})
+	}
+	for _, n := range []string{"c", "d", "e"} {
+		root.Entries = append(root.Entries, core.Entry{
+			Name: n, Path: root.Path + `\` + n, ModTime: stale,
+		})
+	}
+	res.Roots = []core.Root{root}
+	res.Size, res.Count = root.Size, root.Count
+	a.cache = &core.Cache{Results: map[string]core.Result{"node/npm": res}}
+	a.regroup()
+	a.recommend()
+	for _, s := range a.suggestions() {
+		if strings.Contains(s.label, "就够了") {
+			t.Fatalf("pareto named a top three from two paying entries: %q", s.label)
+		}
+	}
+}
+
 // A path that came straight back after the last clean is the one the next
 // selection should skip, and the panel offers exactly that in one click.
 func TestPanelSuggestsSkippingRegenerated(t *testing.T) {
@@ -924,8 +957,9 @@ func TestReceiptComparesBeforeAndAfter(t *testing.T) {
 		t.Fatalf("receipt not measured: %+v", rc)
 	}
 	// The .NET family is the only one that changed: it now holds exactly the
-	// regenerated version.
-	if d := rc.groups[1]; d.name != ".NET" || d.after != 50 || d.before <= 50 {
+	// regenerated version. Deltas are keyed by the catalog ID, which no
+	// language toggle during the clean can rename.
+	if d := rc.groups[1]; d.id != "dotnet" || d.after != 50 || d.before <= 50 {
 		t.Fatalf(".NET delta = %+v", d)
 	}
 	if rc.after >= rc.before {
