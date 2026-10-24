@@ -1,11 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <!-- The mark: ledger rows struck off, the app's signature clean. The
+  <!-- The mark: a checked box, the app's own 勾选态 — 勾上的就是会被删的.
+       The check's tail runs past the box and vanishes into the plate. The
        generator in genicon/ draws the same geometry; keep them in sync. -->
   <rect width="256" height="256" rx="58" fill="#0969DA"/>
-  <g fill="#FFFFFF">
-    <rect x="60" y="66" width="136" height="18" rx="9"/>
-    <rect x="60" y="118" width="104" height="18" rx="9"/>
-    <rect x="60" y="170" width="80" height="18" rx="9"/>
-  </g>
-  <line x1="46" y1="188" x2="210" y2="72" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round"/>
+  <rect x="56" y="56" width="144" height="144" rx="36" fill="#FFFFFF"/>
+  <path d="M86 132 L120 168 L196 84" fill="none" stroke="#0969DA" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

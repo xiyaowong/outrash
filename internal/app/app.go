@@ -678,14 +678,15 @@ func (a *App) mark(c *ui.Context, size float32) {
 	ui.Box(c).Size(size, size).Shrink(0).Draw(func(pt *ui.Painter, r ui.Rect) {
 		s := size / 256
 		pt.Fill(r, p.Accent, 58*s)
-		for _, row := range [][4]float32{{60, 66, 136, 18}, {60, 118, 104, 18}, {60, 170, 80, 18}} {
-			pt.Fill(ui.Rect{X: r.X + row[0]*s, Y: r.Y + row[1]*s, W: row[2] * s, H: row[3] * s},
-				p.OnAccent, row[3]*s/2)
-		}
-		for i := 0; i <= 10; i++ {
-			t := float32(i) / 10
-			x, y := (46+(210-46)*t)*s, (188+(72-188)*t)*s
-			pt.Fill(ui.Rect{X: r.X + x - 10*s, Y: r.Y + y - 10*s, W: 20 * s, H: 20 * s}, p.OnAccent, 10*s)
+		// The checked box: a white plate with the check knocked out in the
+		// plate color, its tail running past the box and vanishing into it.
+		pt.Fill(ui.Rect{X: r.X + 56*s, Y: r.Y + 56*s, W: 144 * s, H: 144 * s}, p.OnAccent, 36*s)
+		for _, ln := range [][4]float32{{86, 132, 120, 168}, {120, 168, 196, 84}} {
+			for i := 0; i <= 12; i++ {
+				t := float32(i) / 12
+				x, y := (ln[0]+(ln[2]-ln[0])*t)*s, (ln[1]+(ln[3]-ln[1])*t)*s
+				pt.Fill(ui.Rect{X: r.X + x - 13*s, Y: r.Y + y - 13*s, W: 26 * s, H: 26 * s}, p.Accent, 13*s)
+			}
 		}
 	})
 }

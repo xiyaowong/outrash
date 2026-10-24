@@ -18,8 +18,9 @@ import (
 	"runtime"
 )
 
-// Geometry in 256-unit icon space: the accent plate, three ledger rows, and
-// the strike that crosses them out.
+// Geometry in 256-unit icon space: the accent plate, the checked box, and
+// the check knocked out of it — its tail runs past the box and vanishes
+// into the plate.
 const (
 	plate        = 256.0
 	cornerRadius = 58.0
@@ -29,12 +30,11 @@ var (
 	accent = color.RGBA{0x09, 0x69, 0xDA, 0xFF} // Primer accent.emphasis
 	mark   = color.RGBA{0xFF, 0xFF, 0xFF, 0xFF}
 
-	rows = []rect{
-		{x: 60, y: 66, w: 136, h: 18, r: 9},
-		{x: 60, y: 118, w: 104, h: 18, r: 9},
-		{x: 60, y: 170, w: 80, h: 18, r: 9},
+	checkPlate = rect{x: 56, y: 56, w: 144, h: 144, r: 36}
+	check      = []seg{
+		{x1: 86, y1: 132, x2: 120, y2: 168, w: 26},
+		{x1: 120, y1: 168, x2: 196, y2: 84, w: 26},
 	}
-	strike = seg{x1: 46, y1: 188, x2: 210, y2: 72, w: 20}
 )
 
 type rect struct{ x, y, w, h, r float64 }
@@ -58,14 +58,13 @@ func sdSeg(px, py float64, s seg) float64 {
 	return math.Hypot(wx-t*vx, wy-t*vy) - s.w/2
 }
 
-// markDist is the signed distance to the whole white mark; the union of the
-// rows and the strike.
-func markDist(px, py float64) float64 {
+// checkDist is the signed distance to the check knocked out of the box.
+func checkDist(px, py float64) float64 {
 	d := math.Inf(1)
-	for _, r := range rows {
-		d = min(d, sdRoundRect(px, py, r))
+	for _, s := range check {
+		d = min(d, sdSeg(px, py, s))
 	}
-	return min(d, sdSeg(px, py, strike))
+	return d
 }
 
 // cover turns a signed distance into anti-aliased coverage over one pixel.
@@ -84,8 +83,11 @@ func draw(size int) image.Image {
 			if a := cover(plateD); a > 0 {
 				c = blend(c, accent, a)
 			}
-			if a := cover(markDist(x, y)); a > 0 {
+			if a := cover(sdRoundRect(x, y, checkPlate)); a > 0 {
 				c = blend(c, mark, a)
+			}
+			if a := cover(checkDist(x, y)); a > 0 {
+				c = blend(c, accent, a)
 			}
 			img.Set(px, py, c)
 		}
