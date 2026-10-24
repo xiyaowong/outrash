@@ -95,7 +95,7 @@ func fixture() *core.Cache {
 	gocache.Roots = []core.Root{goRoot}
 
 	var edge core.Result
-	edge.GroupID, edge.ItemID, edge.Unit = "apps", "edge", core.UnitEntries
+	edge.GroupID, edge.ItemID, edge.Unit = "browsers", "edge", core.UnitEntries
 	edgeCache := core.Root{Path: `C:\Users\tester\AppData\Local\Microsoft\Edge\User Data\Default\Cache`, Source: "默认位置"}
 	edgeCache.Entries = []core.Entry{{Name: "Cache_Data", Path: edgeCache.Path + `\Cache_Data`, Size: 114_500_000, ModTime: fixedTime(1)}}
 	edgeCache.Size = 114_500_000
@@ -105,7 +105,7 @@ func fixture() *core.Cache {
 	edge.Roots = []core.Root{edgeCache, edgeCode}
 
 	var vscode core.Result
-	vscode.GroupID, vscode.ItemID, vscode.Unit = "apps", "vscode", core.UnitEntries
+	vscode.GroupID, vscode.ItemID, vscode.Unit = "editors", "vscode", core.UnitEntries
 	vsRoot := core.Root{Path: `C:\Users\tester\AppData\Roaming\Code\CachedExtensionVSIXs`, Source: "默认位置"}
 	for i, n := range []string{"vscodevim", "golang.go", "rust-lang"} {
 		vsRoot.Entries = append(vsRoot.Entries, core.Entry{
