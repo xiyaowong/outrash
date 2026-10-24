@@ -34,14 +34,10 @@ type Outcome struct {
 	Elapsed time.Duration
 }
 
-// ErrUnsafe marks a path the cleaner refuses to touch. SetLang re-points it
-// per language; identity holds within a session, which is what errors.Is
-// needs.
-var (
-	errUnsafeZh = errors.New("拒绝删除：不在扫描范围内，或路径过于靠近根目录")
-	errUnsafeEn = errors.New("refusing to delete: outside the scanned roots, or too close to a drive root")
-	ErrUnsafe   = errUnsafeZh
-)
+// ErrUnsafe marks a path the cleaner refuses to touch. It is an immutable
+// sentinel; the localized sentence is wrapped around it at creation time by
+// unsafeErr, so errors.Is keeps its identity across language switches.
+var ErrUnsafe = errors.New("unsafe")
 
 // Remove removes every step in order. roots are the directories the scan
 // measured; a step outside all of them is refused, so a catalog change
@@ -249,7 +245,9 @@ func linkCheck(p string) error {
 		return err
 	}
 	if isLink(info) {
-		return fmt.Errorf(L("%w：%s 是链接", "%w: %s is a link"), unsafeErr(), p)
+		// unsafeErr already wraps the sentinel; the link context joins the
+		// sentence in the language it was built in.
+		return fmt.Errorf("%w：%s 是链接", unsafeErr(), p)
 	}
 	return nil
 }
