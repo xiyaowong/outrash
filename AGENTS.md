@@ -1,6 +1,6 @@
 # outrash
 
-Windows-first cache cleaner for developer tools and everyday apps: whatever a program can download or rebuild itself. Go + mygo native UI. Cross-platform logic, no webviews.
+Cross-platform cache cleaner for developer tools and everyday apps: whatever a program can download or rebuild itself. Go + mygo native UI, no webviews.
 
 ## Hard rules
 

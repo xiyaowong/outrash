@@ -1,7 +1,7 @@
 # outrash
 
-一个 Windows 优先的缓存清理小工具：扫描本机各程序留下的可重建缓存，勾选，一次清掉，清掉的下次使用时自动回来。
-A Windows-first cache cleaner: it scans the rebuildable caches your tools leave behind, you check, one pass clears them, and everything comes back the next time you use it.
+一个跨平台的缓存清理小工具：扫描本机各程序留下的可重建缓存，勾选，一次清掉，清掉的下次使用时自动回来。
+A cross-platform cache cleaner: it scans the rebuildable caches your tools leave behind, you check, one pass clears them, and everything comes back the next time you use it.
 
 ![扫描结果 Screenshot](docs/screenshot.png)
 
