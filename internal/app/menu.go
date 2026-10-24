@@ -96,8 +96,12 @@ func (a *App) packageMenu(c *ui.Context, it itemState, ent core.Entry) func(m *u
 // itemMenu is one cache: the whole thing, across every root the scan found.
 // Its paths are a submenu because naming only the first would be a lie.
 func (a *App) itemMenu(c *ui.Context, it itemState, family string) func(m *ui.Menu) {
-	picks := allPicks(it.res)
-	roots := rootPaths(it.res)
+	vr := a.visibleRoots(it.res)
+	picks := picksOf(vr)
+	roots := make([]string, 0, len(vr))
+	for _, r := range vr {
+		roots = append(roots, r.Path)
+	}
 	return func(m *ui.Menu) {
 		a.selectItems(m, picks, nil)
 		m.Separator()
@@ -113,7 +117,9 @@ func (a *App) itemMenu(c *ui.Context, it itemState, family string) func(m *ui.Me
 // familyMenu is a tool family: a total and the items under it, no path of its
 // own.
 func (a *App) familyMenu(g groupState) func(m *ui.Menu) {
-	picks := a.groupPicks(g)
+	// The same set the row's checkbox toggles: a menu on the row must not
+	// quote, or check, leaves the filter is hiding.
+	picks := a.familyPicks(g)
 	key := "g:" + g.group.ID
 	return func(m *ui.Menu) {
 		label := a.T("展开")
