@@ -536,6 +536,8 @@ func (a *App) view(c *ui.Context) {
 	a.now = time.Now()
 	c.OnShortcut(ui.Cmd, ui.KeyR, a.Scan)
 	c.OnShortcut(ui.Cmd, ui.KeyA, a.selectAllVisible)
+	c.OnShortcut(ui.Cmd, ui.KeyMinus, func() { core.ZoomText(-1); a.repaint() })
+	c.OnShortcut(ui.Cmd, ui.KeyEqual, func() { core.ZoomText(1); a.repaint() })
 	c.OnShortcut(0, ui.KeyEnter, a.startClean)
 	c.OnShortcut(0, ui.KeyEscape, a.dismiss)
 
@@ -602,14 +604,14 @@ func (a *App) titleBar(c *ui.Context) {
 	ui.Row(c).Height(h).DragWindow().Gradient(p.Wash(), p.Canvas, 180).
 		Padding(0, bar.Right+12, 0, bar.Left+14).AlignItems(ui.Center).Gap(10).Children(func() {
 		a.mark(c, 12)
-		ui.Text(c, "Outrash").FontSize(12).FontWeight(600).TextColor(p.Ink).Shrink(0)
+		ui.Text(c, "Outrash").FontSize(fz(12)).FontWeight(600).TextColor(p.Ink).Shrink(0)
 		ui.Box(c).Width(1).Height(14).Shrink(0).Background(p.RuleStrong)
-		ui.Text(c, a.summary()).FontSize(12).TextColor(p.Ink3).SingleLine().Grow(1)
+		ui.Text(c, a.summary()).FontSize(fz(12)).TextColor(p.Ink3).SingleLine().Grow(1)
 		if a.busy {
 			a.cleanProgress(c)
 		}
 		if a.so.Debug || a.so.NoDelete {
-			ui.Text(c, a.modeNote()).FontSize(11).TextColor(p.Ink2).Shrink(0)
+			ui.Text(c, a.modeNote()).FontSize(fz(11)).TextColor(p.Ink2).Shrink(0)
 		}
 		if a.phase == phaseScanning {
 			ui.Spinner(c).Width(12).Shrink(0)
@@ -779,7 +781,7 @@ func (a *App) navItem(c *ui.Context, pg page, label string, icon navIcon) {
 			fg = p.Ink
 		}
 		a.icon(c, icon, fg)
-		ui.Text(c, label).FontSize(13).TextColor(fg).
+		ui.Text(c, label).FontSize(fz(13)).TextColor(fg).
 			FontWeight(map[bool]int{true: 600, false: 400}[active]).SingleLine()
 	})
 }
@@ -838,7 +840,7 @@ func (a *App) navFooter(c *ui.Context) {
 		about.Background(hoverFill(about, ui.Transparent, p.Hover)).Radius(6)
 		about.Children(func() {
 			a.icon(c, iconAbout, p.Ink2)
-			ui.Text(c, a.T("关于")).FontSize(13).TextColor(p.Ink2).SingleLine()
+			ui.Text(c, a.T("关于")).FontSize(fz(13)).TextColor(p.Ink2).SingleLine()
 		})
 	})
 }
@@ -849,14 +851,14 @@ func (a *App) pageHeader(c *ui.Context) {
 	ui.Column(c).Shrink(0).Children(func() {
 		ui.Row(c).Padding(20, 24, 14, 24).Gap(12).AlignItems(ui.End).Children(func() {
 			ui.Column(c).Grow(1).Gap(3).Children(func() {
-				ui.Text(c, title).FontSize(19).FontWeight(650).TextColor(p.Ink).SingleLine()
-				ui.Text(c, sub).FontSize(12).TextColor(p.Ink3).SingleLine()
+				ui.Text(c, title).FontSize(fz(19)).FontWeight(650).TextColor(p.Ink).SingleLine()
+				ui.Text(c, sub).FontSize(fz(12)).TextColor(p.Ink3).SingleLine()
 			})
 			if a.page == pageResults || a.page == pageOverview {
 				ui.Column(c).AlignItems(ui.End).Shrink(0).Children(func() {
-					ui.Text(c, core.Bytes(a.totalSize())).Font(core.Mono()).FontSize(18).
+					ui.Text(c, core.Bytes(a.totalSize())).Font(core.Mono()).FontSize(fz(18)).
 						FontWeight(600).TextColor(p.Ink)
-					ui.Text(c, a.T("缓存总量")).FontSize(11).TextColor(p.Ink3)
+					ui.Text(c, a.T("缓存总量")).FontSize(fz(11)).TextColor(p.Ink3)
 				})
 			}
 		})
@@ -909,7 +911,7 @@ func (a *App) overviewPage(c *ui.Context) {
 	p := a.pal
 	ui.Column(c).Padding(24).Gap(24).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
-			ui.Text(c, a.T("清理可重建缓存")).FontSize(16).FontWeight(600).TextColor(p.Ink)
+			ui.Text(c, a.T("清理可重建缓存")).FontSize(fz(16)).FontWeight(600).TextColor(p.Ink)
 			ui.Text(c, a.T("扫描本机留下的可重建缓存，勾选后一次清理。")).
 				FontSize(12).TextColor(p.Ink2)
 			ui.Text(c, a.T("只列出能重新下载或重新编译的内容，清理后各工具会在下次使用时自行恢复。")).
@@ -917,7 +919,7 @@ func (a *App) overviewPage(c *ui.Context) {
 		})
 		ui.Row(c).Height(1).Background(p.Rule)
 		ui.Column(c).Gap(10).Children(func() {
-			ui.Text(c, a.T("本次状态")).FontSize(11).FontWeight(600).TextColor(p.Ink3)
+			ui.Text(c, a.T("本次状态")).FontSize(fz(11)).FontWeight(600).TextColor(p.Ink3)
 			ui.Row(c).Gap(40).Children(func() {
 				a.stat(c, core.L("缓存", "Caches"), fmt.Sprint(a.totalCount()))
 				a.stat(c, a.T("总量"), core.Bytes(a.totalSize()))
@@ -937,7 +939,7 @@ func (a *App) overviewPage(c *ui.Context) {
 		})
 		ui.Row(c).Height(1).Background(p.Rule)
 		ui.Column(c).Gap(8).Children(func() {
-			ui.Text(c, a.T("占用最多")).FontSize(11).FontWeight(600).TextColor(p.Ink3)
+			ui.Text(c, a.T("占用最多")).FontSize(fz(11)).FontWeight(600).TextColor(p.Ink3)
 			for _, it := range a.biggest(5) {
 				row := ui.Row(c).Height(26).Gap(12).AlignItems(ui.Center).
 					Cursor(ui.CursorPointer).OnClick(func() {
@@ -946,13 +948,13 @@ func (a *App) overviewPage(c *ui.Context) {
 				})
 				row.Background(hoverFill(row, ui.Transparent, p.Hover))
 				row.Children(func() {
-					ui.Text(c, it.name).FontSize(12).TextColor(p.Ink).SingleLine().Grow(1)
-					ui.Text(c, core.Bytes(it.size)).Font(core.Mono()).FontSize(12).
+					ui.Text(c, it.name).FontSize(fz(12)).TextColor(p.Ink).SingleLine().Grow(1)
+					ui.Text(c, core.Bytes(it.size)).Font(core.Mono()).FontSize(fz(12)).
 						TextColor(p.Ink2).Width(88).TextAlign(ui.End).Shrink(0)
 				})
 			}
 			if len(a.biggest(1)) == 0 {
-				ui.Text(c, a.T("还没有扫描结果")).FontSize(12).TextColor(p.Ink3)
+				ui.Text(c, a.T("还没有扫描结果")).FontSize(fz(12)).TextColor(p.Ink3)
 			}
 		})
 	})
@@ -986,7 +988,7 @@ func (a *App) scanning(c *ui.Context) {
 	ui.Column(c).Padding(40, 24).Gap(10).Children(func() {
 		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 			ui.Spinner(c).Width(14).Shrink(0)
-			ui.Text(c, a.T("正在扫描缓存目录")).FontSize(14).FontWeight(600).TextColor(p.Ink)
+			ui.Text(c, a.T("正在扫描缓存目录")).FontSize(fz(14)).FontWeight(600).TextColor(p.Ink)
 		})
 		ui.Text(c, a.T("按环境变量优先、默认位置兜底逐个目录统计；读不到的位置会在结果里标出来。")).
 			FontSize(12).TextColor(p.Ink3)
@@ -996,7 +998,7 @@ func (a *App) scanning(c *ui.Context) {
 func (a *App) emptyResults(c *ui.Context) {
 	p := a.pal
 	ui.Column(c).Padding(40, 24).Gap(6).Children(func() {
-		ui.Text(c, a.T("没有找到可清理的缓存")).FontSize(14).FontWeight(600).TextColor(p.Ink)
+		ui.Text(c, a.T("没有找到可清理的缓存")).FontSize(fz(14)).FontWeight(600).TextColor(p.Ink)
 		ui.Text(c, a.T("已检查环境变量与各工具的默认位置。安装工具并运行一次后，它们的缓存会出现在这里。")).
 			FontSize(12).TextColor(p.Ink3)
 		a.actionButton(c, a.T("重新扫描"), false, true, a.Scan)
@@ -1023,8 +1025,8 @@ func (a *App) tableHead(c *ui.Context) {
 		ui.Row(c).Height(30).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Size(colCheck, 1).Shrink(0)
 			a.sortLabel(c, a.T("名称"), sortName, colName, ui.Start)
-			ui.Text(c, a.T("缓存路径")).FontSize(11).FontWeight(600).TextColor(p.Ink3).Grow(1)
-			ui.Text(c, a.T("文件数量")).FontSize(11).FontWeight(600).TextColor(p.Ink3).
+			ui.Text(c, a.T("缓存路径")).FontSize(fz(11)).FontWeight(600).TextColor(p.Ink3).Grow(1)
+			ui.Text(c, a.T("文件数量")).FontSize(fz(11)).FontWeight(600).TextColor(p.Ink3).
 				Width(colCount).TextAlign(ui.End).Shrink(0)
 			a.sortLabel(c, a.T("缓存大小"), sortSize, colSize, ui.End)
 			a.sortLabel(c, a.T("风险状态"), sortStatus, colStatus, ui.Start)
@@ -1053,13 +1055,13 @@ func (a *App) sortLabel(c *ui.Context, label string, mode sortMode, width float3
 		a.sizeUp = false
 	})
 	row.Children(func() {
-		ui.Text(c, label).FontSize(11).FontWeight(600).TextColor(fg)
+		ui.Text(c, label).FontSize(fz(11)).FontWeight(600).TextColor(fg)
 		if active && mode == sortSize {
 			arrow := "▾"
 			if a.sizeUp {
 				arrow = "▴"
 			}
-			ui.Text(c, arrow).FontSize(9).TextColor(fg)
+			ui.Text(c, arrow).FontSize(fz(9)).TextColor(fg)
 		}
 	})
 }
@@ -1110,13 +1112,13 @@ func (a *App) actionBar(c *ui.Context) {
 		ui.Row(c).Height(52).Padding(8, 24).Gap(12).AlignItems(ui.Center).Children(func() {
 			if a.page == pageResults && all > 0 {
 				a.check(c, stateOf(n, all), a.selectAllVisible)
-				ui.Text(c, a.T("全选")).FontSize(12).TextColor(p.Ink2).Shrink(0)
+				ui.Text(c, a.T("全选")).FontSize(fz(12)).TextColor(p.Ink2).Shrink(0)
 				ui.Box(c).Width(1).Height(16).Shrink(0).Background(p.Rule)
 			}
 			ui.Column(c).Grow(1).Gap(2).Children(func() {
-				ui.Text(c, a.barStatus(n, chosen)).FontSize(12).FontWeight(600).
+				ui.Text(c, a.barStatus(n, chosen)).FontSize(fz(12)).FontWeight(600).
 					TextColor(p.Ink).SingleLine()
-				ui.Text(c, a.barSub()).FontSize(11).TextColor(p.Ink3).SingleLine()
+				ui.Text(c, a.barSub()).FontSize(fz(11)).TextColor(p.Ink3).SingleLine()
 			})
 			if n > 0 {
 				// Paired with 全选 above: the bar's two selection verbs read
@@ -1167,7 +1169,7 @@ func (a *App) textButton(c *ui.Context, label string, fn func()) {
 	b := ui.ButtonBase(c).Height(28).Radius(6).Padding(0, 8).Shrink(0).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(fn)
 	b.Background(hoverFill(b, ui.Transparent, p.Hover))
-	b.Children(func() { ui.Text(c, label).FontSize(12).TextColor(p.Ink2) })
+	b.Children(func() { ui.Text(c, label).FontSize(fz(12)).TextColor(p.Ink2) })
 }
 
 // actionButton is the one button shape: a quiet outline that fills under the
@@ -1208,7 +1210,7 @@ func (a *App) actionButton(c *ui.Context, label string, primary, enabled bool, f
 	if primary && enabled {
 		btn.Shadow(0, 2, 6, 0, tint(p.Confirm, p.Surface, 0.24))
 	}
-	btn.Children(func() { ui.Text(c, label).FontSize(12).FontWeight(600).TextColor(fg).SingleLine() })
+	btn.Children(func() { ui.Text(c, label).FontSize(fz(12)).FontWeight(600).TextColor(fg).SingleLine() })
 }
 
 // panel is the right column: what the scan found, what is selected, and the
@@ -1268,7 +1270,7 @@ func (a *App) panel(c *ui.Context) {
 			ui.Spacer(c)
 			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 			ui.Row(c).Padding(10, 20).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, a.railNote()).FontSize(11).TextColor(p.Ink3).SingleLine().Grow(1)
+				ui.Text(c, a.railNote()).FontSize(fz(11)).TextColor(p.Ink3).SingleLine().Grow(1)
 				if a.phase == phaseScanning {
 					ui.Spinner(c).Width(12).Shrink(0)
 				}
@@ -1279,8 +1281,8 @@ func (a *App) panel(c *ui.Context) {
 func (a *App) panelLine(c *ui.Context, label, value string) {
 	p := a.pal
 	ui.Row(c).Gap(8).AlignItems(ui.Baseline).Children(func() {
-		ui.Text(c, label).FontSize(12).TextColor(p.Ink2).Grow(1)
-		ui.Text(c, value).Font(core.Mono()).FontSize(12).TextColor(p.Ink).Shrink(0)
+		ui.Text(c, label).FontSize(fz(12)).TextColor(p.Ink2).Grow(1)
+		ui.Text(c, value).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink).Shrink(0)
 	})
 }
 
@@ -1418,7 +1420,7 @@ func (a *App) suggestChip(c *ui.Context, s suggestion) {
 	row.Cursor(ui.CursorPointer).OnClick(func() { a.applySuggestion(s) })
 	row.Background(hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
-		ui.Text(c, s.label).FontSize(11).TextColor(p.Ink).SingleLine()
+		ui.Text(c, s.label).FontSize(fz(11)).TextColor(p.Ink).SingleLine()
 	})
 }
 
@@ -1502,7 +1504,7 @@ func (a *App) volumeChip(c *ui.Context, o volumeOpt, active bool) {
 	}
 	row.Background(hoverFill(row, bg, p.Hover)).Border(1, border).Tooltip(note)
 	row.Children(func() {
-		ui.Text(c, label).FontSize(11).TextColor(p.Ink).SingleLine()
+		ui.Text(c, label).FontSize(fz(11)).TextColor(p.Ink).SingleLine()
 	})
 }
 
@@ -1510,7 +1512,7 @@ func (a *App) bullet(c *ui.Context, line string) {
 	p := a.pal
 	ui.Row(c).AlignItems(ui.Start).Gap(6).Children(func() {
 		ui.Box(c).Size(3, 3).Shrink(0).Margin(0, 6, 0, 0).Background(p.Ink3)
-		ui.Text(c, line).FontSize(11).TextColor(p.Ink2)
+		ui.Text(c, line).FontSize(fz(11)).TextColor(p.Ink2)
 	})
 }
 
@@ -1557,7 +1559,7 @@ func (a *App) biggest(n int) []bigItem {
 func (a *App) panelBlock(c *ui.Context, title string, body func()) {
 	p := a.pal
 	ui.Column(c).Gap(8).Children(func() {
-		ui.Text(c, title).FontSize(11).FontWeight(600).TextColor(p.Ink3)
+		ui.Text(c, title).FontSize(fz(11)).FontWeight(600).TextColor(p.Ink3)
 		body()
 	})
 }
@@ -1586,7 +1588,7 @@ func (a *App) elapsed() string {
 func tag(c *ui.Context, text string, fg, ground ui.Color) {
 	ui.Box(c).Height(20).Radius(10).Padding(0, 8).Shrink(0).AlignItems(ui.Center).
 		Background(tint(fg, ground, 0.10)).Children(func() {
-		ui.Text(c, text).FontSize(11).FontWeight(600).TextColor(fg).SingleLine()
+		ui.Text(c, text).FontSize(fz(11)).FontWeight(600).TextColor(fg).SingleLine()
 	})
 }
 
@@ -1595,6 +1597,9 @@ func tint(fg, ground ui.Color, alpha float32) ui.Color {
 	blend := func(a, b uint8) uint8 { return uint8(float32(a)*alpha + float32(b)*(1-alpha)) }
 	return ui.RGBA(blend(fg.R, ground.R), blend(fg.G, ground.G), blend(fg.B, ground.B), 255)
 }
+
+// fz sizes one point of the type scale.
+func fz(v float32) float32 { return core.Zoomed(v) }
 
 // hoverFill is the row's background under the pointer, eased rather than
 // snapped. It is read while the row is built, which is also what asks mygo

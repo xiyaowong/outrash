@@ -108,6 +108,18 @@ func Mono() string { return "Consolas" }
 // Display is the family for the screen title.
 func Display() string { return "Segoe UI Variable Display" }
 
+// textZoom is a session-only multiplier on the type scale. Nothing in the
+// interface offers or explains it; it resets when the window closes.
+var textZoom float32 = 1
+
+// ZoomText moves the type scale one step up or down.
+func ZoomText(step int) {
+	textZoom = max(0.8, min(1.4, textZoom+0.1*float32(step)))
+}
+
+// Zoomed scales a point size by the current type scale.
+func Zoomed(v float32) float32 { return v * textZoom }
+
 // ApplyTheme sets the mygo theme for this frame and returns the palette that
 // goes with it. The light palette is the product's look, so a dark system
 // appearance does not repaint it; DarkPalette stays for a future explicit
@@ -138,7 +150,7 @@ func ApplyTheme(c *ui.Context) *Palette {
 	t.ScrollbarWidth = 8
 	t.Radius = 6
 	t.Spacing = 4
-	t.FontSize = 13
+	t.FontSize = Zoomed(13)
 	// Native controls (spinner, scroller, check marks) follow these flags, so
 	// pin them to the light palette rather than to the system appearance.
 	t.Dark = false
