@@ -1,5 +1,5 @@
-# just — the commands this repo actually uses. Windows-first: recipes stay
-# one-liners so the default shell (PowerShell) and sh both run them.
+# just — the commands this repo actually uses. Recipes stay one-liners so
+# the default shell (PowerShell) and sh both run them.
 set windows-shell := ["pwsh", "-NoLogo", "-NoProfile", "-Command"]
 
 # -s drops the symbol table, -w the DWARF data, -trimpath the build paths, and

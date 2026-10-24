@@ -8,9 +8,8 @@ on:
 
 jobs:
   build:
-    # The app is Windows-first, but the core must behave on every platform:
-    # the scan/clean guards, path expansion and link handling are exercised
-    # by the suite on all three.
+    # The app runs on every platform: the scan/clean guards, path expansion
+    # and link handling are exercised by the suite on all three.
     strategy:
       fail-fast: false
       matrix:
