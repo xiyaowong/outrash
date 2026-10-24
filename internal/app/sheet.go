@@ -107,7 +107,7 @@ func (a *App) detailSheet(c *ui.Context) {
 	open := true
 	w, _ := c.Size()
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
-		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
+		backdrop.Background(ui.RGBA(31, 35, 40, 0.5))
 		panel.Width(min(520, w-32)).Background(p.Surface).Radius(12).Border(1, p.RuleStrong).
 			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
 			ui.Column(c).Children(func() {
@@ -162,7 +162,7 @@ func (a *App) aboutSheet(c *ui.Context) {
 	open := true
 	w, _ := c.Size()
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
-		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
+		backdrop.Background(ui.RGBA(31, 35, 40, 0.5))
 		panel.Width(min(400, w-32)).Background(p.Surface).Radius(12).Border(1, p.RuleStrong).
 			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
 			ui.Column(c).Children(func() {
@@ -181,7 +181,7 @@ func (a *App) aboutSheet(c *ui.Context) {
 					ui.Row(c).Gap(8).AlignItems(ui.Baseline).Children(func() {
 						ui.Text(c, a.T("项目主页")).FontSize(fz(12)).TextColor(p.Ink2).Grow(1)
 						ui.Link(c, "github.com/xiyaowong/outrash", "https://github.com/xiyaowong/outrash").
-							FontSize(12).TextColor(p.Accent)
+							FontSize(fz(12)).TextColor(p.Accent)
 					})
 				})
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
@@ -236,7 +236,7 @@ func (a *App) planSheet(c *ui.Context) {
 	open := true
 	w, _ := c.Size()
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
-		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
+		backdrop.Background(ui.RGBA(31, 35, 40, 0.5))
 		panel.Width(min(720, w-32)).Background(p.Surface).Radius(12).Border(1, p.RuleStrong).
 			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
 			ui.Column(c).Children(func() {
@@ -267,7 +267,7 @@ func (a *App) planSheet(c *ui.Context) {
 								order := n
 								ui.Row(c).Height(32).Gap(12).AlignItems(ui.Center).Children(func() {
 									ui.Text(c, fmt.Sprintf("%03d", order)).Font(core.Mono()).
-										FontSize(11).TextColor(p.Ink3).Width(32).Shrink(0)
+										FontSize(fz(11)).TextColor(p.Ink3).Width(32).Shrink(0)
 									ui.Text(c, abbrevPath(s.Path, 72)).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink).
 										SingleLine().Grow(1).Tooltip(s.Path)
 									// Why this path is on the list; the long form
@@ -289,7 +289,7 @@ func (a *App) planSheet(c *ui.Context) {
 				ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 				ui.Row(c).Height(64).Padding(0, 24).Gap(16).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, a.planFooter()).
-						FontSize(12).TextColor(p.Ink2).SingleLine().Grow(1)
+						FontSize(fz(12)).TextColor(p.Ink2).SingleLine().Grow(1)
 					a.actionButton(c, a.T("关闭"), true, true, a.dismiss)
 				})
 			})
@@ -413,7 +413,7 @@ func (a *App) reportSheet(c *ui.Context) {
 	open := true
 	w, _ := c.Size()
 	ui.DialogBase(c, &open, func(backdrop, panel ui.Element) {
-		backdrop.Background(ui.RGBA(17, 17, 17, 0.4))
+		backdrop.Background(ui.RGBA(31, 35, 40, 0.5))
 		panel.Width(min(420, w-32)).Background(p.Surface).Radius(12).Border(1, p.RuleStrong).
 			Shadow(0, 18, 48, -4, ui.RGBA(16, 22, 34, 0.20)).Children(func() {
 			ui.Column(c).Children(func() {
@@ -481,7 +481,7 @@ func (a *App) receiptBlock(c *ui.Context, r *report) {
 		})
 		if rc.before > rc.after {
 			ui.Text(c, fmt.Sprintf(a.T("实际减少 %s"), core.Bytes(rc.before-rc.after))).
-				FontSize(12).FontWeight(600).TextColor(p.Success)
+				FontSize(fz(12)).FontWeight(600).TextColor(p.Success)
 		}
 		// Only the families that moved: a row that reads 0 → 0 is noise.
 		for _, d := range rc.groups {
@@ -496,11 +496,11 @@ func (a *App) receiptBlock(c *ui.Context, r *report) {
 		}
 		if rc.regenerated > 0 {
 			ui.Text(c, fmt.Sprintf(a.T("已重新生成 %d 项 · %s"), rc.regenerated, core.Bytes(rc.regenBytes))).
-				FontSize(12).TextColor(p.Ink2)
+				FontSize(fz(12)).TextColor(p.Ink2)
 		}
 		if rc.still > 0 {
 			ui.Text(c, fmt.Sprintf(a.T("仍在 %d 项 · %s"), rc.still, core.Bytes(rc.stillBytes))).
-				FontSize(12).TextColor(p.Ink2)
+				FontSize(fz(12)).TextColor(p.Ink2)
 		}
 	})
 }
