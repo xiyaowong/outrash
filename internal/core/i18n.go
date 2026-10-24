@@ -70,6 +70,7 @@ var groupEN = map[string]string{
 	"editors":  "Editors",
 	"chat":     "Chat",
 	"media":    "Media",
+	"cn":       "Domestic apps",
 	"other":    "Other",
 }
 
@@ -110,6 +111,10 @@ var itemEN = map[string]string{
 	"discord":        "Discord cache",
 	"teams":          "Teams cache",
 	"spotify":        "Spotify cache",
+	"qqnt":           "QQ temp files",
+	"baidunetdisk":   "Baidu Netdisk cache",
+	"wps":            "WPS cache",
+	"netease-music":  "NetEase Cloud Music cache",
 	"pub":            "Flutter / Dart",
 	"composer":       "Composer cache",
 	"swiftpm":        "Swift Package cache",
@@ -134,6 +139,7 @@ var noteEN = map[string]string{
 	"重新打开时自动重建":                      "Rebuilt on the next launch",
 	"打开项目时自动重建":                      "Rebuilt when a project reopens",
 	"重新打开时自动重新下载":                    "Re-downloaded on the next launch",
+	"使用时自动重建":                         "Rebuilt on use",
 	"下次播放时自动重新下载":                    "Re-downloaded on the next play",
 	"可用 npx playwright install 重新下载": "Re-download with npx playwright install",
 	"可用 npx cypress install 重新下载":    "Re-download with npx cypress install",
