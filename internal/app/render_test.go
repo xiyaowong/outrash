@@ -605,18 +605,26 @@ func TestPlanSheetFooterNamesTheBuild(t *testing.T) {
 	}
 }
 
-// The product locks the light look: a dark system appearance must not
-// repaint the window.
-func TestDarkSystemKeepsLightPalette(t *testing.T) {
+// In system mode the palette follows the host's appearance: a dark machine
+// wears the dark palette, until the user picks a mode of their own.
+func TestDarkSystemGetsDarkPalette(t *testing.T) {
+	defer core.SetThemeMode("system")
+	core.SetThemeMode("system")
 	a := testApp(t, false)
 	a.now = fixedTime(0)
 	tt := ui.NewTester(a.view, 1200, 780)
 	tt.SetDark(true)
 	tt.Frame()
-	if a.pal.Dark || a.pal.Canvas != core.Light.Canvas {
-		t.Fatalf("palette follows the system: %+v", a.pal)
+	if !a.pal.Dark || a.pal.Canvas != core.DarkPalette.Canvas {
+		t.Fatalf("palette ignores the system: %+v", a.pal)
 	}
 	write(t, "dark-system.png", tt.Image())
+	// An explicit light choice outvotes the machine.
+	core.SetThemeMode("light")
+	tt.Frame()
+	if a.pal.Dark {
+		t.Fatal("an explicit light choice still wore the dark palette")
+	}
 }
 
 // A cache the scan could not read must not pass for an empty one.

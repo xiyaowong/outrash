@@ -122,13 +122,30 @@ func ZoomText(step int) {
 // Zoomed scales a point size by the current type scale.
 func Zoomed(v float32) float32 { return v * textZoom }
 
+// themeMode is the appearance choice: "system" (the default), "light" or
+// "dark".
+var themeMode = "system"
+
+// SetThemeMode picks the appearance; anything unknown reads as "system".
+func SetThemeMode(m string) {
+	if m != "light" && m != "dark" {
+		m = "system"
+	}
+	themeMode = m
+}
+
+// ThemeMode reports the appearance choice.
+func ThemeMode() string { return themeMode }
+
 // ApplyTheme sets the mygo theme for this frame and returns the palette that
-// goes with it. The light palette is the product's look, so a dark system
-// appearance does not repaint it; DarkPalette stays for a future explicit
-// choice.
+// goes with it. "system" reads the appearance off the theme mygo already
+// resolved for this frame, so the palette always matches the platform chrome.
 func ApplyTheme(c *ui.Context) *Palette {
 	t := *c.Theme()
 	p := Light
+	if themeMode == "dark" || (themeMode == "system" && t.Dark) {
+		p = DarkPalette
+	}
 	t.Background = p.Canvas
 	// Controls default to the surface colour; the list sits on it too.
 	t.Surface = p.Surface
@@ -154,8 +171,8 @@ func ApplyTheme(c *ui.Context) *Palette {
 	t.Spacing = 4
 	t.FontSize = Zoomed(13)
 	// Native controls (spinner, scroller, check marks) follow these flags, so
-	// pin them to the light palette rather than to the system appearance.
-	t.Dark = false
+	// they must match the palette the frame actually wears.
+	t.Dark = p.Dark
 	c.SetTheme(&t)
 	return &p
 }

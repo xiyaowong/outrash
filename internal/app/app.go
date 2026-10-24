@@ -753,6 +753,9 @@ const (
 	iconRules
 	iconAbout
 	iconLang
+	iconSun
+	iconMoon
+	iconSystem
 )
 
 func (a *App) navItem(c *ui.Context, pg page, label string, icon navIcon) {
@@ -824,29 +827,51 @@ func (a *App) icon(c *ui.Context, kind navIcon, fg ui.Color) {
 			pt.Stroke(ui.Rect{X: x + 1.5, Y: y + 1.5, W: 13, H: 13}, fg, 7, 1)
 			pt.Stroke(ui.Rect{X: x + 5.5, Y: y + 1.5, W: 5, H: 13}, fg, 2.5, 1)
 			pt.Fill(ui.Rect{X: x + 3, Y: y + 7.5, W: 10, H: 1}, fg, 0)
+		case iconSun:
+			// A disc with eight rays; the diagonals are discs, the only way
+			// this painter draws a slanted stroke.
+			pt.Fill(ui.Rect{X: x + 5.5, Y: y + 5.5, W: 5, H: 5}, fg, 2.5)
+			pt.Line(x+8, y+1.5, x+8, y+4, 1, fg)
+			pt.Line(x+8, y+12, x+8, y+14.5, 1, fg)
+			pt.Line(x+1.5, y+8, x+4, y+8, 1, fg)
+			pt.Line(x+12, y+8, x+14.5, y+8, 1, fg)
+			for _, r := range [][2]float32{{3.5, 3.5}, {12.5, 3.5}, {3.5, 12.5}, {12.5, 12.5}} {
+				pt.Fill(ui.Rect{X: x + r[0] - 1, Y: y + r[1] - 1, W: 2, H: 2}, fg, 1)
+			}
+		case iconMoon:
+			// A crescent: a disc bit by a second one in the rail's ground
+			// colour, which the gradient behind the icon keeps uniform.
+			pt.Fill(ui.Rect{X: x + 2.5, Y: y + 2.5, W: 11, H: 11}, fg, 5.5)
+			pt.Fill(ui.Rect{X: x + 5.5, Y: y - 0.5, W: 9, H: 9}, a.pal.Wash(), 4.5)
+		case iconSystem:
+			// A monitor: the screen, then its stand.
+			pt.Stroke(ui.Rect{X: x + 1.5, Y: y + 2.5, W: 13, H: 9}, fg, 0, 1)
+			pt.Line(x+8, y+11.5, x+8, y+13.5, 1, fg)
+			pt.Line(x+5, y+14, x+11, y+14, 1, fg)
 		}
 	})
 }
 
 func (a *App) navFooter(c *ui.Context) {
-	p := a.pal
-	row := ui.Row(c).Height(32).Padding(0, 10).Gap(9).AlignItems(ui.Center)
-	row.Background(hoverFill(row, ui.Transparent, p.Hover)).Radius(6)
-	row.Children(func() {
-		lang := ui.ButtonBase(c).Size(24, 24).AlignItems(ui.Center).
-			Label(a.T("切换语言")).
-			Tooltip(core.L("English", "中文"))
-		lang.Cursor(ui.CursorPointer).OnClick(a.toggleLang)
-		lang.Background(hoverFill(lang, ui.Transparent, p.Hover)).Radius(6)
-		lang.Children(func() { a.icon(c, iconLang, p.Ink2) })
-		about := ui.ButtonBase(c).Height(32).Padding(0, 10).Gap(9).AlignItems(ui.Center).
-			Justify(ui.Start).Label(a.T("关于")).OnClick(func() { a.modal = modalAbout })
-		about.Background(hoverFill(about, ui.Transparent, p.Hover)).Radius(6)
-		about.Children(func() {
-			a.icon(c, iconAbout, p.Ink2)
-			ui.Text(c, a.T("关于")).FontSize(fz(13)).TextColor(p.Ink2).SingleLine()
-		})
+	// Three square buttons, one row: theme, language, about. Each hover and
+	// each tooltip is its own; the row itself stays quiet.
+	ui.Row(c).Height(32).Padding(0, 10).Gap(4).AlignItems(ui.Center).Children(func() {
+		a.footerIcon(c, a.T("切换主题"), a.themeAction(), themeIcon(), a.toggleTheme)
+		a.footerIcon(c, a.T("切换语言"), core.L("English", "中文"), iconLang, a.toggleLang)
+		a.footerIcon(c, a.T("关于"), a.T("关于"), iconAbout, func() { a.modal = modalAbout })
 	})
+}
+
+// footerIcon is one square button at the rail's foot. A button, not a row
+// with a click, so the keyboard reaches it and assistive technology names
+// it; the tooltip carries what clicking does this time.
+func (a *App) footerIcon(c *ui.Context, label, tooltip string, kind navIcon, fn func()) {
+	p := a.pal
+	b := ui.ButtonBase(c).Size(28, 28).AlignItems(ui.Center).Justify(ui.Center).
+		Label(label).Tooltip(tooltip)
+	b.Cursor(ui.CursorPointer).OnClick(fn)
+	b.Background(hoverFill(b, ui.Transparent, p.Hover)).Radius(6)
+	b.Children(func() { a.icon(c, kind, p.Ink2) })
 }
 
 func (a *App) pageHeader(c *ui.Context) {
