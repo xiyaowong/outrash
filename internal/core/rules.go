@@ -178,20 +178,16 @@ func (it Item) Roots(o Options) (dirs []string, source string, fromEnv bool) {
 		}
 	}
 	for _, tpl := range it.Paths[o.GOOS] {
-		d, ok := expand(tpl, o)
-		if !ok {
-			continue
-		}
 		// A template may name a per-profile folder with a wildcard, because
 		// browsers and chat apps keep one cache per profile under a name the
-		// user chose. Glob only ever returns paths that exist, so a pattern
-		// that matches nothing adds nothing.
-		if strings.ContainsAny(d, "*?[") {
-			matches, err := filepath.Glob(d)
-			if err != nil {
-				continue
-			}
-			dirs = append(dirs, matches...)
+		// user chose. Only paths that exist come back, so a pattern that
+		// matches nothing adds nothing.
+		if strings.ContainsAny(tpl, "*?[") {
+			dirs = append(dirs, globPath(tpl, o)...)
+			continue
+		}
+		d, ok := expand(tpl, o)
+		if !ok {
 			continue
 		}
 		dirs = append(dirs, d)
@@ -222,6 +218,16 @@ func expand(tpl string, o Options) (string, bool) {
 		}
 		s = filepath.Join(o.Home, rest)
 	}
+	s, ok := expandVars(s, o)
+	if !ok {
+		return "", false
+	}
+	return clean(s, o)
+}
+
+// expandVars substitutes %VAR% references, reporting false when one is
+// unset — the template does not apply here.
+func expandVars(s string, o Options) (string, bool) {
 	var b strings.Builder
 	for {
 		i := strings.Index(s, "%")
@@ -243,7 +249,7 @@ func expand(tpl string, o Options) (string, bool) {
 		b.WriteString(v)
 		s = s[i+j+2:]
 	}
-	return clean(b.String(), o)
+	return b.String(), true
 }
 
 func clean(p string, o Options) (string, bool) {
@@ -289,4 +295,85 @@ func unique(in []string) []string {
 		}
 	}
 	return out
+}
+
+// globPath expands a template whose wildcards the catalog wrote. The
+// template is walked segment by segment, and only the segments that carry
+// metacharacters before expansion are matched as patterns: a home directory
+// or variable whose value contains * or [ is data, not a pattern.
+// filepath.Glob cannot tell the two apart — and on Windows it cannot escape
+// metacharacters at all — so the catalog's wildcards are matched by hand,
+// and only paths that exist come back.
+func globPath(tpl string, o Options) []string {
+	tpl = strings.ReplaceAll(tpl, `\`, "/")
+	var cur []string
+	if strings.HasPrefix(tpl, "/") {
+		cur = []string{"/"}
+	}
+	for _, seg := range strings.Split(tpl, "/") {
+		if seg == "" {
+			continue
+		}
+		if seg == "~" && len(cur) == 0 {
+			if o.Home == "" {
+				return nil
+			}
+			cur = []string{o.Home}
+			continue
+		}
+		pattern := strings.ContainsAny(seg, "*?[")
+		seg, ok := expandVars(seg, o)
+		if !ok {
+			return nil
+		}
+		if len(cur) == 0 {
+			if pattern {
+				return nil
+			}
+			cur = []string{seg}
+			continue
+		}
+		if pattern {
+			var next []string
+			for _, d := range cur {
+				children, err := os.ReadDir(d)
+				if err != nil {
+					continue
+				}
+				for _, ch := range children {
+					if ok, err := filepath.Match(seg, ch.Name()); err != nil || !ok {
+						continue
+					}
+					next = append(next, joinSeg(d, ch.Name()))
+				}
+			}
+			cur = next
+			if len(cur) == 0 {
+				return nil
+			}
+			continue
+		}
+		for i, d := range cur {
+			cur[i] = joinSeg(d, seg)
+		}
+	}
+	out := cur[:0]
+	for _, d := range cur {
+		if abs, err := filepath.Abs(d); err == nil {
+			d = abs
+		}
+		if exists(d) {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// joinSeg appends one path segment; a bare drive letter has no separator
+// for filepath.Join to keep, so it is joined by hand.
+func joinSeg(d, seg string) string {
+	if strings.HasSuffix(d, ":") {
+		return d + string(filepath.Separator) + seg
+	}
+	return filepath.Join(d, seg)
 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -122,9 +123,17 @@ func ruleSource(it core.Item) string {
 	for _, e := range it.Env {
 		parts = append(parts, "%"+e+"%")
 	}
-	paths := it.Paths["windows"]
-	if a := it.Paths["darwin"]; len(a) > 0 && len(paths) == 0 {
-		paths = a
+	// The row has to name the location this machine's scan actually tries,
+	// so the current platform's template comes first; a tool the catalog
+	// only knows elsewhere falls back to that entry.
+	paths := it.Paths[runtime.GOOS]
+	if len(paths) == 0 {
+		for _, p := range []string{"windows", "darwin", "linux"} {
+			if len(it.Paths[p]) > 0 {
+				paths = it.Paths[p]
+				break
+			}
+		}
 	}
 	if len(paths) > 0 {
 		parts = append(parts, paths[0])
