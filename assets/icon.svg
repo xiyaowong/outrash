@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
   <!-- The mark: ledger rows struck off, the app's signature clean. The
        generator in genicon/ draws the same geometry; keep them in sync. -->
-  <rect width="256" height="256" rx="58" fill="#3574F0"/>
+  <rect width="256" height="256" rx="58" fill="#0969DA"/>
   <g fill="#FFFFFF">
     <rect x="60" y="66" width="136" height="18" rx="9"/>
     <rect x="60" y="118" width="104" height="18" rx="9"/>
