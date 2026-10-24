@@ -811,6 +811,7 @@ func TestDeepCacheRowsExpandAndCheck(t *testing.T) {
 	if !tt.HasText("a@v1.0.0") {
 		t.Fatalf("folder row did not open onto the leaves; texts %v", tt.Texts())
 	}
+	write(t, "deep.png", tt.Image())
 
 	// Checking the site row selects every leaf under it; the checked paths
 	// are the leaves, never the folder itself. The checkbox has no label for
