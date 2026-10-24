@@ -39,6 +39,20 @@ jobs:
           build darwin amd64 ""
           build darwin arm64 ""
 
+          # UPX variants alongside the plain ones, at the packer's default
+          # level: a balance of ratio and speed. Mach-O is not a format UPX
+          # packs, so macOS gets the plain binaries only.
+          command -v upx >/dev/null || sudo apt-get install -y -qq upx-ucl
+          pack() {
+            local name="outrash-$VERSION-$1-$2"
+            cp "out/$name$3" "out/$name-upx$3"
+            upx -q "out/$name-upx$3"
+            (cd out && zip -q "$name-upx.zip" "$name-upx$3")
+          }
+          pack windows amd64 .exe
+          pack linux amd64 ""
+          pack linux arm64 ""
+
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
