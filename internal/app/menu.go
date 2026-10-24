@@ -46,24 +46,24 @@ func (a *App) leafMenu(c *ui.Context, it itemState, name, path string, size int6
 		on := a.checked[path]
 		// A check mark carries the state, so the label stays one word and the
 		// menu never grows a 取消… twin for every verb.
-		if m.Item("勾选").Checked(on).Chosen() {
+		if m.Item(a.T("勾选")).Checked(on).Chosen() {
 			a.checked[path] = !on
 		}
-		if m.Item("仅勾选此项").Chosen() {
+		if m.Item(a.T("仅勾选此项")).Chosen() {
 			a.onlyPick(pick)
 		}
 		m.Separator()
-		if m.Item("复制路径").Chosen() {
+		if m.Item(a.T("复制路径")).Chosen() {
 			c.WriteClipboard(path)
 		}
 		// Revealed rather than opened: a version folder has no sensible
 		// "default application", and its parent is what the user wants to
 		// see it in.
-		if m.Item("在文件夹中显示").Chosen() {
+		if m.Item(a.T("在文件夹中显示")).Chosen() {
 			revealPath(path)
 		}
 		m.Separator()
-		if m.Item("详细信息").Chosen() {
+		if m.Item(a.T("详细信息")).Chosen() {
 			a.showDetail(a.leafDetail(it, name, path, size, mod))
 		}
 	}
@@ -75,19 +75,19 @@ func (a *App) packageMenu(c *ui.Context, it itemState, ent core.Entry) func(m *u
 	picks := versionPicks(ent)
 	return func(m *ui.Menu) {
 		a.selectItems(m, picks, func(m *ui.Menu) {
-			if m.Item("仅旧版本").Chosen() {
+			if m.Item(a.T("仅旧版本")).Chosen() {
 				a.setChecks(picks, core.Select(picks, core.Policy{KeepNewest: true, Now: a.now}).Steps)
 			}
 		})
 		m.Separator()
-		if m.Item("复制包路径").Chosen() {
+		if m.Item(a.T("复制包路径")).Chosen() {
 			c.WriteClipboard(ent.Path)
 		}
-		if m.Item("打开包目录").Chosen() {
+		if m.Item(a.T("打开包目录")).Chosen() {
 			openPath(ent.Path)
 		}
 		m.Separator()
-		if m.Item("详细信息").Chosen() {
+		if m.Item(a.T("详细信息")).Chosen() {
 			a.showDetail(a.packageDetail(it, ent))
 		}
 	}
@@ -101,10 +101,10 @@ func (a *App) itemMenu(c *ui.Context, it itemState, family string) func(m *ui.Me
 	return func(m *ui.Menu) {
 		a.selectItems(m, picks, nil)
 		m.Separator()
-		a.pathItems(m, "复制缓存路径", roots, func(p string) { c.WriteClipboard(p) })
-		a.pathItems(m, "打开缓存目录", roots, openPath)
+		a.pathItems(m, a.T("复制缓存路径"), roots, func(p string) { c.WriteClipboard(p) })
+		a.pathItems(m, a.T("打开缓存目录"), roots, openPath)
 		m.Separator()
-		if m.Item("详细信息").Chosen() {
+		if m.Item(a.T("详细信息")).Chosen() {
 			a.showDetail(a.itemDetail(it, family))
 		}
 	}
@@ -116,9 +116,9 @@ func (a *App) familyMenu(g groupState) func(m *ui.Menu) {
 	picks := a.groupPicks(g)
 	key := "g:" + g.group.ID
 	return func(m *ui.Menu) {
-		label := "展开"
+		label := a.T("展开")
 		if a.open[key] {
-			label = "折叠"
+			label = a.T("折叠")
 		}
 		if m.Item(label).Chosen() {
 			a.open[key] = !a.open[key]
@@ -126,7 +126,7 @@ func (a *App) familyMenu(g groupState) func(m *ui.Menu) {
 		m.Separator()
 		a.selectItems(m, picks, nil)
 		m.Separator()
-		if m.Item("详细信息").Chosen() {
+		if m.Item(a.T("详细信息")).Chosen() {
 			a.showDetail(a.familyDetail(g))
 		}
 	}
@@ -138,22 +138,22 @@ func (a *App) familyMenu(g groupState) func(m *ui.Menu) {
 // submenu keeps each label down to the word that differs, and keeps 选择 out
 // of every row of the parent menu, where it would read as the whole list.
 func (a *App) selectItems(m *ui.Menu, picks []core.Pick, extra func(m *ui.Menu)) {
-	m.Submenu("选择", func(sub *ui.Menu) {
+	m.Submenu(a.T("选择"), func(sub *ui.Menu) {
 		on, _ := a.checkState(picks)
-		if sub.Item(fmt.Sprintf("全选 %d 项", len(picks))).Chosen() {
+		if sub.Item(fmt.Sprintf(a.T("全选 %d 项"), len(picks))).Chosen() {
 			a.checkAll(picks)
 		}
-		if sub.Item("全不选").Disabled(on == 0).Chosen() {
+		if sub.Item(a.T("全不选")).Disabled(on == 0).Chosen() {
 			a.clearPicks(picks)
 		}
 		if on > 0 {
 			// The trims narrow what is checked instead of replacing it: a
 			// rough check followed by a trim is how a long list gets honest.
 			sub.Separator()
-			if sub.Item("从选中排除本周用过的").Chosen() {
+			if sub.Item(a.T("从选中排除本周用过的")).Chosen() {
 				a.dropRecent(picks)
 			}
-			if sub.Item("从选中排除小项").Chosen() {
+			if sub.Item(a.T("从选中排除小项")).Chosen() {
 				a.dropSmall(picks)
 			}
 		}
@@ -263,18 +263,18 @@ var (
 )
 
 func (a *App) leafDetail(it itemState, name, path string, size int64, mod time.Time) detail {
-	d := detail{title: name, kicker: "缓存条目", path: path, note: it.item.Note}
+	d := detail{title: name, kicker: a.T("缓存条目"), path: path, note: core.ItemNote(&it.item)}
 	d.lines = []kv{
-		{"路径", path},
-		{"大小", core.Bytes(size)},
-		{"最后写入", stamp(a.now, mod)},
-		{"所属缓存", it.item.Name},
+		{a.T("路径"), path},
+		{a.T("大小"), core.Bytes(size)},
+		{a.T("最后写入"), stamp(a.now, mod)},
+		{a.T("所属缓存"), core.ItemName(&it.item)},
 	}
 	return d
 }
 
 func (a *App) packageDetail(it itemState, ent core.Entry) detail {
-	d := detail{title: ent.Name, kicker: "软件包", path: ent.Path, note: it.item.Note}
+	d := detail{title: ent.Name, kicker: a.T("软件包"), path: ent.Path, note: core.ItemNote(&it.item)}
 	var newest time.Time
 	for _, v := range ent.Versions {
 		if v.ModTime.After(newest) {
@@ -282,23 +282,23 @@ func (a *App) packageDetail(it itemState, ent core.Entry) detail {
 		}
 	}
 	d.lines = []kv{
-		{"路径", ent.Path},
-		{"版本", fmt.Sprintf("%d 个", len(ent.Versions))},
-		{"合计", core.Bytes(ent.Size)},
-		{"最后写入", stamp(a.now, newest)},
-		{"所属缓存", it.item.Name},
+		{a.T("路径"), ent.Path},
+		{a.T("版本"), fmt.Sprintf(a.T("%d 个"), len(ent.Versions))},
+		{a.T("合计"), core.Bytes(ent.Size)},
+		{a.T("最后写入"), stamp(a.now, newest)},
+		{a.T("所属缓存"), core.ItemName(&it.item)},
 	}
 	return d
 }
 
 func (a *App) itemDetail(it itemState, family string) detail {
-	d := detail{title: it.item.Name, kicker: "缓存", path: rootPath(it.res), note: it.item.Note}
+	d := detail{title: core.ItemName(&it.item), kicker: a.T("缓存"), path: rootPath(it.res), note: core.ItemNote(&it.item)}
 	d.lines = []kv{
-		{"路径", strings.Join(rootPaths(it.res), "\n")},
-		{"条目", countText(it.res.Roots)},
-		{"大小", core.Bytes(it.res.Size)},
-		{"最后写入", stamp(a.now, newestOf(it.res))},
-		{"所属分组", family},
+		{a.T("路径"), strings.Join(rootPaths(it.res), "\n")},
+		{a.T("条目"), countText(it.res.Roots)},
+		{a.T("大小"), core.Bytes(it.res.Size)},
+		{a.T("最后写入"), stamp(a.now, newestOf(it.res))},
+		{a.T("所属分组"), family},
 	}
 	if it.res.Failed() {
 		d.err = failureText(it.res)
@@ -307,7 +307,7 @@ func (a *App) itemDetail(it itemState, family string) detail {
 }
 
 func (a *App) familyDetail(g groupState) detail {
-	d := detail{title: g.group.Name, kicker: "缓存分组"}
+	d := detail{title: core.GroupName(&g.group), kicker: a.T("缓存分组")}
 	var newest time.Time
 	items := 0
 	for _, it := range g.items {
@@ -317,10 +317,10 @@ func (a *App) familyDetail(g groupState) detail {
 		}
 	}
 	d.lines = []kv{
-		{"缓存", fmt.Sprintf("%d 个", len(g.items))},
-		{"条目", fmt.Sprintf("%d 项", items)},
-		{"合计", core.Bytes(g.size)},
-		{"最后写入", stamp(a.now, newest)},
+		{a.T("缓存"), fmt.Sprintf(a.T("%d 个"), len(g.items))},
+		{a.T("条目"), fmt.Sprintf(a.T("%d 项"), items)},
+		{a.T("合计"), core.Bytes(g.size)},
+		{a.T("最后写入"), stamp(a.now, newest)},
 	}
 	return d
 }
@@ -354,7 +354,7 @@ func failureText(res core.Result) string {
 		case root.Err != nil:
 			parts = append(parts, root.Path+": "+root.Err.Error())
 		case root.Skipped > 0:
-			parts = append(parts, fmt.Sprintf("%s: %d 个路径无法读取", root.Path, root.Skipped))
+			parts = append(parts, fmt.Sprintf(core.L("%s: %d 个路径无法读取", "%s: %d paths unreadable"), root.Path, root.Skipped))
 		}
 	}
 	return strings.Join(parts, "\n")
@@ -364,7 +364,7 @@ func failureText(res core.Result) string {
 // do the subtraction that decides whether the cache is stale.
 func stamp(now, at time.Time) string {
 	if at.IsZero() {
-		return "未知"
+		return core.L("未知", "unknown")
 	}
-	return at.Format("2006-01-02 15:04") + "（" + ageText(now, at) + "）"
+	return at.Format("2006-01-02 15:04") + core.L("（", " (") + ageText(now, at) + core.L("）", ")")
 }

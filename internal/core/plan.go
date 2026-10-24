@@ -106,13 +106,13 @@ func Select(picks []Pick, pol Policy) *Plan {
 		case fresh:
 			continue
 		case versioned && pol.KeepNewest && pol.StaleDays > 0:
-			steps = append(steps, step(p, ModeOld, "旧版本，且很久未使用"))
+			steps = append(steps, step(p, ModeOld, L("旧版本，且很久未使用", "Old version, unused for a long time")))
 		case versioned && pol.KeepNewest:
-			steps = append(steps, step(p, ModeOld, "旧版本，下次构建时重新下载"))
+			steps = append(steps, step(p, ModeOld, L("旧版本，下次构建时重新下载", "Old version; re-downloaded on the next build")))
 		case pol.StaleDays > 0:
-			steps = append(steps, step(p, ModeStale, fmt.Sprintf("超过 %d 天未使用，用时自动重建", pol.StaleDays)))
+			steps = append(steps, step(p, ModeStale, fmt.Sprintf(L("超过 %d 天未使用，用时自动重建", "Unused for %d days; rebuilt on demand"), pol.StaleDays)))
 		default:
-			steps = append(steps, step(p, ModeAll, "用时自动重新下载"))
+			steps = append(steps, step(p, ModeAll, L("用时自动重新下载", "Re-downloaded on demand")))
 		}
 	}
 	return (&Plan{Steps: steps, Title: describe(pol, len(picks))}).Total()
@@ -168,9 +168,9 @@ func (p *Plan) Annotate(all []Pick, staleDays int, now time.Time) *Plan {
 		}
 		if pk.Package == "" {
 			if now.Sub(pk.ModTime) < time.Duration(staleDays)*24*time.Hour {
-				s.Mode, s.Reason = ModeStale, "近期使用过，下次用时重新生成"
+				s.Mode, s.Reason = ModeStale, L("近期使用过，下次用时重新生成", "Used recently; regenerated on the next use")
 			} else {
-				s.Mode, s.Reason = ModeStale, fmt.Sprintf("超过 %d 天未使用，用时自动重建", staleDays)
+				s.Mode, s.Reason = ModeStale, fmt.Sprintf(L("超过 %d 天未使用，用时自动重建", "Unused for %d days; rebuilt on demand"), staleDays)
 			}
 			continue
 		}
@@ -181,11 +181,11 @@ func (p *Plan) Annotate(all []Pick, staleDays int, now time.Time) *Plan {
 			}
 		}
 		if len(kept) > 0 {
-			s.Mode, s.Reason = ModeOld, "旧版本，保留 "+strings.Join(kept, "、")
+			s.Mode, s.Reason = ModeOld, L("旧版本，保留 ", "Old version; kept ")+joinList(kept)
 			keptPkgs[pk.Package] = true
 			continue
 		}
-		s.Mode, s.Reason = ModeAll, "最新版本，下次构建时重新下载"
+		s.Mode, s.Reason = ModeAll, L("最新版本，下次构建时重新下载", "Newest version; re-downloaded on the next build")
 	}
 	p.kept = p.kept[:0]
 	seen := map[string]bool{}
@@ -367,15 +367,15 @@ func step(p Pick, m Mode, reason string) Step {
 func describe(pol Policy, chosen int) string {
 	switch {
 	case pol.KeepNewest && pol.StaleDays > 0:
-		return "保留最新版，并清理很久未使用的"
+		return L("保留最新版，并清理很久未使用的", "Keep the newest and clear the long unused")
 	case pol.KeepNewest:
-		return "每个依赖只保留最新版本"
+		return L("每个依赖只保留最新版本", "Keep only the newest of each package")
 	case pol.StaleDays > 0:
-		return fmt.Sprintf("清理 %d 天以上未使用的内容", pol.StaleDays)
+		return fmt.Sprintf(L("清理 %d 天以上未使用的内容", "Clear anything unused for %d days"), pol.StaleDays)
 	case chosen == 1:
-		return "清理这一项"
+		return L("清理这一项", "Clear this one")
 	}
-	return "清理已勾选的内容"
+	return L("清理已勾选的内容", "Clear the checked items")
 }
 
 // PlanGroup is one family's share of a plan.
