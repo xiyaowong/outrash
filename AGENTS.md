@@ -17,9 +17,10 @@ Windows-first cache cleaner for developer tools and everyday apps: whatever a pr
 
 | file | role |
 |---|---|
-| `main.go` | flags, window wiring; nothing else lives at the root |
+| `main.go` | flags, window wiring; nothing else lives at the root (the generated `rsrc_windows_amd64.syso` beside it carries the Windows icon and version block) |
 | `internal/core` | rules: parse + env override + path expansion · scan: walk dirs concurrently, per-entry size/mtime, classify versions · plan: policy → ordered list of `Step` (path, bytes, reason) · clean: guarded `os.RemoveAll`, the only code that deletes · theme: palette + type scale (ledger: paper, ink, one accent) · `rules.json` catalog |
 | `internal/app` | `app.go` window frame: title strip, nav rail, page header, action bar, right info panel, scan/recommend, clean estimate · `pages.go` 概览 intro + 扫描结果 table · 清理记录 (session, memory only) · 规则 (read-only catalog) · `cards.go` family/item/version rows, tri-state check, sort, tags, presets · `sheet.go` plan sheet (no-delete builds only), report sheet, clean run |
+| `assets` | `icon.svg` the mark (ledger rows struck off) · `icon.ico`, `icon-256.png` and the resource object, all generated · `genicon/` regenerates them (`just icon`), drawing the SVG's geometry as distance fields and writing the PE resources itself |
 
 ## Commands
 
