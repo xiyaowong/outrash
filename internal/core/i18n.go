@@ -4,13 +4,23 @@
 // from the id-keyed maps below, so rules.json never grows a schema for it.
 package core
 
-import "strings"
+import (
+	"strings"
+	"sync"
+)
 
-// The display language: "zh" (the default) or "en".
-var lang = "zh"
+// The display language: "zh" (the default) or "en". Scan and clean workers
+// read it from their goroutines while the window writes it, so access goes
+// through the lock.
+var (
+	langMu sync.RWMutex
+	lang   = "zh"
+)
 
 // SetLang picks the display language; anything unknown reads as "zh".
 func SetLang(l string) {
+	langMu.Lock()
+	defer langMu.Unlock()
 	if l == "en" {
 		lang = "en"
 		ErrUnsafe = errUnsafeEn
@@ -21,11 +31,15 @@ func SetLang(l string) {
 }
 
 // Lang reports the display language.
-func Lang() string { return lang }
+func Lang() string {
+	langMu.RLock()
+	defer langMu.RUnlock()
+	return lang
+}
 
 // L picks between the Chinese and the English line.
 func L(zh, en string) string {
-	if lang == "en" {
+	if Lang() == "en" {
 		return en
 	}
 	return zh
@@ -33,7 +47,7 @@ func L(zh, en string) string {
 
 // GroupName is a group's display name.
 func GroupName(g *Group) string {
-	if lang == "en" {
+	if Lang() == "en" {
 		if s := groupEN[g.ID]; s != "" {
 			return s
 		}
@@ -43,7 +57,7 @@ func GroupName(g *Group) string {
 
 // ItemName is an item's display name.
 func ItemName(it *Item) string {
-	if lang == "en" {
+	if Lang() == "en" {
 		if s := itemEN[it.ID]; s != "" {
 			return s
 		}
@@ -142,6 +156,14 @@ var noteEN = map[string]string{
 	"下次播放时自动重新下载":                    "Re-downloaded on the next play",
 	"可用 npx playwright install 重新下载": "Re-download with npx playwright install",
 	"可用 npx cypress install 重新下载":    "Re-download with npx cypress install",
+}
+
+// unsafeErr is ErrUnsafe read under the language lock: the cleaner's
+// goroutines meet it while the window may be re-pointing it.
+func unsafeErr() error {
+	langMu.RLock()
+	defer langMu.RUnlock()
+	return ErrUnsafe
 }
 
 // joinList joins names the way the current language reads.

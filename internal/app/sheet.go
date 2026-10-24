@@ -351,9 +351,14 @@ func (a *App) run() {
 			pr.set(done, total)
 			// The title bar carries the estimate; the taskbar, dock or
 			// launcher carries a bar of its own, on whichever surface the
-			// user turned away to.
+			// user turned away to. A plan of zero bytes (empty directories
+			// are legal entries) must send the system a number, not a NaN.
 			if a.Window != nil {
-				a.Window.SetProgressBar(mygo.ProgressBar{Value: float64(done) / float64(total)})
+				v := 0.0
+				if total > 0 {
+					v = float64(done) / float64(total)
+				}
+				a.Window.SetProgressBar(mygo.ProgressBar{Value: v})
 			}
 			a.repaint()
 		}, func(r core.Removal) {
@@ -400,6 +405,12 @@ func (a *App) finish(out core.Outcome) {
 	})
 	a.msg = ""
 	a.modal = modalReport
+	// This clean's receipt must be settled by the scan about to start, and
+	// by no other: Scan stamps it with that scan's number on the UI thread,
+	// so a rescan already on its way cannot file its data under this clean.
+	if rc := r.receipt; rc != nil {
+		a.pendingReceipt = rc
+	}
 	a.Scan()
 }
 
