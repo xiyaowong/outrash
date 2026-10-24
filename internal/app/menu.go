@@ -295,7 +295,7 @@ func (a *App) itemDetail(it itemState, family string) detail {
 	d := detail{title: it.item.Name, kicker: "缓存", path: rootPath(it.res), note: it.item.Note}
 	d.lines = []kv{
 		{"路径", strings.Join(rootPaths(it.res), "\n")},
-		{"条目", countText(it.res)},
+		{"条目", countText(it.res.Roots)},
 		{"大小", core.Bytes(it.res.Size)},
 		{"最后写入", stamp(a.now, newestOf(it.res))},
 		{"所属分组", family},

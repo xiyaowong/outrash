@@ -21,8 +21,12 @@ func (a *App) groupPicks(g groupState) []core.Pick {
 
 // allPicks is every leaf of a scanned item.
 func allPicks(res core.Result) []core.Pick {
+	return picksOf(res.Roots)
+}
+
+func picksOf(roots []core.Root) []core.Pick {
 	var picks []core.Pick
-	for _, root := range res.Roots {
+	for _, root := range roots {
 		for _, e := range root.Entries {
 			if len(e.Versions) > 0 {
 				for _, v := range e.Versions {
@@ -37,6 +41,66 @@ func allPicks(res core.Result) []core.Pick {
 		}
 	}
 	return picks
+}
+
+// volumeOf is the drive a Windows path sits on, read from the text itself so
+// the filter sees exactly what the scan listed. Paths without a drive — every
+// Unix path among them — share one volume, which is why the volume bubbles
+// only ever offer themselves on a scan that spans drives.
+func volumeOf(p string) string {
+	if len(p) >= 2 && p[1] == ':' {
+		return p[:2]
+	}
+	return ""
+}
+
+// visibleRoots applies the volume filter. Roots are the unit because a root
+// never spans drives: one match decides the whole subtree under it.
+func (a *App) visibleRoots(res core.Result) []core.Root {
+	if a.volume == "" {
+		return res.Roots
+	}
+	var out []core.Root
+	for _, r := range res.Roots {
+		if volumeOf(r.Path) == a.volume {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// familyPicks is the family's leaves on the visible volume only, so the
+// count column and the preset chips describe what is on screen.
+func (a *App) familyPicks(g groupState) []core.Pick {
+	var picks []core.Pick
+	for _, it := range g.items {
+		picks = append(picks, picksOf(a.visibleRoots(it.res))...)
+	}
+	return picks
+}
+
+// familySize is the family total for what is on screen.
+func (a *App) familySize(g groupState) int64 {
+	var n int64
+	for _, it := range g.items {
+		for _, r := range a.visibleRoots(it.res) {
+			n += r.Size
+		}
+	}
+	return n
+}
+
+// familyVisible hides a family that has nothing on the visible volume.
+func (a *App) familyVisible(g groupState) bool {
+	if a.volume == "" {
+		return g.visible()
+	}
+	for _, it := range g.items {
+		if len(a.visibleRoots(it.res)) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // newestPick is the last time anything in the family touched the disk. A
@@ -148,7 +212,7 @@ func (a *App) familyRow(c *ui.Context, g groupState) {
 	p := a.pal
 	key := "g:" + g.group.ID
 	open := a.open[key]
-	picks := a.groupPicks(g)
+	picks := a.familyPicks(g)
 	on, total := a.checkState(picks)
 	row := ui.Row(c).Height(38).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
@@ -161,7 +225,7 @@ func (a *App) familyRow(c *ui.Context, g groupState) {
 		ui.Spacer(c).Grow(1)
 		ui.Text(c, fmt.Sprintf("%d 项", len(picks))).Font(core.Mono()).FontSize(12).
 			TextColor(p.Ink3).Width(colCount).TextAlign(ui.End).Shrink(0)
-		ui.Text(c, core.Bytes(g.size)).Font(core.Mono()).FontSize(12).
+		ui.Text(c, core.Bytes(a.familySize(g))).Font(core.Mono()).FontSize(12).
 			TextColor(p.Ink).Width(colSize).TextAlign(ui.End).Shrink(0)
 		ui.Box(c).Width(colStatus).Shrink(0).AlignItems(ui.Center).Children(func() {
 			a.familyTag(c, g)
@@ -191,13 +255,21 @@ func (a *App) familyRow(c *ui.Context, g groupState) {
 // name, path, entry count, size, and what the scan can vouch for.
 func (a *App) itemRow(c *ui.Context, it itemState) {
 	p := a.pal
-	picks := allPicks(it.res)
+	roots := a.visibleRoots(it.res)
+	if len(roots) == 0 {
+		return // every root of this cache sits on a hidden volume
+	}
+	picks := picksOf(roots)
 	if len(picks) == 0 && !it.res.Failed() {
 		return
 	}
 	key := "i:" + it.item.ID
 	open := a.open[key]
 	on, total := a.checkState(picks)
+	var size int64
+	for _, r := range roots {
+		size += r.Size
+	}
 	row := ui.Row(c).Height(44).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
 		ContextMenu(a.itemMenu(c, it, a.familyName(it)))
@@ -207,17 +279,17 @@ func (a *App) itemRow(c *ui.Context, it itemState) {
 		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
 		ui.Text(c, it.item.Name).FontSize(13).TextColor(p.Ink).SingleLine().
 			Width(colName - indentItem).Shrink(0).Tooltip(it.item.Note)
-		ui.Text(c, rootPath(it.res)).Font(core.Mono()).FontSize(11).
-			TextColor(p.Ink3).SingleLine().Ellipsis("…").Grow(1).Tooltip(rootPath(it.res))
-		ui.Text(c, countText(it.res)).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).
+		ui.Text(c, rootPathOf(roots)).Font(core.Mono()).FontSize(11).
+			TextColor(p.Ink3).SingleLine().Ellipsis("…").Grow(1).Tooltip(rootPathOf(roots))
+		ui.Text(c, countText(roots)).Font(core.Mono()).FontSize(12).TextColor(p.Ink2).
 			SingleLine().Width(colCount).TextAlign(ui.End).Shrink(0)
-		ui.Text(c, core.Bytes(it.res.Size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink).
+		ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(12).TextColor(p.Ink).
 			SingleLine().Width(colSize).TextAlign(ui.End).Shrink(0)
 		ui.Box(c).Width(colStatus).Shrink(0).AlignItems(ui.Center).Children(func() {
 			a.statusTag(c, it.res)
 		})
 		hasVersions := false
-		for _, root := range it.res.Roots {
+		for _, root := range roots {
 			for _, e := range root.Entries {
 				if len(e.Versions) > 0 {
 					hasVersions = true
@@ -307,17 +379,21 @@ func (a *App) recent(res core.Result) bool {
 }
 
 func rootPath(res core.Result) string {
-	if len(res.Roots) == 0 {
+	return rootPathOf(res.Roots)
+}
+
+func rootPathOf(roots []core.Root) string {
+	if len(roots) == 0 {
 		return ""
 	}
-	return res.Roots[0].Path
+	return roots[0].Path
 }
 
 // countText is the 文件数量 column: what one click would remove, in the unit
 // the cache itself uses.
-func countText(res core.Result) string {
+func countText(roots []core.Root) string {
 	versions, entries := 0, 0
-	for _, root := range res.Roots {
+	for _, root := range roots {
 		for _, e := range root.Entries {
 			if len(e.Versions) > 0 {
 				versions += len(e.Versions)
@@ -338,7 +414,7 @@ func countText(res core.Result) string {
 }
 
 func (a *App) entries(c *ui.Context, it itemState) {
-	for _, root := range it.res.Roots {
+	for _, root := range a.visibleRoots(it.res) {
 		for _, e := range root.Entries {
 			if len(e.Versions) > 0 {
 				a.versioned(c, it, e)
