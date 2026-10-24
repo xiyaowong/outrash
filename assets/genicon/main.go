@@ -130,18 +130,23 @@ func main() {
 	if err := os.WriteFile(filepath.Join(dir, "icon.ico"), ico(pngs), 0o666); err != nil {
 		panic(err)
 	}
-	// The object links into every Windows build; the version here is the
-	// fallback for local builds, and a release regenerates it at its tag.
+	// The object links into every Windows build. The version comes from the
+	// environment so a release stamps its tag; a local build falls back to
+	// this placeholder, which the properties sheet reads either way.
+	version := os.Getenv("OUTRASH_VERSION")
+	if version == "" {
+		version = "0.1.0"
+	}
 	strs := map[string]string{
 		"CompanyName":      "xiyaowong",
 		"FileDescription":  "清理可重建的缓存",
-		"FileVersion":      "0.1.0",
+		"FileVersion":      version,
 		"LegalCopyright":   "xiyaowong · MIT",
 		"ProductName":      "Outrash",
 		"OriginalFilename": "outrash.exe",
 	}
 	root := filepath.Dir(dir)
-	if err := os.WriteFile(filepath.Join(root, "rsrc_windows_amd64.syso"), buildSYSO(pngs, "0.1.0", strs), 0o666); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "rsrc_windows_amd64.syso"), buildSYSO(pngs, version, strs), 0o666); err != nil {
 		panic(err)
 	}
 }
