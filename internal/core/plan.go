@@ -6,6 +6,8 @@ package core
 import (
 	"cmp"
 	"fmt"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -414,14 +416,98 @@ func (p *Plan) Add(group, item, note string, other *Plan) {
 	p.Total()
 }
 
-// Total recomputes Bytes and orders the steps.
+// Total recomputes Bytes and orders the steps. It first drops every step
+// another step covers, so a leaf the catalog reaches twice — a root nested
+// inside another item's root — is removed once and its bytes counted once.
 func (p *Plan) Total() *Plan {
+	p.Steps = dedupeSteps(p.Steps)
 	p.Bytes = 0
 	for _, s := range p.Steps {
 		p.Bytes += s.Bytes
 	}
 	slices.SortStableFunc(p.Steps, func(a, b Step) int { return cmp.Compare(b.Bytes, a.Bytes) })
 	return p
+}
+
+// dedupeSteps drops a step whose path another kept step covers. The widest
+// step wins: a parent step removes the subtree a child step names, and its
+// bytes already include the child's, so keeping the child would only count
+// the same directory twice. Comparison folds separators everywhere and case
+// where the platform's paths are case-insensitive, because two roots can
+// spell one directory differently; an exact match still dedupes, which is
+// the leaf two items both listed.
+func dedupeSteps(steps []Step) []Step {
+	return dedupeBy(steps, func(s Step) string { return s.Path })
+}
+
+// DedupePicks drops each pick whose path another pick covers, keeping the
+// widest, so the window's estimate counts a selection the same way the plan
+// does: a parent whose leaves are also checked holds those bytes already.
+func DedupePicks(picks []Pick) []Pick {
+	return dedupeBy(picks, func(p Pick) string { return p.Path })
+}
+
+func dedupeBy[T any](items []T, path func(T) string) []T {
+	if len(items) < 2 {
+		return items
+	}
+	fold := runtime.GOOS == "windows" || runtime.GOOS == "darwin"
+	key := func(p string) string {
+		p = filepath.ToSlash(p)
+		if fold {
+			p = strings.ToLower(p)
+		}
+		return p
+	}
+	type keyed struct {
+		path string
+		item T
+	}
+	ks := make([]keyed, len(items))
+	for i, it := range items {
+		// An unnamed step is a test convenience and nothing real; it can
+		// cover nothing and nothing covers it.
+		if p := path(it); p != "" {
+			ks[i] = keyed{key(p), it}
+		} else {
+			ks[i] = keyed{"\x00" + strconv.Itoa(i), it}
+		}
+	}
+	// An ancestor sorts before everything under it, so one pass keeping the
+	// first of each path meets a parent before the steps it covers.
+	slices.SortStableFunc(ks, func(a, b keyed) int { return strings.Compare(a.path, b.path) })
+	kept := make(map[string]bool, len(ks))
+	out := ks[:0]
+	for _, k := range ks {
+		if covered(k.path, kept) {
+			continue
+		}
+		kept[k.path] = true
+		out = append(out, k)
+	}
+	items = items[:0]
+	for _, k := range out {
+		items = append(items, k.item)
+	}
+	return items
+}
+
+// covered reports whether p is itself kept or sits under a kept path. Only
+// p's ancestors can cover it, and there are as few as a path has parts.
+func covered(p string, kept map[string]bool) bool {
+	if kept[p] {
+		return true
+	}
+	for {
+		i := strings.LastIndexByte(p, '/')
+		if i < 0 {
+			return false
+		}
+		if kept[p[:i]] {
+			return true
+		}
+		p = p[:i]
+	}
 }
 
 // Groups lists the distinct group names in a plan, in plan order, with the
