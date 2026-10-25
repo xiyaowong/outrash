@@ -1,6 +1,6 @@
 # Release: a pushed v* tag builds every target and attaches the artifacts to
-# the release. Cross-compiles from one Linux runner; the Windows resource
-# object is regenerated first so the binary's version block names the tag.
+# the release. Cross-compiles from one Linux runner; the tag is the version
+# every artifact carries.
 name: Release
 
 on:
@@ -19,12 +19,11 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Stamp the version
+      - name: Set the version
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           jq --arg v "$VERSION" '.version = $v' mygo.json > mygo.json.tmp && mv mygo.json.tmp mygo.json
-          OUTRASH_VERSION="$VERSION" go run ./assets/genicon
 
       # The packaged forms, mygo build cross-compiled from this runner: the
       # Windows plain binary and its NSIS installer (makensis from apt; mygo

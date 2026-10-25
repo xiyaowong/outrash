@@ -1,6 +1,7 @@
 /build/
 /.mygo/
 mygo_windows_*.syso
+rsrc_windows_amd64.syso
 /outrash-dev.exe
 /outrash-dev.exe~
 /outrash.exe
