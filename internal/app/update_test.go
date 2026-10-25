@@ -90,7 +90,7 @@ func TestUpdateFlowThroughTheSheet(t *testing.T) {
 	<-done
 	// The hand-off happened outside a frame; rebuild one to see it.
 	tt = ui.NewTester(a.view, 1200, 780)
-	if !tt.HasText("重启已更新") {
+	if !tt.HasText("重启以更新") {
 		t.Fatalf("no restart button; texts %v", tt.Texts())
 	}
 }

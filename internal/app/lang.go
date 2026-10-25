@@ -291,7 +291,7 @@ var en = map[string]string{
 	"下载更新":       "Download update",
 	"发现新版本 ":     "New version ",
 	"正在下载更新…":    "Downloading…",
-	"重启已更新":      "Restart to update",
+	"重启以更新":      "Restart to update",
 	"更新就绪，重启后生效": "Update ready; it applies on restart",
 	"检查失败：":      "Check failed: ",
 
