@@ -255,7 +255,9 @@ func (a *App) updateRow(c *ui.Context) {
 		ui.Text(c, sub).FontSize(fz(11)).TextColor(p.Accent).Padding(24, 0, 0, 24).SingleLine()
 	}
 	if note != "" {
-		ui.Text(c, note).FontSize(fz(11)).TextColor(p.Ink3).Padding(0, 24, 6, 24).SingleLine()
+		// An error carries whatever the network or the disk said, which can
+		// run long; it wraps, where the short status lines stay one line.
+		ui.Text(c, note).FontSize(fz(11)).TextColor(p.Ink3).Padding(0, 24, 6, 24)
 	}
 }
 
