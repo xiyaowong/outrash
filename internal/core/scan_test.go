@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -47,7 +48,7 @@ func TestReadEntries(t *testing.T) {
 	write(t, filepath.Join(root, "top.bin"), 7)
 	setMtime(t, filepath.Join(root, "top.bin"), base)
 
-	l := readEntries(root, 1)
+	l := readEntries(root, 1, nil)
 	if l.err != nil {
 		t.Fatal(l.err)
 	}
@@ -97,7 +98,7 @@ func TestReadVersioned(t *testing.T) {
 	setMtime(t, filepath.Join(root, "pkg", "2.0.0", "f"), base.Add(2*time.Hour))
 	setMtime(t, filepath.Join(root, "other", "1.0.0", "f"), base.Add(time.Hour))
 
-	l := readVersioned(root)
+	l := readVersioned(root, nil)
 	if l.err != nil {
 		t.Fatal(l.err)
 	}
@@ -150,7 +151,7 @@ func TestReadEntriesSymlink(t *testing.T) {
 		t.Skipf("symlink unavailable: %v", err)
 	}
 
-	l := readEntries(root, 1)
+	l := readEntries(root, 1, nil)
 	if l.err != nil {
 		t.Fatal(l.err)
 	}
@@ -229,14 +230,14 @@ func TestReadEntriesReportsUnreadableRoot(t *testing.T) {
 	file := filepath.Join(dir, "not-a-dir")
 	write(t, file, 3)
 
-	l := readEntries(file, 1)
+	l := readEntries(file, 1, nil)
 	if l.err == nil {
 		t.Fatal("listing a file as a root must report an error")
 	}
 	if len(l.entries) != 0 || l.size != 0 {
 		t.Fatalf("unreadable root still produced %d entries, %d bytes", len(l.entries), l.size)
 	}
-	if v := readVersioned(file); v.err == nil {
+	if v := readVersioned(file, nil); v.err == nil {
 		t.Fatal("readVersioned must report an unreadable root too")
 	}
 }
@@ -327,7 +328,7 @@ func TestReadEntriesDeep(t *testing.T) {
 	setMtime(t, filepath.Join(pkgB, "f"), base.Add(2*time.Hour))
 	setMtime(t, filepath.Join(other, "f"), base.Add(3*time.Hour))
 
-	l := readEntries(root, 3)
+	l := readEntries(root, 3, nil)
 	if l.err != nil {
 		t.Fatal(l.err)
 	}
@@ -367,7 +368,7 @@ func TestReadEntriesDeep(t *testing.T) {
 
 	// A shallow read of the same tree keeps the old shape: one leaf per
 	// child of the root, no levels added.
-	shallow := readEntries(root, 1)
+	shallow := readEntries(root, 1, nil)
 	if len(shallow.entries) != 1 || shallow.entries[0].Size != 70 || shallow.entries[0].Children != nil {
 		t.Fatalf("shallow read %+v, want one whole-measured leaf", shallow.entries)
 	}
@@ -434,7 +435,7 @@ func TestReadEntriesDeepUnreadableFolder(t *testing.T) {
 	}
 	write(t, filepath.Join(site, "author", "pkg", "f"), 10)
 
-	l := readEntries(filepath.Join(root, "site", "author"), 1)
+	l := readEntries(filepath.Join(root, "site", "author"), 1, nil)
 	if l.err != nil {
 		t.Fatal(l.err)
 	}
@@ -465,6 +466,39 @@ func TestScanRefusesLinkedRoot(t *testing.T) {
 	}
 	if !r.Failed() {
 		t.Fatal("the refusal has to reach the window as a warning")
+	}
+}
+
+// A closed stop abandons the listing and the walk inside it: the result is
+// ErrStopped with no roots, so half a listing can never pass for a complete
+// one, and the aborted root is not counted as a read failure.
+func TestScanItemStops(t *testing.T) {
+	root := t.TempDir()
+	site := filepath.Join(root, "site")
+	if err := os.MkdirAll(filepath.Join(site, "pkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(site, "pkg", "f"), 10)
+	it := Item{
+		ID: "cache", Name: "cache", Unit: UnitEntries, Depth: 2,
+		Paths: map[string][]string{runtime.GOOS: {root}},
+	}
+	o := Options{GOOS: runtime.GOOS, Getenv: func(string) string { return "" }}
+
+	stop := make(chan struct{})
+	close(stop)
+	if r := scanItem("grp", it, o, stop); !errors.Is(r.Err, ErrStopped) || len(r.Roots) != 0 {
+		t.Fatalf("stopped scanItem = err %v, %d roots; want ErrStopped and none", r.Err, len(r.Roots))
+	}
+	if r := scanItem("grp", it, o, nil); r.Err != nil || len(r.Roots) != 1 {
+		t.Fatalf("live scanItem = err %v, %d roots; want a full listing", r.Err, len(r.Roots))
+	}
+
+	// The walk inside measure also unwinds, which is the multi-gigabyte case:
+	// the check has to reach below the top-level ReadDir.
+	l := readEntries(root, 1, stop)
+	if !l.stopped || len(l.entries) != 0 {
+		t.Fatalf("stopped listing = %+v, want stopped and empty", l)
 	}
 }
 
