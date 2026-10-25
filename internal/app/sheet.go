@@ -77,6 +77,13 @@ func (a *App) printScanWarnings(cache *core.Cache) {
 
 func (a *App) dismiss() {
 	if a.modal != modalNone {
+		// Closing the about sheet ends a finished check: reopening asks
+		// again rather than showing a stale answer. A check or download in
+		// flight keeps its state — it lands its result when it ends.
+		if a.modal == modalAbout && a.update != nil &&
+			a.update.phase != updateChecking && a.update.phase != updateDownloading {
+			a.update = nil
+		}
 		a.modal = modalNone
 		a.shown = nil
 	}
