@@ -48,9 +48,11 @@ jobs:
             (cd "$d" && zip -qry "../../outrash-$VERSION-darwin-$arch.app.zip" outrash.app)
           done
           cp out/pack/linux-*/outrash_*.deb out/pack/linux-*/outrash-*.tar.gz out/
-          # The manifests are what the app's update check reads; they must
-          # reach the release even though softprops picks up out/ only.
-          cp out/pack/*/update-*.json out/
+          # The manifests are what the app's update check reads; the signed
+          # archives and deltas are what the manifests name. Every one must
+          # reach the release, or a check that finds the new version cannot
+          # download it.
+          cp out/pack/*/update-*.json out/pack/*/outrash-*.tar.gz out/pack/*/*.delta out/
 
       - uses: softprops/action-gh-release@v2
         with:
