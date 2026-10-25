@@ -1,6 +1,7 @@
 package core
 
 import (
+	"runtime"
 	"testing"
 	"time"
 )
@@ -189,13 +190,13 @@ func TestSelectKeepsNewestByVersion(t *testing.T) {
 
 // A step whose path another step covers is dropped in favour of the widest
 // one: the parent removes the subtree, and its bytes already include the
-// child's.
+// child's. Slash paths keep the comparison lexical on every platform.
 func TestTotalDedupesCoveredSteps(t *testing.T) {
-	parent := `C:\cache\go-mod`
-	child := `C:\cache\go-mod\shard`
+	parent := "C:/cache/go-mod"
+	child := "C:/cache/go-mod/shard"
 	p := &Plan{Steps: []Step{
 		{Path: child, Name: "shard", Bytes: 5},
-		{Path: `C:\other`, Name: "other", Bytes: 7},
+		{Path: "C:/other", Name: "other", Bytes: 7},
 		{Path: parent, Name: "go-mod", Bytes: 50},
 	}}
 	p.Total()
@@ -209,8 +210,11 @@ func TestTotalDedupesCoveredSteps(t *testing.T) {
 
 // Two roots can spell one directory with different case (a user-typed
 // environment variable against a literal template), so the comparison folds
-// case where the platform does.
+// case where the platform does. A case-sensitive platform keeps both.
 func TestTotalDedupesCaseSpelling(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("paths fold case only where the platform's do")
+	}
 	p := &Plan{Steps: []Step{
 		{Path: `C:\Cache\go-mod\shard`, Name: "upper", Bytes: 5},
 		{Path: `c:\cache\go-mod\shard`, Name: "lower", Bytes: 5},
@@ -224,8 +228,8 @@ func TestTotalDedupesCaseSpelling(t *testing.T) {
 // DedupePicks keeps the window's estimate in step with the plan it previews.
 func TestDedupePicksKeepsWidest(t *testing.T) {
 	picks := []Pick{
-		{Path: `C:\cache\leaf`, Name: "leaf", Bytes: 3},
-		{Path: `C:\cache`, Name: "root", Bytes: 30},
+		{Path: "C:/cache/leaf", Name: "leaf", Bytes: 3},
+		{Path: "C:/cache", Name: "root", Bytes: 30},
 	}
 	out := DedupePicks(picks)
 	if len(out) != 1 || out[0].Name != "root" || out[0].Bytes != 30 {
