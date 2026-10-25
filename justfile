@@ -62,6 +62,7 @@ safe:
 shots:
     $env:OUTRASH_SHOTS = "1"; go test ./internal/app -count=1
 
-# Regenerate the icon and the Windows resource object the build links.
+# Regenerate the icon files: assets/ and resources/icon.png, which mygo
+# reads for the packaged app.
 icon:
     go run ./assets/genicon
