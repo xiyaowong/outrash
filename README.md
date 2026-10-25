@@ -7,8 +7,8 @@ A cross-platform cache cleaner: it scans the rebuildable caches your tools leave
 
 ## 为什么是它 Why
 
-- **纯离线。** 扫描与清理全部在本机完成。
-  **Offline.** Scanning and cleaning never touch the network.
+- **纯离线。** 扫描与清理全部在本机完成。唯一联网的功能是「关于」页的手动检查更新。
+  **Offline.** Scanning and cleaning never touch the network. The one online feature is the manual update check on the About sheet.
 - **无后台常驻。** 用时打开，关掉即退。
   **No background process.** Open it when you need it; closing it ends it.
 - **不产生杂物。** 无配置文件、无注册表、无日志。
@@ -36,6 +36,8 @@ Four pages: Overview, Scan results, Cleanups, Rules. The interface speaks Chines
   **Only what can be fetched back.** Sources, projects and consoles are never touched.
 - **不写任何东西。** 「清理记录」只存在内存里，关窗即消失。
   **Writes nothing.** The cleanup log lives in memory and dies with the window.
+- **不自动更新。** 只有在「关于」页手动点「检查更新」时才检查更新，不会自动检查、不会自动下载。
+  **No automatic updates.** Updates are only checked when you press 检查更新 on the About sheet; the app never checks or downloads on its own.
 
 收录范围是各类软件会自行重建的缓存，清单在应用的「规则」页随时可见。
 The catalog covers what software rebuilds on its own; it is on the app's Rules page.

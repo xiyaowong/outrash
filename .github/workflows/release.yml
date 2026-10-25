@@ -30,9 +30,13 @@ jobs:
       # Windows plain binary and its NSIS installer (makensis from apt; mygo
       # downloads NSIS only on Windows), the .app bundles for macOS, and a
       # deb plus an installable tarball for Linux. Signing and disk images
-      # are the parts that need macOS, so the bundles ship unsigned.
+      # are the parts that need macOS, so the bundles ship unsigned. The
+      # update signing key signs each platform's update archive and writes
+      # its manifest, which installed apps check when the user asks.
       - name: Package
         shell: bash
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           sudo apt-get update -y && sudo apt-get install -y nsis
@@ -45,6 +49,9 @@ jobs:
             (cd "$d" && zip -qry "../../outrash-$VERSION-darwin-$arch.app.zip" outrash.app)
           done
           cp out/pack/linux-*/outrash_*.deb out/pack/linux-*/outrash-*.tar.gz out/
+          # The manifests are what the app's update check reads; they must
+          # reach the release even though softprops picks up out/ only.
+          cp out/pack/*/update-*.json out/
 
       - uses: softprops/action-gh-release@v2
         with:

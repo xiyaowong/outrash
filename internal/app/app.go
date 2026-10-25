@@ -100,6 +100,9 @@ type App struct {
 	report *report
 	detail *detail
 	msg    string
+	// update is the manual update check's state; nil until 检查更新 was
+	// clicked, and never touched by anything but that sheet.
+	update *updater
 }
 
 // runRecord is one clean as the log page shows it: what it freed, what it
