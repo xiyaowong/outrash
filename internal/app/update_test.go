@@ -191,6 +191,132 @@ func TestUpdateStateClearsWhenTheSheetCloses(t *testing.T) {
 	<-landed
 }
 
+// Closing the sheet during a download must not swallow it: the title bar
+// carries the progress, its end is announced there either way, and clicking
+// the announcement reopens the sheet where the button waits.
+func TestUpdateDownloadSurvivesTheSheetClose(t *testing.T) {
+	a := testApp(t, false)
+	landed := make(chan struct{}, 8)
+	a.post = func(f func()) { f(); landed <- struct{}{} }
+	tt := ui.NewTester(a.view, 1200, 780)
+	if err := tt.Click("关于"); err != nil {
+		t.Fatal(err)
+	}
+
+	prevCheck, prevInstall := checkUpdate, runInstallUpdate
+	defer func() { checkUpdate, runInstallUpdate = prevCheck, prevInstall }()
+	release := make(chan struct{})
+	checkUpdate = func() (*mygo.Update, error) {
+		<-release
+		return &mygo.Update{Version: "0.2.0"}, nil
+	}
+	var progress func(int64, int64)
+	started, releaseInstall, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	runInstallUpdate = func(_ *mygo.Update, fn func(int64, int64)) error {
+		progress = fn
+		close(started)
+		<-releaseInstall
+		return nil
+	}
+
+	if err := tt.Click("检查更新"); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	<-landed
+	tt.Frame()
+	if err := tt.Click("下载更新"); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	// Walk away mid-download.
+	if err := tt.Click("关闭"); err != nil {
+		t.Fatal(err)
+	}
+	if a.modal != modalNone {
+		t.Fatalf("the sheet did not close")
+	}
+	if !tt.HasText("下载更新") {
+		t.Fatalf("the download vanished with the sheet; texts %v", tt.Texts())
+	}
+
+	// Progress moves the bar where the user can see it.
+	progress(400, 1000)
+	tt.Frame()
+	if !tt.HasText("下载更新") {
+		t.Fatal("the indicator did not survive a progress step")
+	}
+
+	// The end — here the good one — is announced outside the sheet too.
+	a.post = func(f func()) { f(); close(done) }
+	close(releaseInstall)
+	<-done
+	tt = ui.NewTester(a.view, 1200, 780)
+	if !tt.HasText("更新已就绪") {
+		t.Fatalf("the finished download has no reader; texts %v", tt.Texts())
+	}
+	// And the announcement is a door back to the button.
+	if err := tt.Click("更新已就绪"); err != nil {
+		t.Fatal(err)
+	}
+	if a.modal != modalAbout {
+		t.Fatalf("modal = %v, want the about sheet back", a.modal)
+	}
+	if !tt.HasText("重启以更新") {
+		t.Fatalf("no restart button; texts %v", tt.Texts())
+	}
+}
+
+// A download that fails while the sheet is closed is named in the title bar
+// instead of looking like nothing happened.
+func TestUpdateFailureSurvivesTheSheetClose(t *testing.T) {
+	a := testApp(t, false)
+	landed := make(chan struct{}, 8)
+	a.post = func(f func()) { f(); landed <- struct{}{} }
+	tt := ui.NewTester(a.view, 1200, 780)
+	if err := tt.Click("关于"); err != nil {
+		t.Fatal(err)
+	}
+
+	prevCheck, prevInstall := checkUpdate, runInstallUpdate
+	defer func() { checkUpdate, runInstallUpdate = prevCheck, prevInstall }()
+	releaseCheck := make(chan struct{})
+	checkUpdate = func() (*mygo.Update, error) {
+		<-releaseCheck
+		return &mygo.Update{Version: "0.2.0"}, nil
+	}
+	releaseInstall := make(chan struct{})
+	runInstallUpdate = func(*mygo.Update, func(int64, int64)) error {
+		<-releaseInstall
+		return errors.New("disk full")
+	}
+
+	if err := tt.Click("检查更新"); err != nil {
+		t.Fatal(err)
+	}
+	close(releaseCheck)
+	<-landed
+	tt.Frame()
+	if err := tt.Click("下载更新"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("关闭"); err != nil {
+		t.Fatal(err)
+	}
+	close(releaseInstall)
+	<-landed
+	tt.Frame()
+	if !tt.HasText("更新失败") {
+		t.Fatalf("the failure went unseen; texts %v", tt.Texts())
+	}
+	if err := tt.Click("更新失败"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("检查失败：disk full") {
+		t.Fatalf("the sheet does not name the failure; texts %v", tt.Texts())
+	}
+}
+
 // A failed check says why and offers the button again.
 func TestUpdateCheckFailure(t *testing.T) {
 	a := testApp(t, false)

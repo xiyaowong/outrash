@@ -683,6 +683,9 @@ func (a *App) titleBar(c *ui.Context) {
 		if a.busy {
 			a.cleanProgress(c)
 		}
+		if a.modal != modalAbout {
+			a.updateIndicator(c)
+		}
 		if a.buildOpts.Debug || a.buildOpts.NoDelete {
 			ui.Text(c, a.modeNote()).FontSize(fz(11)).TextColor(p.Ink2).Shrink(0)
 		}
@@ -739,6 +742,53 @@ func (a *App) cleanProgress(c *ui.Context) {
 	bar.Draw(func(pt *ui.Painter, r ui.Rect) {
 		pt.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W * float32(frac), H: r.H}, p.Accent, 0)
 	})
+}
+
+// updateIndicator keeps a download the user walked away from visible. The
+// about sheet is the only place the check lives, but closing it must not
+// swallow the download: while it runs, the title bar carries the bar, and
+// once it ends — either way — a line says where it landed, so a result the
+// sheet no longer shows still has a reader. Clicking it reopens the sheet,
+// where 重启以更新 waits. The indicator stays out of the sheet's own frame:
+// there the row shows the same thing with more room.
+func (a *App) updateIndicator(c *ui.Context) {
+	u := a.update
+	if u == nil {
+		return
+	}
+	p := a.pal
+	switch u.phase {
+	case updateDownloading:
+		done, total := u.progress()
+		frac := 0.0
+		if total > 0 {
+			frac = float64(done) / float64(total)
+		}
+		row := ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).
+			Cursor(ui.CursorPointer).OnClick(func() { a.modal = modalAbout }).
+			Tooltip(a.T("正在下载更新，点按打开关于页"))
+		row.Background(a.hoverFill(row, ui.Transparent, p.Hover)).Radius(4)
+		row.Children(func() {
+			ui.Text(c, a.T("下载更新")).FontSize(fz(11)).TextColor(p.Ink2).SingleLine()
+			ui.Progress(c, frac).Width(64).Height(4).Shrink(0)
+		})
+	case updateInstalled:
+		row := ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).
+			Cursor(ui.CursorPointer).OnClick(func() { a.modal = modalAbout }).
+			Tooltip(a.T("更新就绪，点按打开关于页重启"))
+		row.Background(a.hoverFill(row, ui.Transparent, p.Hover)).Radius(4)
+		row.Children(func() {
+			ui.Text(c, a.T("更新已就绪")).FontSize(fz(11)).FontWeight(600).TextColor(p.Accent).SingleLine()
+		})
+	case updateFailed:
+		row := ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).
+			Cursor(ui.CursorPointer).OnClick(func() { a.modal = modalAbout }).
+			Tooltip(a.T("更新失败："+u.err))
+		row.Background(a.hoverFill(row, ui.Transparent, p.Hover)).Radius(4)
+		row.Children(func() {
+			ui.Text(c, a.T("更新失败")).FontSize(fz(11)).TextColor(p.Danger).SingleLine()
+		})
+	}
 }
 
 // estimate turns the bytes done so far into the time left. Under a second of
