@@ -36,10 +36,12 @@ func TestUpdateCheckDisabledShowsQuietButton(t *testing.T) {
 }
 
 // A found update turns the button into the download; the download fills the
-// bar; its end turns the button into the restart.
+// bar and repaints as bytes arrive; its end turns the button into the
+// restart.
 func TestUpdateFlowThroughTheSheet(t *testing.T) {
 	a := testApp(t, false)
-	a.post = func(f func()) { f() }
+	repaints := 0
+	a.post = func(f func()) { repaints++; f() }
 	tt := ui.NewTester(a.view, 1200, 780)
 	if err := tt.Click("关于"); err != nil {
 		t.Fatal(err)
@@ -80,7 +82,13 @@ func TestUpdateFlowThroughTheSheet(t *testing.T) {
 	if progress == nil {
 		t.Fatal("Install never received the progress callback")
 	}
+	// A cursor without a repaint fills only in memory: the bar would stand
+	// still for the whole download.
+	before := repaints
 	progress(250, 1000)
+	if repaints == before {
+		t.Fatal("a progress step never repainted")
+	}
 	if doneBytes, total := a.update.progress(); doneBytes != 250 || total != 1000 {
 		t.Fatalf("progress = %d/%d, want 250/1000", doneBytes, total)
 	}
@@ -94,6 +102,62 @@ func TestUpdateFlowThroughTheSheet(t *testing.T) {
 	if !tt.HasText("重启以更新") {
 		t.Fatalf("no restart button; texts %v", tt.Texts())
 	}
+}
+
+// Closing the sheet ends a finished check: reopening offers 检查更新 again,
+// not the old answer. A download in flight survives the close.
+func TestUpdateStateClearsWhenTheSheetCloses(t *testing.T) {
+	a := testApp(t, false)
+	a.post = func(f func()) { f() }
+	tt := ui.NewTester(a.view, 1200, 780)
+	if err := tt.Click("关于"); err != nil {
+		t.Fatal(err)
+	}
+
+	prevCheck, prevInstall := checkUpdate, runInstallUpdate
+	defer func() { checkUpdate, runInstallUpdate = prevCheck, prevInstall }()
+	checkUpdate = func() (*mygo.Update, error) {
+		return &mygo.Update{Version: "0.2.0"}, nil
+	}
+	started, release := make(chan struct{}), make(chan struct{})
+	runInstallUpdate = func(*mygo.Update, func(int64, int64)) error {
+		close(started)
+		<-release
+		return nil
+	}
+
+	if err := tt.Click("检查更新"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("关闭"); err != nil {
+		t.Fatal(err)
+	}
+	if a.update != nil {
+		t.Fatalf("a finished check survived the close: %v", a.update.phase)
+	}
+	if err := tt.Click("关于"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("检查更新") {
+		t.Fatalf("the sheet does not start over; texts %v", tt.Texts())
+	}
+
+	// A download in flight keeps its state, because its goroutine still has
+	// to land the result somewhere.
+	if err := tt.Click("检查更新"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("下载更新"); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	if err := tt.Click("关闭"); err != nil {
+		t.Fatal(err)
+	}
+	if a.update == nil || a.update.phase != updateDownloading {
+		t.Fatalf("phase = %v, want the download kept", a.update)
+	}
+	close(release)
 }
 
 // A failed check says why and offers the button again.

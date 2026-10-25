@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/egoist/mygo"
 )
@@ -107,7 +108,10 @@ func (a *App) checkForUpdate() {
 }
 
 // installUpdate downloads and applies the found update, reporting bytes to
-// the progress bar. When it ends, the app on disk is the new version.
+// the progress bar. The callback stores the cursor and repaints — nothing
+// else invalidates the window during a download, so without it the bar
+// would fill only in memory. When it ends, the app on disk is the new
+// version.
 func (a *App) installUpdate() {
 	up := a.update.up
 	if up == nil || a.update.phase != updateReady {
@@ -116,7 +120,14 @@ func (a *App) installUpdate() {
 	a.update.phase = updateDownloading
 	a.repaint()
 	go func() {
-		err := runInstallUpdate(up, a.update.setProgress)
+		var last time.Time
+		err := runInstallUpdate(up, func(done, total int64) {
+			a.update.setProgress(done, total)
+			if time.Since(last) >= 80*time.Millisecond {
+				last = time.Now()
+				a.applyUpdate(a.repaint)
+			}
+		})
 		a.applyUpdate(func() {
 			if err != nil {
 				a.update = &updater{phase: updateFailed, err: err.Error()}
