@@ -758,18 +758,22 @@ func (a *App) selectedPlan() *core.Plan {
 	return p
 }
 
+// checkedTotal is what the action bar's confirmation names: the picks behind
+// the checks, deduplicated the way the plan will be, so a parent whose
+// leaves are also checked counts its subtree once.
 func (a *App) checkedTotal() (n int, bytes int64) {
+	var picks []core.Pick
 	for _, g := range a.groups {
 		for _, it := range g.items {
 			for _, p := range allPicks(it.res) {
 				if a.checked[p.Path] {
-					n++
-					bytes += p.Bytes
+					picks = append(picks, p)
 				}
 			}
 		}
 	}
-	return n, bytes
+	picks = core.DedupePicks(picks)
+	return len(picks), pickBytes(picks)
 }
 
 func (a *App) clearChecks() {

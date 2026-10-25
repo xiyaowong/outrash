@@ -187,6 +187,52 @@ func TestSelectKeepsNewestByVersion(t *testing.T) {
 	}
 }
 
+// A step whose path another step covers is dropped in favour of the widest
+// one: the parent removes the subtree, and its bytes already include the
+// child's.
+func TestTotalDedupesCoveredSteps(t *testing.T) {
+	parent := `C:\cache\go-mod`
+	child := `C:\cache\go-mod\shard`
+	p := &Plan{Steps: []Step{
+		{Path: child, Name: "shard", Bytes: 5},
+		{Path: `C:\other`, Name: "other", Bytes: 7},
+		{Path: parent, Name: "go-mod", Bytes: 50},
+	}}
+	p.Total()
+	if !equal(names(p), []string{"go-mod", "other"}) {
+		t.Fatalf("got %v", names(p))
+	}
+	if p.Bytes != 57 {
+		t.Fatalf("bytes %d, want the subtree counted once", p.Bytes)
+	}
+}
+
+// Two roots can spell one directory with different case (a user-typed
+// environment variable against a literal template), so the comparison folds
+// case where the platform does.
+func TestTotalDedupesCaseSpelling(t *testing.T) {
+	p := &Plan{Steps: []Step{
+		{Path: `C:\Cache\go-mod\shard`, Name: "upper", Bytes: 5},
+		{Path: `c:\cache\go-mod\shard`, Name: "lower", Bytes: 5},
+	}}
+	p.Total()
+	if len(p.Steps) != 1 || p.Bytes != 5 {
+		t.Fatalf("got %d steps, %d bytes; want one", len(p.Steps), p.Bytes)
+	}
+}
+
+// DedupePicks keeps the window's estimate in step with the plan it previews.
+func TestDedupePicksKeepsWidest(t *testing.T) {
+	picks := []Pick{
+		{Path: `C:\cache\leaf`, Name: "leaf", Bytes: 3},
+		{Path: `C:\cache`, Name: "root", Bytes: 30},
+	}
+	out := DedupePicks(picks)
+	if len(out) != 1 || out[0].Name != "root" || out[0].Bytes != 30 {
+		t.Fatalf("got %+v", out)
+	}
+}
+
 func TestAddAndGroups(t *testing.T) {
 	p := &Plan{}
 	p.Add("Node", "npm", "下次安装依赖时自动重新下载", Select([]Pick{{Name: "n1", Bytes: 5, ModTime: ago(1)}}, Policy{Now: day0}))
