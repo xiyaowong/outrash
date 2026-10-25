@@ -283,6 +283,18 @@ var en = map[string]string{
 	"第 %d 版 · %d 项缓存": "Rev %d · %d caches",
 	"项目主页":            "Project",
 
+	// Update check. The check is manual; these lines only ever come from
+	// the about sheet's button.
+	"检查更新":       "Check for updates",
+	"正在检查更新…":    "Checking…",
+	"已是最新版本":     "Up to date",
+	"下载更新":       "Download update",
+	"发现新版本 ":     "New version ",
+	"正在下载更新…":    "Downloading…",
+	"重启已更新":      "Restart to update",
+	"更新就绪，重启后生效": "Update ready; it applies on restart",
+	"检查失败：":      "Check failed: ",
+
 	// Language toggle.
 	"切换语言":    "Switch language",
 	"中文":      "中文",

@@ -163,7 +163,8 @@ func (a *App) detailSheet(c *ui.Context) {
 }
 
 // aboutSheet is the one screen with nothing to decide: what this build is,
-// where it comes from, and the licence it comes under.
+// where it comes from, and the licence it comes under — plus the one button
+// that ever reaches the network, on the click that asks for an update.
 func (a *App) aboutSheet(c *ui.Context) {
 	p := a.pal
 	a.dialog(c, 400, func() {
@@ -186,12 +187,76 @@ func (a *App) aboutSheet(c *ui.Context) {
 						FontSize(fz(12)).TextColor(p.Accent)
 				})
 			})
+			a.updateRow(c)
 			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 			ui.Row(c).Height(60).Padding(0, 24).Justify(ui.End).AlignItems(ui.Center).Children(func() {
 				a.actionButton(c, a.T("关闭"), true, true, a.dismiss)
 			})
 		})
 	})
+}
+
+// updateRow is the check-for-updates control and whatever it has to say.
+// The check is manual by construction: the network is only touched inside
+// checkForUpdate, on the click below.
+func (a *App) updateRow(c *ui.Context) {
+	p := a.pal
+	if a.update == nil {
+		a.update = &updater{phase: updateIdle}
+	}
+	u := a.update
+	label, primary, enabled := a.T("检查更新"), false, true
+	var note, sub string
+	switch u.phase {
+	case updateChecking:
+		label, enabled = a.T("正在检查更新…"), false
+	case updateNone:
+		note = a.T("已是最新版本")
+	case updateReady:
+		label, primary = a.T("下载更新"), true
+		sub = a.T("发现新版本 ") + u.version
+	case updateDownloading:
+		label, enabled = a.T("正在下载更新…"), false
+	case updateInstalled:
+		label, primary = a.T("重启已更新"), true
+		sub = a.T("更新就绪，重启后生效")
+	case updateFailed:
+		label = a.T("检查更新")
+		note = a.T("检查失败：") + u.err
+	}
+	ui.Row(c).Height(44).Padding(0, 24).Gap(12).AlignItems(ui.Center).Children(func() {
+		a.actionButton(c, label, primary, enabled, func() {
+			switch u.phase {
+			case updateIdle, updateNone, updateFailed:
+				a.checkForUpdate()
+			case updateReady:
+				a.installUpdate()
+			case updateInstalled:
+				a.relaunchIntoUpdate()
+			}
+		})
+		switch u.phase {
+		case updateDownloading:
+			done, total := u.progress()
+			frac := 0.0
+			if total > 0 {
+				frac = float64(done) / float64(total)
+			}
+			ui.Progress(c, frac).Height(4).Radius(2).Grow(1)
+		case updateChecking:
+			// The manifest is small and its size unknown; the bar shows
+			// motion rather than a fraction.
+			ui.Progress(c, -1).Height(4).Radius(2).Grow(1)
+		default:
+			ui.Spacer(c)
+		}
+	})
+	if sub != "" {
+		ui.Text(c, sub).FontSize(fz(11)).TextColor(p.Accent).Padding(24, 0, 0, 24).SingleLine()
+	}
+	if note != "" {
+		ui.Text(c, note).FontSize(fz(11)).TextColor(p.Ink3).Padding(0, 24, 6, 24).SingleLine()
+	}
 }
 
 func (a *App) aboutLine(c *ui.Context, label, value string) {

@@ -2,6 +2,9 @@
   "name": "outrash",
   "identifier": "io.github.xiyaowong.outrash",
   "version": "0.1.0",
-  "out": "build"
+  "out": "build",
+  "updates": {
+    "publicKey": "CLnWT8Q3/dLSb+fGuj3ikmAF+sgm3wnW6VEv425pEOg=",
+    "github": "xiyaowong/outrash"
+  }
 }
-
