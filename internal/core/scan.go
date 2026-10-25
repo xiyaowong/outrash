@@ -225,9 +225,16 @@ func scanItem(groupID string, it Item, o Options, stop <-chan struct{}) Result {
 		}
 		var l listing
 		if it.Unit == UnitVersioned {
-			l = readVersioned(d)
+			l = readVersioned(d, stop)
 		} else {
-			l = readEntries(d, it.Depth)
+			l = readEntries(d, it.Depth, stop)
+		}
+		if l.stopped {
+			// Half a listing must never pass for a complete one; ErrStopped
+			// is already outside the Unreadable count, so an aborted root is
+			// not reported as a read failure either.
+			r.Err = ErrStopped
+			return r
 		}
 		if len(it.Exclude) > 0 {
 			l.entries, _ = excludeTree(l.entries, it.Exclude)
@@ -262,26 +269,40 @@ type listing struct {
 	// itself could not be listed.
 	bad int
 	err error
+	// stopped marks a listing abandoned because the scan was stopped. The
+	// caller must not present what came back as a complete listing.
+	stopped bool
 }
 
 // readEntries lists the removable entries of dir, depth levels of folder
 // below it. A folder past the last level is a leaf: it is measured whole,
-// and a check on it removes it whole.
-func readEntries(dir string, depth int) listing {
+// and a check on it removes it whole. Closing stop abandons the walk at the
+// next path, so a rescan does not leave the old workers grinding through
+// multi-gigabyte trees that nothing will read.
+func readEntries(dir string, depth int, stop <-chan struct{}) listing {
+	if stopped(stop) {
+		return listing{stopped: true}
+	}
 	children, err := os.ReadDir(dir)
 	if err != nil {
 		return listing{err: err}
 	}
 	var l listing
 	for _, ch := range children {
+		if stopped(stop) {
+			return listing{stopped: true}
+		}
 		p := filepath.Join(dir, ch.Name())
 		if depth > 1 && ch.IsDir() {
-			sub := readEntries(p, depth-1)
+			sub := readEntries(p, depth-1, stop)
+			if sub.stopped {
+				return sub
+			}
 			l.bad += sub.bad
 			if sub.err != nil || len(sub.entries) == 0 {
 				// The folder could not be listed, or holds nothing at the
 				// levels below: measure it whole, as a leaf.
-				sz, mt, bad, ok := measure(p, ch)
+				sz, mt, bad, ok := measure(p, ch, stop)
 				l.bad += bad
 				if !ok {
 					l.bad++
@@ -304,7 +325,7 @@ func readEntries(dir string, depth int) listing {
 			}
 			continue
 		}
-		sz, mt, bad, ok := measure(p, ch)
+		sz, mt, bad, ok := measure(p, ch, stop)
 		l.bad += bad
 		if !ok {
 			l.bad++
@@ -323,16 +344,22 @@ func readEntries(dir string, depth int) listing {
 
 // readVersioned measures root/<package>/<version> folders, plus any stray
 // files at the root as entries of their own.
-func readVersioned(dir string) listing {
+func readVersioned(dir string, stop <-chan struct{}) listing {
+	if stopped(stop) {
+		return listing{stopped: true}
+	}
 	children, err := os.ReadDir(dir)
 	if err != nil {
 		return listing{err: err}
 	}
 	var l listing
 	for _, ch := range children {
+		if stopped(stop) {
+			return listing{stopped: true}
+		}
 		p := filepath.Join(dir, ch.Name())
 		if !ch.IsDir() {
-			sz, mt, bad, ok := measure(p, ch)
+			sz, mt, bad, ok := measure(p, ch, stop)
 			l.bad += bad
 			if !ok {
 				l.bad++
@@ -345,7 +372,7 @@ func readVersioned(dir string) listing {
 		}
 		versions, verr := os.ReadDir(p)
 		if verr != nil || len(versions) == 0 {
-			sz, mt, bad, ok := measure(p, ch)
+			sz, mt, bad, ok := measure(p, ch, stop)
 			l.bad += bad
 			if !ok {
 				l.bad++
@@ -361,8 +388,11 @@ func readVersioned(dir string) listing {
 		}
 		e := Entry{Name: ch.Name(), Path: p, Package: ch.Name(), ModTime: time.Time{}, IsDir: true}
 		for _, v := range versions {
+			if stopped(stop) {
+				return listing{stopped: true}
+			}
 			vp := filepath.Join(p, v.Name())
-			sz, mt, bad, ok := measure(vp, v)
+			sz, mt, bad, ok := measure(vp, v, stop)
 			l.bad += bad
 			if !ok {
 				l.bad++
@@ -391,11 +421,23 @@ func readVersioned(dir string) listing {
 	return l
 }
 
+// stopped reports a closed stop channel, the one check the walk callbacks
+// also make. A nil channel never closes.
+func stopped(stop <-chan struct{}) bool {
+	select {
+	case <-stop:
+		return true
+	default:
+		return false
+	}
+}
+
 // measure returns the bytes and newest modification time below p, the number
 // of paths it could not read, and whether p itself could be measured. A
 // symlink counts as its link size and is never followed, so a junction that
-// points back up cannot loop the walk.
-func measure(p string, ch fs.DirEntry) (size int64, mod time.Time, bad int, ok bool) {
+// points back up cannot loop the walk. Closing stop abandons the walk:
+// fs.SkipAll unwinds it cleanly and stopped reports that it happened.
+func measure(p string, ch fs.DirEntry, stop <-chan struct{}) (size int64, mod time.Time, bad int, ok bool) {
 	if ch.Type()&fs.ModeSymlink != 0 {
 		info, err := os.Lstat(p)
 		if err != nil {
@@ -412,6 +454,9 @@ func measure(p string, ch fs.DirEntry) (size int64, mod time.Time, bad int, ok b
 	}
 	var newest time.Time
 	err = filepath.WalkDir(p, func(_ string, d fs.DirEntry, err error) error {
+		if stopped(stop) {
+			return fs.SkipAll
+		}
 		if err != nil {
 			bad++
 			return nil
