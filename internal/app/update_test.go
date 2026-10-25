@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo"
@@ -171,4 +172,20 @@ func TestUpdateSheetStates(t *testing.T) {
 			write(t, "update-"+tc.name+".png", tt.Image())
 		})
 	}
+}
+
+// The failure note wraps: an error can be a whole URL chain, and cutting it
+// to one line hides the part that says what went wrong.
+func TestUpdateFailureNoteWraps(t *testing.T) {
+	a := testApp(t, false)
+	long := strings.Repeat("无法连接到更新服务器，", 12) + "请稍后再试。"
+	a.update = &updater{phase: updateFailed, err: long}
+	tt := ui.NewTester(a.view, 1200, 780)
+	if err := tt.Click("关于"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText(long) {
+		t.Fatalf("the long error was cut; texts %v", tt.Texts())
+	}
+	write(t, "update-failed.png", tt.Image())
 }
