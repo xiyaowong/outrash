@@ -1,7 +1,9 @@
 // genicon rasterizes the app mark into icon.ico and a 256px preview. The
 // geometry is the SVG's (assets/icon.svg), drawn as signed distance fields so
 // every size renders crisp from the same numbers instead of a downscaled
-// bitmap; keep the two files in sync.
+// bitmap; keep the two files in sync. The 256px PNG also lands in
+// resources/, which `mygo build` reads for the packaged app's icon — without
+// this write it would keep whatever the last manual copy left there.
 //
 //	go run ./assets/genicon
 package main
@@ -148,6 +150,11 @@ func main() {
 		"OriginalFilename": "outrash.exe",
 	}
 	root := filepath.Dir(dir)
+	// The packaged app's icon: mygo reads resources/icon.png for the .app,
+	// the Linux bundle and the Windows installer's shortcuts.
+	if err := os.WriteFile(filepath.Join(root, "resources", "icon.png"), pngs[len(pngs)-1], 0o666); err != nil {
+		panic(err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "rsrc_windows_amd64.syso"), buildSYSO(pngs, version, strs), 0o666); err != nil {
 		panic(err)
 	}
