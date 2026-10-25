@@ -218,7 +218,7 @@ func (a *App) updateRow(c *ui.Context) {
 	case updateDownloading:
 		label, enabled = a.T("正在下载更新…"), false
 	case updateInstalled:
-		label, primary = a.T("重启已更新"), true
+		label, primary = a.T("重启以更新"), true
 		sub = a.T("更新就绪，重启后生效")
 	case updateFailed:
 		label = a.T("检查更新")
