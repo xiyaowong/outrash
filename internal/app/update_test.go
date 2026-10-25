@@ -13,7 +13,13 @@ import (
 // every development build — answers its click without a failure.
 func TestUpdateCheckDisabledShowsQuietButton(t *testing.T) {
 	a := testApp(t, false)
-	a.post = func(f func()) { f() }
+	// The seam lands like Window.Update does: the check's goroutine runs
+	// the hand-off, and the test reads only what a landed hand-off wrote.
+	// The stub holds the goroutine at the network call, so no frame the
+	// click builds ever races its write.
+	landed := make(chan struct{}, 8)
+	a.post = func(f func()) { f(); landed <- struct{}{} }
+	release := make(chan struct{})
 	tt := ui.NewTester(a.view, 1200, 780)
 	if err := tt.Click("关于"); err != nil {
 		t.Fatal(err)
@@ -23,10 +29,16 @@ func TestUpdateCheckDisabledShowsQuietButton(t *testing.T) {
 	}
 	prevCheck := checkUpdate
 	defer func() { checkUpdate = prevCheck }()
-	checkUpdate = func() (*mygo.Update, error) { return nil, mygo.ErrUpdatesDisabled }
+	checkUpdate = func() (*mygo.Update, error) {
+		<-release
+		return nil, mygo.ErrUpdatesDisabled
+	}
 	if err := tt.Click("检查更新"); err != nil {
 		t.Fatal(err)
 	}
+	close(release)
+	<-landed
+	tt.Frame()
 	if a.update.phase != updateIdle {
 		t.Fatalf("phase = %v, want back at idle: %v", a.update.phase, a.update.err)
 	}
@@ -41,7 +53,8 @@ func TestUpdateCheckDisabledShowsQuietButton(t *testing.T) {
 func TestUpdateFlowThroughTheSheet(t *testing.T) {
 	a := testApp(t, false)
 	repaints := 0
-	a.post = func(f func()) { repaints++; f() }
+	landed := make(chan struct{}, 8)
+	a.post = func(f func()) { repaints++; f(); landed <- struct{}{} }
 	tt := ui.NewTester(a.view, 1200, 780)
 	if err := tt.Click("关于"); err != nil {
 		t.Fatal(err)
@@ -50,7 +63,9 @@ func TestUpdateFlowThroughTheSheet(t *testing.T) {
 	prevCheck := checkUpdate
 	prevInstall := runInstallUpdate
 	defer func() { checkUpdate, runInstallUpdate = prevCheck, prevInstall }()
+	releaseCheck := make(chan struct{})
 	checkUpdate = func() (*mygo.Update, error) {
+		<-releaseCheck
 		return &mygo.Update{Version: "0.2.0"}, nil
 	}
 	var progress func(int64, int64)
@@ -65,6 +80,9 @@ func TestUpdateFlowThroughTheSheet(t *testing.T) {
 	if err := tt.Click("检查更新"); err != nil {
 		t.Fatal(err)
 	}
+	close(releaseCheck)
+	<-landed
+	tt.Frame()
 	if a.update.phase != updateReady || a.update.version != "0.2.0" {
 		t.Fatalf("phase = %v version %q, want ready 0.2.0", a.update.phase, a.update.version)
 	}
@@ -108,7 +126,8 @@ func TestUpdateFlowThroughTheSheet(t *testing.T) {
 // not the old answer. A download in flight survives the close.
 func TestUpdateStateClearsWhenTheSheetCloses(t *testing.T) {
 	a := testApp(t, false)
-	a.post = func(f func()) { f() }
+	landed := make(chan struct{}, 8)
+	a.post = func(f func()) { f(); landed <- struct{}{} }
 	tt := ui.NewTester(a.view, 1200, 780)
 	if err := tt.Click("关于"); err != nil {
 		t.Fatal(err)
@@ -116,19 +135,26 @@ func TestUpdateStateClearsWhenTheSheetCloses(t *testing.T) {
 
 	prevCheck, prevInstall := checkUpdate, runInstallUpdate
 	defer func() { checkUpdate, runInstallUpdate = prevCheck, prevInstall }()
+	release := make(chan struct{})
 	checkUpdate = func() (*mygo.Update, error) {
+		<-release
 		return &mygo.Update{Version: "0.2.0"}, nil
 	}
-	started, release := make(chan struct{}), make(chan struct{})
+	started, releaseInstall := make(chan struct{}), make(chan struct{})
 	runInstallUpdate = func(*mygo.Update, func(int64, int64)) error {
 		close(started)
-		<-release
+		<-releaseInstall
 		return nil
 	}
 
 	if err := tt.Click("检查更新"); err != nil {
 		t.Fatal(err)
 	}
+	close(release)
+	<-landed
+	// The hand-off added the version line, which moves the close button;
+	// rebuild the frame before clicking by where things now are.
+	tt.Frame()
 	if err := tt.Click("关闭"); err != nil {
 		t.Fatal(err)
 	}
@@ -144,9 +170,13 @@ func TestUpdateStateClearsWhenTheSheetCloses(t *testing.T) {
 
 	// A download in flight keeps its state, because its goroutine still has
 	// to land the result somewhere.
+	release = make(chan struct{})
 	if err := tt.Click("检查更新"); err != nil {
 		t.Fatal(err)
 	}
+	close(release)
+	<-landed
+	tt.Frame()
 	if err := tt.Click("下载更新"); err != nil {
 		t.Fatal(err)
 	}
@@ -157,13 +187,15 @@ func TestUpdateStateClearsWhenTheSheetCloses(t *testing.T) {
 	if a.update == nil || a.update.phase != updateDownloading {
 		t.Fatalf("phase = %v, want the download kept", a.update)
 	}
-	close(release)
+	close(releaseInstall)
+	<-landed
 }
 
 // A failed check says why and offers the button again.
 func TestUpdateCheckFailure(t *testing.T) {
 	a := testApp(t, false)
-	a.post = func(f func()) { f() }
+	landed := make(chan struct{}, 8)
+	a.post = func(f func()) { f(); landed <- struct{}{} }
 	tt := ui.NewTester(a.view, 1200, 780)
 	if err := tt.Click("关于"); err != nil {
 		t.Fatal(err)
@@ -171,13 +203,18 @@ func TestUpdateCheckFailure(t *testing.T) {
 
 	prev := checkUpdate
 	defer func() { checkUpdate = prev }()
+	release := make(chan struct{})
 	checkUpdate = func() (*mygo.Update, error) {
+		<-release
 		return nil, errors.New("no route to host")
 	}
 
 	if err := tt.Click("检查更新"); err != nil {
 		t.Fatal(err)
 	}
+	close(release)
+	<-landed
+	tt.Frame()
 	if a.update.phase != updateFailed {
 		t.Fatalf("phase = %v, want failed", a.update.phase)
 	}
@@ -189,7 +226,8 @@ func TestUpdateCheckFailure(t *testing.T) {
 // A failed install is a failure too, with the same way back.
 func TestUpdateInstallFailure(t *testing.T) {
 	a := testApp(t, false)
-	a.post = func(f func()) { f() }
+	landed := make(chan struct{}, 8)
+	a.post = func(f func()) { f(); landed <- struct{}{} }
 	tt := ui.NewTester(a.view, 1200, 780)
 	if err := tt.Click("关于"); err != nil {
 		t.Fatal(err)
@@ -197,19 +235,29 @@ func TestUpdateInstallFailure(t *testing.T) {
 
 	prevCheck, prevInstall := checkUpdate, runInstallUpdate
 	defer func() { checkUpdate, runInstallUpdate = prevCheck, prevInstall }()
+	releaseCheck := make(chan struct{})
 	checkUpdate = func() (*mygo.Update, error) {
+		<-releaseCheck
 		return &mygo.Update{Version: "0.2.0"}, nil
 	}
+	releaseInstall := make(chan struct{})
 	runInstallUpdate = func(*mygo.Update, func(int64, int64)) error {
+		<-releaseInstall
 		return errors.New("disk full")
 	}
 
 	if err := tt.Click("检查更新"); err != nil {
 		t.Fatal(err)
 	}
+	close(releaseCheck)
+	<-landed
+	tt.Frame()
 	if err := tt.Click("下载更新"); err != nil {
 		t.Fatal(err)
 	}
+	close(releaseInstall)
+	<-landed
+	tt.Frame()
 	if a.update.phase != updateFailed || a.update.err != "disk full" {
 		t.Fatalf("phase = %v err %q, want failed disk full", a.update.phase, a.update.err)
 	}
