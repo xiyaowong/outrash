@@ -45,6 +45,52 @@ func testAppWith(t *testing.T, so Options) *App {
 	return a
 }
 
+func TestResultsListVirtualizesExpandedCache(t *testing.T) {
+	a := testApp(t, false)
+	result := a.cache.Results["go/go-build"]
+	root := result.Roots[0]
+	root.Entries = make([]core.Entry, 3000)
+	root.Count = len(root.Entries)
+	root.Size = int64(len(root.Entries))
+	for i := range root.Entries {
+		name := fmt.Sprintf("shard-%04d", i)
+		root.Entries[i] = core.Entry{
+			Name: name, Path: root.Path + `\` + name, Size: 1, ModTime: fixedTime(1),
+		}
+	}
+	result.Roots = []core.Root{root}
+	result.Count, result.Size = root.Count, root.Size
+	a.cache.Results["go/go-build"] = result
+	a.regroup()
+	a.open["g:go"] = true
+	a.open["i:go-build"] = true
+	a.resultRowsDirty = true
+	a.page = pageResults
+
+	tt := ui.NewTester(a.view, 1200, 780)
+	tt.Frame()
+	if got := len(a.resultRows); got < 3000 {
+		t.Fatalf("expanded rows = %d, want at least 3000", got)
+	}
+	first, last := a.resultsList.Visible()
+	if first < 0 || last < first || last-first >= 100 {
+		t.Fatalf("visible rows = %d..%d, want a small window into the list", first, last)
+	}
+
+	target := len(a.resultRows) - 2
+	a.resultsList.ScrollTo(target, ui.Start)
+	tt.Frame()
+	first, last = a.resultsList.Visible()
+	if first > target || last < target {
+		t.Fatalf("scroll landed on rows %d..%d, want row %d visible", first, last, target)
+	}
+	path := root.Entries[len(root.Entries)-1].Path
+	tt.Click(root.Entries[len(root.Entries)-1].Name)
+	if !a.checked[path] {
+		t.Fatalf("clicking the visible leaf did not check %q", path)
+	}
+}
+
 // fixture is a scan result shaped like this machine's, without touching the
 // disk.
 func fixture() *core.Cache {

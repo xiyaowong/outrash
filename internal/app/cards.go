@@ -10,6 +10,187 @@ import (
 	"outrash/internal/core"
 )
 
+type resultRowKind uint8
+
+const (
+	resultFamily resultRowKind = iota
+	resultPresets
+	resultItem
+	resultDeep
+	resultVersions
+	resultLeaf
+	resultDivider
+)
+
+type resultRowKey struct {
+	kind  resultRowKind
+	group string
+	item  string
+	path  string
+}
+
+type resultRow struct {
+	key          resultRowKey
+	kind         resultRowKind
+	group        groupState
+	item         *itemState
+	entry        core.Entry
+	pick         core.Pick
+	presets      []preset
+	fromEnv      bool
+	indent       float32
+	count        int
+	countLabel   string
+	on           int
+	total        int
+	deep         bool
+	failed       bool
+	recent       bool
+	countsReady  bool
+	countVersion uint64
+}
+
+func (a *App) visibleResultRows() []resultRow {
+	if !a.resultRowsDirty {
+		return a.resultRows
+	}
+	var rows []resultRow
+	add := func(r resultRow) { rows = append(rows, r) }
+	for _, g := range a.sortedGroups() {
+		if !a.familyVisible(g) {
+			continue
+		}
+		groupID := g.group.ID
+		add(resultRow{key: resultRowKey{kind: resultFamily, group: groupID}, kind: resultFamily, group: g})
+		add(resultRow{key: resultRowKey{kind: resultDivider, group: groupID}, kind: resultDivider})
+		if !a.open["g:"+groupID] {
+			continue
+		}
+		if acts := a.presets(a.familyPicks(g)); len(acts) > 0 {
+			add(resultRow{key: resultRowKey{kind: resultPresets, group: groupID}, kind: resultPresets, group: g, presets: acts})
+		}
+		for i := range g.items {
+			it := &g.items[i]
+			roots := a.visibleRoots(it.res)
+			if len(roots) == 0 {
+				continue
+			}
+			count := 0
+			for _, root := range roots {
+				count += rootEntryCount(root)
+			}
+			if count == 0 && !it.res.Failed() {
+				continue
+			}
+			add(resultRow{key: resultRowKey{kind: resultItem, group: groupID, item: it.item.ID}, kind: resultItem, item: it})
+			if a.open["i:"+it.item.ID] {
+				for _, root := range roots {
+					for _, e := range root.Entries {
+						a.appendResultEntry(&rows, groupID, it, e, root.EnvSrc, indentLeaf)
+					}
+				}
+			}
+			add(resultRow{
+				key:  resultRowKey{kind: resultDivider, group: groupID, item: it.item.ID},
+				kind: resultDivider,
+			})
+		}
+	}
+	a.resultRows = rows
+	a.resultRowsDirty = false
+	return rows
+}
+
+func (a *App) appendResultEntry(rows *[]resultRow, groupID string, it *itemState, e core.Entry, fromEnv bool, ind float32) {
+	add := func(kind resultRowKind, path string, count int) {
+		*rows = append(*rows, resultRow{
+			key:  resultRowKey{kind: kind, group: groupID, item: it.item.ID, path: path},
+			kind: kind, item: it, entry: e, fromEnv: fromEnv, indent: ind, count: count,
+		})
+	}
+	switch {
+	case len(e.Versions) > 0:
+		add(resultVersions, e.Path, 0)
+		if a.open["p:"+e.Path] {
+			for _, v := range e.Versions {
+				*rows = append(*rows, resultRow{
+					key:  resultRowKey{kind: resultLeaf, group: groupID, item: it.item.ID, path: v.Path},
+					kind: resultLeaf, item: it,
+					pick:   core.Pick{Path: v.Path, Name: v.Name, Bytes: v.Size, ModTime: v.ModTime, Package: e.Name},
+					indent: indentLeaf + 16,
+				})
+			}
+		}
+	case len(e.Children) > 0:
+		add(resultDeep, e.Path, 0)
+		if a.open["d:"+e.Path] {
+			for _, child := range e.Children {
+				a.appendResultEntry(rows, groupID, it, child, fromEnv, ind+16)
+			}
+		}
+	default:
+		pick := core.Pick{Path: e.Path, Name: e.Name, Bytes: e.Size, ModTime: e.ModTime}
+		if ind > indentLeaf {
+			pick.EnvSrc = fromEnv
+		}
+		*rows = append(*rows, resultRow{
+			key:  resultRowKey{kind: resultLeaf, group: groupID, item: it.item.ID, path: e.Path},
+			kind: resultLeaf, item: it, pick: pick, indent: ind,
+		})
+	}
+}
+
+func (a *App) resultRow(c *ui.Context, row resultRow) {
+	switch row.kind {
+	case resultFamily:
+		a.familyRow(c, row.group, row.count, row.on, row.total, row.failed, row.recent)
+	case resultPresets:
+		a.familyPresets(c, row.presets)
+	case resultItem:
+		a.itemRow(c, *row.item, row.on, row.total, row.countLabel, row.deep, row.recent)
+	case resultDeep:
+		a.deepRow(c, *row.item, row.entry, row.fromEnv, row.indent, row.count, row.on, row.total)
+	case resultVersions:
+		a.versioned(c, *row.item, row.entry, row.fromEnv, row.on, row.total)
+	case resultLeaf:
+		a.leaf(c, *row.item, row.pick, row.indent)
+	case resultDivider:
+		ui.Box(c).Height(1).Shrink(0).Background(a.pal.Rule)
+	}
+}
+
+func (a *App) prepareResultRow(row *resultRow) {
+	switch row.kind {
+	case resultFamily:
+		row.count, row.on, row.total = a.familyCheckCounts(row.group)
+		for _, it := range row.group.items {
+			row.failed = row.failed || it.res.Failed()
+			row.recent = row.recent || a.recent(it.res)
+		}
+	case resultItem:
+		roots := a.visibleRoots(row.item.res)
+		for _, root := range roots {
+			row.count += rootEntryCount(root)
+			for _, e := range root.Entries {
+				row.deep = row.deep || len(e.Versions) > 0 || len(e.Children) > 0
+			}
+		}
+		row.on, row.total = a.rootsCheckCounts(roots)
+		row.countLabel = countText(roots)
+		row.failed = row.item.res.Failed()
+		row.recent = a.recent(row.item.res)
+	case resultDeep, resultVersions:
+		row.on, row.total = a.entryCheckCounts(row.entry, row.fromEnv)
+		if row.kind == resultDeep {
+			row.count = leafCount(row.entry)
+		} else {
+			row.count = len(row.entry.Versions)
+		}
+	}
+	row.countsReady = true
+	row.countVersion = a.selectionVersion
+}
+
 // groupPicks is every leaf of every scanned item in a group.
 func (a *App) groupPicks(g groupState) []core.Pick {
 	var picks []core.Pick
@@ -155,6 +336,7 @@ func (a *App) setChecks(picks []core.Pick, chosen []core.Step) {
 	for _, s := range chosen {
 		a.checked[s.Path] = true
 	}
+	a.selectionChanged()
 }
 
 func (a *App) checkState(picks []core.Pick) (on, total int) {
@@ -164,6 +346,79 @@ func (a *App) checkState(picks []core.Pick) (on, total int) {
 		}
 	}
 	return on, len(picks)
+}
+
+func (a *App) familyCheckCounts(g groupState) (count, on, total int) {
+	for _, it := range g.items {
+		for _, root := range a.visibleRoots(it.res) {
+			count += rootEntryCount(root)
+			if root.EnvSrc {
+				continue
+			}
+			for _, e := range root.Entries {
+				n, leaves := a.entryCheckCounts(e, false)
+				on += n
+				total += leaves
+			}
+		}
+	}
+	return count, on, total
+}
+
+func rootEntryCount(root core.Root) int {
+	if root.Count != 0 || len(root.Entries) == 0 {
+		return root.Count
+	}
+	var count int
+	for _, e := range root.Entries {
+		if len(e.Versions) > 0 {
+			count += len(e.Versions)
+		} else {
+			count += leafCount(e)
+		}
+	}
+	return count
+}
+
+func (a *App) rootsCheckCounts(roots []core.Root) (on, total int) {
+	for _, root := range roots {
+		if root.EnvSrc {
+			continue
+		}
+		for _, e := range root.Entries {
+			n, leaves := a.entryCheckCounts(e, false)
+			on += n
+			total += leaves
+		}
+	}
+	return on, total
+}
+
+func (a *App) entryCheckCounts(e core.Entry, fromEnv bool) (on, total int) {
+	if fromEnv {
+		return 0, 0
+	}
+	if len(e.Versions) > 0 {
+		for _, v := range e.Versions {
+			total++
+			if a.checked[v.Path] {
+				on++
+			}
+		}
+		return on, total
+	}
+	if len(e.Children) > 0 {
+		for _, child := range e.Children {
+			n, leaves := a.entryCheckCounts(child, false)
+			on += n
+			total += leaves
+		}
+		return on, total
+	}
+	if a.checked[e.Path] {
+		return 1, 1
+	}
+	return 0, 1
 }
 
 func (a *App) toggleChecks(picks []core.Pick) {
@@ -242,37 +497,33 @@ func (a *App) chip(c *ui.Context, act preset) {
 // familyRow is the tool family: a header that carries the family total, and
 // under it the items the scan found. The header's checkbox picks everything
 // the family holds.
-func (a *App) familyRow(c *ui.Context, g groupState) {
+func (a *App) familyRow(c *ui.Context, g groupState, count, on, total int, failed, recent bool) {
 	p := a.pal
 	key := "g:" + g.group.ID
 	open := a.open[key]
-	picks := a.familyPicks(g)
-	// The tri-state box speaks for the bulk toggle, and the bulk toggle skips
-	// env-sourced roots; the count column still counts what is on screen.
-	on, total := a.checkState(autoPicks(picks))
 	row := ui.Row(c).Height(38).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
+		Cursor(ui.CursorPointer).OnClick(func() { a.setOpen(key, !open) }).
 		ContextMenu(a.familyMenu(g))
 	row.Background(a.hoverFill(row, tint(p.Ink2, p.Surface, 0.03), p.Hover))
 	row.Children(func() {
-		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
+		a.check(c, stateOf(on, total), func() { a.toggleChecks(a.familyPicks(g)) })
 		ui.Text(c, core.GroupName(&g.group)).FontSize(fz(13)).FontWeight(600).TextColor(p.Ink).
 			SingleLine().Width(colName).Shrink(0)
 		ui.Spacer(c).Grow(1)
-		ui.Text(c, fmt.Sprintf(a.T("%d 项"), len(picks))).Font(core.Mono()).FontSize(fz(12)).
+		ui.Text(c, fmt.Sprintf(a.T("%d 项"), count)).Font(core.Mono()).FontSize(fz(12)).
 			TextColor(p.Ink3).Width(colCount).TextAlign(ui.End).Shrink(0)
 		ui.Text(c, core.Bytes(a.familySize(g))).Font(core.Mono()).FontSize(fz(12)).
 			TextColor(p.Ink).Width(colSize).TextAlign(ui.End).Shrink(0)
 		ui.Box(c).Width(colStatus).Shrink(0).AlignItems(ui.Center).Children(func() {
-			a.familyTag(c, g)
+			a.familyTag(c, failed, recent)
 		})
 		a.expander(c, open)
 	})
-	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
-	if !open {
-		return
-	}
-	if acts := a.presets(picks); len(acts) > 0 {
+}
+
+func (a *App) familyPresets(c *ui.Context, acts []preset) {
+	p := a.pal
+	if len(acts) > 0 {
 		ui.Row(c).Height(32).Padding(0, 24, 0, 24+colCheck+colGap+indentItem).Gap(8).
 			AlignItems(ui.Center).Children(func() {
 			ui.Text(c, a.T("选择方式")).FontSize(fz(11)).TextColor(p.Ink3).Shrink(0)
@@ -282,66 +533,46 @@ func (a *App) familyRow(c *ui.Context, g groupState) {
 			ui.Spacer(c)
 		})
 	}
-	for _, it := range g.items {
-		a.itemRow(c, it)
-	}
 }
 
 // itemRow is one cache. It carries the five columns the table promises:
 // name, path, entry count, size, and what the scan can vouch for.
-func (a *App) itemRow(c *ui.Context, it itemState) {
+func (a *App) itemRow(c *ui.Context, it itemState, on, total int, countLabel string, deep, recent bool) {
 	p := a.pal
 	roots := a.visibleRoots(it.res)
 	if len(roots) == 0 {
 		return // every root of this cache sits on a hidden volume
 	}
-	picks := picksOf(roots)
-	if len(picks) == 0 && !it.res.Failed() {
-		return
-	}
 	key := "i:" + it.item.ID
 	open := a.open[key]
-	on, total := a.checkState(autoPicks(picks))
 	var size int64
 	for _, r := range roots {
 		size += r.Size
 	}
 	row := ui.Row(c).Height(44).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
+		Cursor(ui.CursorPointer).OnClick(func() { a.setOpen(key, !open) }).
 		ContextMenu(a.itemMenu(c, it, a.familyName(it)))
 	row.Background(a.hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		indent(c, indentItem)
-		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
+		a.check(c, stateOf(on, total), func() { a.toggleChecks(picksOf(roots)) })
 		ui.Text(c, core.ItemName(&it.item)).FontSize(fz(13)).TextColor(p.Ink).SingleLine().
 			Width(colName - indentItem).Shrink(0).Tooltip(core.ItemNote(&it.item))
 		ui.Text(c, rootPathOf(roots)).Font(core.Mono()).FontSize(fz(11)).
 			TextColor(p.Ink3).SingleLine().Ellipsis("…").Grow(1).Tooltip(rootPathOf(roots))
-		ui.Text(c, countText(roots)).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink2).
+		ui.Text(c, countLabel).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink2).
 			SingleLine().Width(colCount).TextAlign(ui.End).Shrink(0)
 		ui.Text(c, core.Bytes(size)).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink).
 			SingleLine().Width(colSize).TextAlign(ui.End).Shrink(0)
 		ui.Box(c).Width(colStatus).Shrink(0).AlignItems(ui.Center).Children(func() {
-			a.statusTag(c, it.res)
+			a.statusTag(c, it.res, recent)
 		})
-		deep := false
-		for _, root := range roots {
-			for _, e := range root.Entries {
-				if len(e.Versions) > 0 || len(e.Children) > 0 {
-					deep = true
-				}
-			}
-		}
 		if deep {
 			a.expander(c, open)
 		} else {
 			ui.Box(c).Width(24).Shrink(0)
 		}
 	})
-	if open {
-		a.entries(c, it)
-	}
-	ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 }
 
 // familyName is the family an item belongs to, for the details sheet: an
@@ -359,17 +590,8 @@ func (a *App) familyName(it itemState) string {
 
 // familyTag is the risk column for a whole family: it names the worst thing
 // under it, so a collapsed family never hides a failed scan behind a total.
-func (a *App) familyTag(c *ui.Context, g groupState) {
+func (a *App) familyTag(c *ui.Context, failed, recent bool) {
 	p := a.pal
-	failed, recent := false, false
-	for _, it := range g.items {
-		if it.res.Failed() {
-			failed = true
-		}
-		if a.recent(it.res) {
-			recent = true
-		}
-	}
 	switch {
 	case failed:
 		tag(c, a.T("读取不全"), p.Danger, p.DangerSubtle)
@@ -383,7 +605,7 @@ func (a *App) familyTag(c *ui.Context, g groupState) {
 // statusTag is the risk column for one cache: what the scan can vouch for
 // about removing it today. A cache it could not read says so instead of
 // passing for empty.
-func (a *App) statusTag(c *ui.Context, res core.Result) {
+func (a *App) statusTag(c *ui.Context, res core.Result, recent bool) {
 	p := a.pal
 	switch {
 	case res.Failed():
@@ -393,7 +615,7 @@ func (a *App) statusTag(c *ui.Context, res core.Result) {
 		// is why: the tool's own config named the place, nothing vouches for
 		// what it holds.
 		tag(c, a.T("环境变量指向"), p.Warning, p.WarningSubtle)
-	case a.recent(res):
+	case recent:
 		tag(c, a.T("近期用过"), p.Warning, p.WarningSubtle)
 	default:
 		tag(c, a.T("可清理"), p.Success, p.SuccessSubtle)
@@ -470,62 +692,34 @@ func leafCount(e core.Entry) int {
 	return n
 }
 
-func (a *App) entries(c *ui.Context, it itemState) {
-	for _, root := range a.visibleRoots(it.res) {
-		for _, e := range root.Entries {
-			if len(e.Versions) > 0 {
-				a.versioned(c, it, e, root.EnvSrc)
-				continue
-			}
-			if len(e.Children) > 0 {
-				a.deepRow(c, it, e, root.EnvSrc, indentLeaf)
-				continue
-			}
-			a.leaf(c, it, core.Pick{Path: e.Path, Name: e.Name, Bytes: e.Size, ModTime: e.ModTime}, indentLeaf)
-		}
-	}
-}
-
 // deepRow is one level of a deep cache: a folder whose check stands for the
 // leaves under it, expandable into the next level. A folder whose children
 // are already leaves opens onto leaf rows; one deeper opens onto more
 // folder rows.
-func (a *App) deepRow(c *ui.Context, it itemState, ent core.Entry, fromEnv bool, ind float32) {
+func (a *App) deepRow(c *ui.Context, it itemState, ent core.Entry, fromEnv bool, ind float32, count, on, total int) {
 	p := a.pal
-	picks := entryPicks(ent, fromEnv)
 	key := "d:" + ent.Path
 	open := a.open[key]
-	on, total := a.checkState(autoPicks(picks))
 	row := ui.Row(c).Height(32).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
+		Cursor(ui.CursorPointer).OnClick(func() { a.setOpen(key, !open) }).
 		ContextMenu(a.folderMenu(c, it, ent, fromEnv))
 	row.Background(a.hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		indent(c, ind)
-		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
+		a.check(c, stateOf(on, total), func() { a.toggleChecks(entryPicks(ent, fromEnv)) })
 		nameColor := p.Ink2
 		if on > 0 {
 			nameColor = p.Ink
 		}
 		ui.Text(c, ent.Name).Font(core.Mono()).FontSize(fz(12)).TextColor(nameColor).SingleLine().Grow(1).
 			Tooltip(ent.Path)
-		ui.Text(c, fmt.Sprintf(a.T("%d 项"), leafCount(ent))).Font(core.Mono()).FontSize(fz(12)).
+		ui.Text(c, fmt.Sprintf(a.T("%d 项"), count)).Font(core.Mono()).FontSize(fz(12)).
 			TextColor(p.Ink3).Width(colCount).TextAlign(ui.End).Shrink(0)
 		ui.Text(c, core.Bytes(ent.Size)).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink2).
 			Width(colSize).TextAlign(ui.End).Shrink(0)
 		ui.Box(c).Width(colStatus).Shrink(0)
 		a.expander(c, open)
 	})
-	if !open {
-		return
-	}
-	for _, ch := range ent.Children {
-		if len(ch.Children) > 0 {
-			a.deepRow(c, it, ch, fromEnv, ind+16)
-			continue
-		}
-		a.leaf(c, it, core.Pick{Path: ch.Path, Name: ch.Name, Bytes: ch.Size, ModTime: ch.ModTime, EnvSrc: fromEnv}, ind+16)
-	}
 }
 
 // The table's three depths. Items sit one step in from their family and
@@ -541,19 +735,17 @@ func indent(c *ui.Context, w float32) {
 	ui.Box(c).Width(w).Height(1).Shrink(0)
 }
 
-func (a *App) versioned(c *ui.Context, it itemState, ent core.Entry, fromEnv bool) {
+func (a *App) versioned(c *ui.Context, it itemState, ent core.Entry, fromEnv bool, on, total int) {
 	p := a.pal
-	picks := versionPicks(ent, fromEnv)
 	key := "p:" + ent.Path
 	open := a.open[key]
-	on, total := a.checkState(autoPicks(picks))
 	row := ui.Row(c).Height(32).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).OnClick(func() { a.open[key] = !open }).
+		Cursor(ui.CursorPointer).OnClick(func() { a.setOpen(key, !open) }).
 		ContextMenu(a.packageMenu(c, it, ent, fromEnv))
 	row.Background(a.hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
 		indent(c, indentLeaf)
-		a.check(c, stateOf(on, total), func() { a.toggleChecks(picks) })
+		a.check(c, stateOf(on, total), func() { a.toggleChecks(versionPicks(ent, fromEnv)) })
 		ui.Text(c, ent.Name).Font(core.Mono()).FontSize(fz(12)).TextColor(p.Ink).SingleLine().Grow(1)
 		ui.Text(c, fmt.Sprintf(a.T("%d 版"), len(ent.Versions))).Font(core.Mono()).FontSize(fz(12)).
 			TextColor(p.Ink3).Width(colCount).TextAlign(ui.End).Shrink(0)
@@ -562,14 +754,6 @@ func (a *App) versioned(c *ui.Context, it itemState, ent core.Entry, fromEnv boo
 		ui.Box(c).Width(colStatus).Shrink(0)
 		a.expander(c, open)
 	})
-	if open {
-		for _, v := range ent.Versions {
-			a.leaf(c, it, core.Pick{
-				Path: v.Path, Name: v.Name, Bytes: v.Size,
-				ModTime: v.ModTime, Package: ent.Name,
-			}, indentLeaf+16)
-		}
-	}
 }
 
 func (a *App) leaf(c *ui.Context, it itemState, pick core.Pick, ind float32) {
@@ -595,7 +779,10 @@ func (a *App) leaf(c *ui.Context, it itemState, pick core.Pick, ind float32) {
 		}
 	}
 	row := ui.Row(c).Height(30).Padding(0, 24).Gap(colGap).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).OnClick(func() { a.checked[path] = !on }).
+		Cursor(ui.CursorPointer).OnClick(func() {
+		a.checked[path] = !on
+		a.selectionChanged()
+	}).
 		ContextMenu(a.leafMenu(c, it, pick))
 	t := row.Animate("fx", target, fxSpan)
 	strike, fold := min(2*t, 1), max(2*t-1, 0)
@@ -780,4 +967,5 @@ func (a *App) clearChecks() {
 	for k := range a.checked {
 		delete(a.checked, k)
 	}
+	a.selectionChanged()
 }
