@@ -325,7 +325,7 @@ func (a *App) Scan() {
 	a.stop = cancel
 	go func() {
 		defer cancel()
-		cache := core.Run(a.cfg, a.opts, runtime.NumCPU()+2, func(r core.Result) {
+		cache := core.Run(a.cfg, a.opts, min(runtime.NumCPU()+2, 4), func(r core.Result) {
 			a.applyUpdate(func() {
 				if seq != a.seq {
 					return

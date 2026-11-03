@@ -5,6 +5,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -303,6 +304,9 @@ func readEntries(dir string, depth int, stop <-chan struct{}) listing {
 				// The folder could not be listed, or holds nothing at the
 				// levels below: measure it whole, as a leaf.
 				sz, mt, bad, ok := measure(p, ch, stop)
+				if stopped(stop) {
+					return listing{stopped: true}
+				}
 				l.bad += bad
 				if !ok {
 					l.bad++
@@ -326,6 +330,9 @@ func readEntries(dir string, depth int, stop <-chan struct{}) listing {
 			continue
 		}
 		sz, mt, bad, ok := measure(p, ch, stop)
+		if stopped(stop) {
+			return listing{stopped: true}
+		}
 		l.bad += bad
 		if !ok {
 			l.bad++
@@ -360,6 +367,9 @@ func readVersioned(dir string, stop <-chan struct{}) listing {
 		p := filepath.Join(dir, ch.Name())
 		if !ch.IsDir() {
 			sz, mt, bad, ok := measure(p, ch, stop)
+			if stopped(stop) {
+				return listing{stopped: true}
+			}
 			l.bad += bad
 			if !ok {
 				l.bad++
@@ -373,6 +383,9 @@ func readVersioned(dir string, stop <-chan struct{}) listing {
 		versions, verr := os.ReadDir(p)
 		if verr != nil || len(versions) == 0 {
 			sz, mt, bad, ok := measure(p, ch, stop)
+			if stopped(stop) {
+				return listing{stopped: true}
+			}
 			l.bad += bad
 			if !ok {
 				l.bad++
@@ -393,6 +406,9 @@ func readVersioned(dir string, stop <-chan struct{}) listing {
 			}
 			vp := filepath.Join(p, v.Name())
 			sz, mt, bad, ok := measure(vp, v, stop)
+			if stopped(stop) {
+				return listing{stopped: true}
+			}
 			l.bad += bad
 			if !ok {
 				l.bad++
@@ -435,8 +451,9 @@ func stopped(stop <-chan struct{}) bool {
 // measure returns the bytes and newest modification time below p, the number
 // of paths it could not read, and whether p itself could be measured. A
 // symlink counts as its link size and is never followed, so a junction that
-// points back up cannot loop the walk. Closing stop abandons the walk:
-// fs.SkipAll unwinds it cleanly and stopped reports that it happened.
+// points back up cannot loop the walk. Directory reads are chunked instead of
+// sorted and materialized as a whole, and stop abandons the walk at the next
+// entry.
 func measure(p string, ch fs.DirEntry, stop <-chan struct{}) (size int64, mod time.Time, bad int, ok bool) {
 	if ch.Type()&fs.ModeSymlink != 0 {
 		info, err := os.Lstat(p)
@@ -452,40 +469,67 @@ func measure(p string, ch fs.DirEntry, stop <-chan struct{}) (size int64, mod ti
 	if !ch.IsDir() {
 		return info.Size(), info.ModTime(), 0, true
 	}
-	var newest time.Time
-	err = filepath.WalkDir(p, func(_ string, d fs.DirEntry, err error) error {
-		if stopped(stop) {
-			return fs.SkipAll
-		}
-		if err != nil {
-			bad++
-			return nil
-		}
-		if d.Type()&fs.ModeSymlink != 0 {
-			if li, err := d.Info(); err == nil {
-				size += li.Size()
-			} else {
-				bad++
-			}
-			return nil
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if i, err := d.Info(); err == nil {
-			size += i.Size()
-			if i.ModTime().After(newest) {
-				newest = i.ModTime()
-			}
-		} else {
-			bad++
-		}
-		return nil
-	})
+	size, newest, bad, aborted := measureTree(p, stop)
+	if aborted {
+		return size, newest, bad, false
+	}
 	if newest.IsZero() {
 		newest = info.ModTime()
 	}
 	return size, newest, bad, true
+}
+
+func measureTree(root string, stop <-chan struct{}) (size int64, newest time.Time, bad int, aborted bool) {
+	dirs := []string{root}
+	for len(dirs) > 0 {
+		if stopped(stop) {
+			return size, newest, bad, true
+		}
+		dir := dirs[len(dirs)-1]
+		dirs = dirs[:len(dirs)-1]
+		f, err := os.Open(dir)
+		if err != nil {
+			bad++
+			continue
+		}
+		for {
+			children, err := f.ReadDir(128)
+			for _, child := range children {
+				if stopped(stop) {
+					_ = f.Close()
+					return size, newest, bad, true
+				}
+				if child.Type()&fs.ModeSymlink != 0 {
+					if li, err := child.Info(); err == nil {
+						size += li.Size()
+					} else {
+						bad++
+					}
+					continue
+				}
+				if child.IsDir() {
+					dirs = append(dirs, filepath.Join(dir, child.Name()))
+					continue
+				}
+				if i, err := child.Info(); err == nil {
+					size += i.Size()
+					if i.ModTime().After(newest) {
+						newest = i.ModTime()
+					}
+				} else {
+					bad++
+				}
+			}
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					bad++
+				}
+				break
+			}
+		}
+		_ = f.Close()
+	}
+	return size, newest, bad, false
 }
 
 // countEntries re-derives a listing's totals from its tree: the bytes of
