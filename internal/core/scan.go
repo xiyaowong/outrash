@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -277,7 +278,9 @@ type listing struct {
 
 // readEntries lists the removable entries of dir, depth levels of folder
 // below it. A folder past the last level is a leaf: it is measured whole,
-// and a check on it removes it whole. Closing stop abandons the walk at the
+// and a check on it removes it whole. The leaves of the level go through one
+// measure pool, so a root holding thousands of children overlaps their walks
+// instead of measuring one at a time. Closing stop abandons the pool at the
 // next path, so a rescan does not leave the old workers grinding through
 // multi-gigabyte trees that nothing will read.
 func readEntries(dir string, depth int, stop <-chan struct{}) listing {
@@ -289,6 +292,14 @@ func readEntries(dir string, depth int, stop <-chan struct{}) listing {
 		return listing{err: err}
 	}
 	var l listing
+	pool := newMeasurePool(stop)
+	// A leaf's bytes arrive when the pool drains; the entry takes its place
+	// now so the listing keeps the order the directory gave.
+	type pending struct {
+		i int
+		s *treeStats
+	}
+	var pend []pending
 	for _, ch := range children {
 		if stopped(stop) {
 			return listing{stopped: true}
@@ -303,20 +314,13 @@ func readEntries(dir string, depth int, stop <-chan struct{}) listing {
 			if sub.err != nil || len(sub.entries) == 0 {
 				// The folder could not be listed, or holds nothing at the
 				// levels below: measure it whole, as a leaf.
-				sz, mt, bad, ok := measure(p, ch, stop)
-				if stopped(stop) {
-					return listing{stopped: true}
-				}
-				l.bad += bad
+				s, ok := pool.begin(p, ch)
 				if !ok {
 					l.bad++
 					continue
 				}
-				l.entries = append(l.entries, Entry{Name: ch.Name(), Path: p, Size: sz, ModTime: mt, IsDir: true})
-				l.size += sz
-				if mt.After(l.newest) {
-					l.newest = mt
-				}
+				pend = append(pend, pending{len(l.entries), s})
+				l.entries = append(l.entries, Entry{Name: ch.Name(), Path: p, IsDir: true})
 				continue
 			}
 			l.entries = append(l.entries, Entry{
@@ -329,17 +333,24 @@ func readEntries(dir string, depth int, stop <-chan struct{}) listing {
 			}
 			continue
 		}
-		sz, mt, bad, ok := measure(p, ch, stop)
-		if stopped(stop) {
-			return listing{stopped: true}
-		}
-		l.bad += bad
+		s, ok := pool.begin(p, ch)
 		if !ok {
 			l.bad++
 			continue
 		}
-		l.entries = append(l.entries, Entry{Name: ch.Name(), Path: p, Size: sz, ModTime: mt, IsDir: ch.IsDir()})
-		l.size += sz
+		pend = append(pend, pending{len(l.entries), s})
+		l.entries = append(l.entries, Entry{Name: ch.Name(), Path: p, IsDir: ch.IsDir()})
+	}
+	pool.wait()
+	if pool.aborted.Load() || stopped(stop) {
+		return listing{stopped: true}
+	}
+	for _, pd := range pend {
+		e := &l.entries[pd.i]
+		size, mt, bad := pd.s.result()
+		e.Size, e.ModTime = size, mt
+		l.bad += bad
+		l.size += size
 		if mt.After(l.newest) {
 			l.newest = mt
 		}
@@ -350,7 +361,9 @@ func readEntries(dir string, depth int, stop <-chan struct{}) listing {
 }
 
 // readVersioned measures root/<package>/<version> folders, plus any stray
-// files at the root as entries of their own.
+// files at the root as entries of their own. Each package is listed and its
+// versions measured through the same pool the leaf walks use, so a registry
+// of thousands of packages overlaps its directory reads too.
 func readVersioned(dir string, stop <-chan struct{}) listing {
 	if stopped(stop) {
 		return listing{stopped: true}
@@ -360,76 +373,111 @@ func readVersioned(dir string, stop <-chan struct{}) listing {
 		return listing{err: err}
 	}
 	var l listing
+	pool := newMeasurePool(stop)
+	// vrow is one version folder of a package; prow is one child of the root,
+	// filled in by the pool and read back once it drains. A pointer, not a
+	// slice element: the slice grows while the workers hold their rows.
+	type vrow struct {
+		name, path string
+		s          *treeStats
+	}
+	type prow struct {
+		name, path string
+		dir        bool
+		whole      *treeStats // the package as one entry, its versions absent or unseen
+		unseen     bool       // its versions could not be listed
+		bad        int        // children that could not be measured
+		versions   []vrow
+	}
+	var rows []*prow
 	for _, ch := range children {
 		if stopped(stop) {
 			return listing{stopped: true}
 		}
 		p := filepath.Join(dir, ch.Name())
 		if !ch.IsDir() {
-			sz, mt, bad, ok := measure(p, ch, stop)
-			if stopped(stop) {
-				return listing{stopped: true}
-			}
-			l.bad += bad
+			s, ok := pool.begin(p, ch)
 			if !ok {
 				l.bad++
 				continue
 			}
-			l.entries = append(l.entries, Entry{Name: ch.Name(), Path: p, Size: sz, ModTime: mt})
-			l.size += sz
-			l.count++
+			rows = append(rows, &prow{name: ch.Name(), path: p, whole: s})
 			continue
 		}
-		versions, verr := os.ReadDir(p)
-		if verr != nil || len(versions) == 0 {
-			sz, mt, bad, ok := measure(p, ch, stop)
-			if stopped(stop) {
-				return listing{stopped: true}
+		row := &prow{name: ch.Name(), path: p, dir: true}
+		rows = append(rows, row)
+		pool.submit(func() {
+			if pool.aborted.Load() || stopped(pool.stop) {
+				pool.aborted.Store(true)
+				return
 			}
+			versions, verr := os.ReadDir(p)
+			if verr != nil || len(versions) == 0 {
+				// The package could not be listed, or holds no version
+				// folders: measure it whole, as one entry. Measured here, not
+				// resubmitted: a task must not feed the pool it runs on, or
+				// a drain could close the queue under it.
+				if s, ok := measureOne(p, ch, pool.stop); ok {
+					row.whole = s
+				} else {
+					row.bad++
+				}
+				row.unseen = verr != nil
+				return
+			}
+			for _, v := range versions {
+				if stopped(pool.stop) {
+					pool.aborted.Store(true)
+					return
+				}
+				vp := filepath.Join(p, v.Name())
+				if s, ok := measureOne(vp, v, pool.stop); ok {
+					row.versions = append(row.versions, vrow{name: v.Name(), path: vp, s: s})
+				} else {
+					row.bad++
+				}
+			}
+		})
+	}
+	pool.wait()
+	if pool.aborted.Load() || stopped(stop) {
+		return listing{stopped: true}
+	}
+	for _, row := range rows {
+		l.bad += row.bad
+		if row.whole != nil {
+			sz, mt, bad := row.whole.result()
 			l.bad += bad
-			if !ok {
-				l.bad++
-				continue
-			}
-			if verr != nil {
+			if row.unseen {
 				l.bad++ // the package listed as one entry, its versions unseen
 			}
-			l.entries = append(l.entries, Entry{Name: ch.Name(), Path: p, Size: sz, ModTime: mt, IsDir: true})
+			l.entries = append(l.entries, Entry{Name: row.name, Path: row.path, Size: sz, ModTime: mt, IsDir: row.dir})
 			l.size += sz
 			l.count++
 			continue
 		}
-		e := Entry{Name: ch.Name(), Path: p, Package: ch.Name(), ModTime: time.Time{}, IsDir: true}
-		for _, v := range versions {
-			if stopped(stop) {
-				return listing{stopped: true}
-			}
-			vp := filepath.Join(p, v.Name())
-			sz, mt, bad, ok := measure(vp, v, stop)
-			if stopped(stop) {
-				return listing{stopped: true}
-			}
+		e := Entry{Name: row.name, Path: row.path, Package: row.name, ModTime: time.Time{}, IsDir: true}
+		for _, v := range row.versions {
+			sz, mt, bad := v.s.result()
 			l.bad += bad
-			if !ok {
-				l.bad++
-				continue
-			}
-			e.Versions = append(e.Versions, Version{Name: v.Name(), Path: vp, Size: sz, ModTime: mt})
+			e.Versions = append(e.Versions, Version{Name: v.name, Path: v.path, Size: sz, ModTime: mt})
 			e.Size += sz
 			if mt.After(e.ModTime) {
 				e.ModTime = mt
 			}
 			l.count++
 		}
+		if len(e.Versions) == 0 {
+			continue
+		}
+		// The contract is oldest first, so a "keep the newest" pass knows
+		// which row to leave standing.
 		sort.SliceStable(e.Versions, func(i, j int) bool {
 			if !e.Versions[i].ModTime.Equal(e.Versions[j].ModTime) {
 				return e.Versions[i].ModTime.Before(e.Versions[j].ModTime)
 			}
 			return e.Versions[i].Name < e.Versions[j].Name
 		})
-		if len(e.Versions) == 0 {
-			continue
-		}
 		l.entries = append(l.entries, e)
 		l.size += e.Size
 	}
@@ -448,42 +496,176 @@ func stopped(stop <-chan struct{}) bool {
 	}
 }
 
-// measure returns the bytes and newest modification time below p, the number
-// of paths it could not read, and whether p itself could be measured. A
-// symlink counts as its link size and is never followed, so a junction that
-// points back up cannot loop the walk. Directory reads are chunked instead of
-// sorted and materialized as a whole, and stop abandons the walk at the next
-// entry.
-func measure(p string, ch fs.DirEntry, stop <-chan struct{}) (size int64, mod time.Time, bad int, ok bool) {
-	if ch.Type()&fs.ModeSymlink != 0 {
-		info, err := os.Lstat(p)
-		if err != nil {
-			return 0, time.Time{}, 0, false
+// treeStats is one subtree's measurement, filled by the pool that walked it.
+// Only that pool's goroutines touch a row, and never after wait returns.
+type treeStats struct {
+	mu      sync.Mutex
+	size    int64
+	newest  time.Time
+	bad     int
+	aborted bool
+}
+
+// fold merges a walked directory's outcome into its subtree row.
+func (s *treeStats) fold(size int64, newest time.Time, bad int) {
+	s.mu.Lock()
+	s.size += size
+	if newest.After(s.newest) {
+		s.newest = newest
+	}
+	s.bad += bad
+	s.mu.Unlock()
+}
+
+// abort marks the subtree's row as cut short by a closing stop channel.
+func (s *treeStats) abort() {
+	s.mu.Lock()
+	s.aborted = true
+	s.mu.Unlock()
+}
+
+func (s *treeStats) result() (size int64, newest time.Time, bad int) {
+	return s.size, s.newest, s.bad
+}
+
+// measurePool overlaps the measurement of one listing's leaves: every leaf
+// subtree and every versioned package's listing runs as a task on a small
+// pool, the shape the removal side already proved. The pool starts with the
+// first task and lives only as long as the listing that made it, so a
+// shallow root of plain files pays nothing for it.
+type measurePool struct {
+	stop    <-chan struct{}
+	tasks   sync.WaitGroup // queued tasks plus the ones run inline
+	workers sync.WaitGroup
+	once    sync.Once
+	queue   chan func()
+	started atomic.Bool
+	aborted atomic.Bool
+}
+
+// measurePoolSize overlaps directory reads without flattening the drive's
+// queue: this is metadata-bound work, and a handful of walkers measured
+// several times faster than one on a wide cache.
+const measurePoolSize = 4
+
+func newMeasurePool(stop <-chan struct{}) *measurePool {
+	return &measurePool{stop: stop, queue: make(chan func(), measurePoolSize*8)}
+}
+
+func (p *measurePool) start() {
+	p.once.Do(func() {
+		p.started.Store(true)
+		for range measurePoolSize {
+			p.workers.Add(1)
+			go func() {
+				defer p.workers.Done()
+				for fn := range p.queue {
+					fn()
+					p.tasks.Done()
+				}
+			}()
 		}
-		return info.Size(), info.ModTime(), 0, true
+	})
+}
+
+// submit queues one task, running it here when the pool is saturated: a
+// task run inline keeps the producer moving instead of blocking a worker on
+// its own queue, and the caller never touches pool state the workers own.
+func (p *measurePool) submit(fn func()) {
+	p.start()
+	p.tasks.Add(1)
+	select {
+	case p.queue <- fn:
+	default:
+		fn()
+		p.tasks.Done()
+	}
+}
+
+// begin schedules the walk of one leaf, returning the row its bytes land in.
+// The caller reads the row only after wait.
+func (p *measurePool) begin(path string, ch fs.DirEntry) (*treeStats, bool) {
+	if ch.Type()&fs.ModeSymlink != 0 {
+		// A symlink counts as its link size and is never followed, so a
+		// junction that points back up cannot loop the walk.
+		info, err := os.Lstat(path)
+		if err != nil {
+			return nil, false
+		}
+		s := &treeStats{size: info.Size(), newest: info.ModTime()}
+		return s, true
 	}
 	info, err := ch.Info()
 	if err != nil {
-		return 0, time.Time{}, 0, false
+		return nil, false
 	}
 	if !ch.IsDir() {
-		return info.Size(), info.ModTime(), 0, true
+		return &treeStats{size: info.Size(), newest: info.ModTime()}, true
 	}
-	size, newest, bad, aborted := measureTree(p, stop)
-	if aborted {
-		return size, newest, bad, false
-	}
-	if newest.IsZero() {
-		newest = info.ModTime()
-	}
-	return size, newest, bad, true
+	s := &treeStats{}
+	p.submit(func() {
+		if aborted := measureTreeInto(s, path, p.stop); aborted {
+			p.aborted.Store(true)
+		}
+	})
+	return s, true
 }
 
-func measureTree(root string, stop <-chan struct{}) (size int64, newest time.Time, bad int, aborted bool) {
+// measureOne returns the stats of one entry measured at once: a file, a
+// link, or a small tree. It runs on the caller's goroutine, which is why a
+// pool task may use it and begin may not — a task that feeds the pool it
+// runs on races the drain that closes the queue.
+func measureOne(path string, ch fs.DirEntry, stop <-chan struct{}) (*treeStats, bool) {
+	if ch.Type()&fs.ModeSymlink != 0 {
+		info, err := os.Lstat(path)
+		if err != nil {
+			return nil, false
+		}
+		return &treeStats{size: info.Size(), newest: info.ModTime()}, true
+	}
+	info, err := ch.Info()
+	if err != nil {
+		return nil, false
+	}
+	if !ch.IsDir() {
+		return &treeStats{size: info.Size(), newest: info.ModTime()}, true
+	}
+	s := &treeStats{}
+	if measureTreeInto(s, path, stop) {
+		return nil, false
+	}
+	if s.newest.IsZero() {
+		s.newest = info.ModTime()
+	}
+	return s, true
+}
+
+// wait drains the pool: the queue closes so the workers end, and tasks.Wait
+// answers for anything run inline. It reports a stopped scan only through
+// aborted, which the caller must check: half a listing must never pass for a
+// complete one.
+func (p *measurePool) wait() {
+	if p.started.Load() {
+		close(p.queue)
+		p.workers.Wait()
+	}
+	p.tasks.Wait()
+}
+
+// measureTreeInto measures the tree at root into s and reports whether the
+// walk was abandoned partway. Its own goroutine runs it once, so its local
+// counters need no locking; s.fold is the only cross-goroutine touch.
+func measureTreeInto(s *treeStats, root string, stop <-chan struct{}) bool {
+	var (
+		size   int64
+		newest time.Time
+		bad    int
+	)
 	dirs := []string{root}
 	for len(dirs) > 0 {
 		if stopped(stop) {
-			return size, newest, bad, true
+			s.fold(size, newest, bad)
+			return true
 		}
 		dir := dirs[len(dirs)-1]
 		dirs = dirs[:len(dirs)-1]
@@ -497,7 +679,8 @@ func measureTree(root string, stop <-chan struct{}) (size int64, newest time.Tim
 			for _, child := range children {
 				if stopped(stop) {
 					_ = f.Close()
-					return size, newest, bad, true
+					s.fold(size, newest, bad)
+					return true
 				}
 				if child.Type()&fs.ModeSymlink != 0 {
 					if li, err := child.Info(); err == nil {
@@ -529,7 +712,8 @@ func measureTree(root string, stop <-chan struct{}) (size int64, newest time.Tim
 		}
 		_ = f.Close()
 	}
-	return size, newest, bad, false
+	s.fold(size, newest, bad)
+	return false
 }
 
 // countEntries re-derives a listing's totals from its tree: the bytes of
