@@ -47,6 +47,8 @@ func (a *App) logBlock(c *ui.Context, r runRecord) {
 				FontSize(fz(12)).TextColor(p.Ink3).Shrink(0)
 			ui.Spacer(c)
 			switch {
+			case r.canceled:
+				tag(c, a.T("已取消"), p.Warning, p.WarningSubtle)
 			case r.failed > 0:
 				tag(c, fmt.Sprintf(a.T("%d 项失败"), r.failed), p.Danger, p.DangerSubtle)
 			case r.freed == 0 && r.gone == 0:

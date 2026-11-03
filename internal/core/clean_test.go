@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -203,7 +204,7 @@ func TestRemoveTreeReportsBytesAndCleans(t *testing.T) {
 	}
 
 	var last int64
-	if _, err := removeTree(entry, func(n int64) {
+	if _, err := removeTree(context.Background(), entry, func(n int64) {
 		if n < last {
 			t.Errorf("progress went back: %d after %d", n, last)
 		}
@@ -232,7 +233,7 @@ func TestRemoveTreeRemovesSingleFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got int64
-	if _, err := removeTree(f, func(n int64) { got = n }); err != nil {
+	if _, err := removeTree(context.Background(), f, func(n int64) { got = n }); err != nil {
 		t.Fatal(err)
 	}
 	if got != 500 {
@@ -255,7 +256,7 @@ func TestRemoveTreeClearsReadOnlyFiles(t *testing.T) {
 	if err := os.Chmod(f, 0o444); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := removeTree(root, nil); err != nil {
+	if _, err := removeTree(context.Background(), root, nil); err != nil {
 		t.Fatalf("read-only file stopped the walk: %v", err)
 	}
 	if _, err := os.Stat(root); !errors.Is(err, fs.ErrNotExist) {
@@ -280,7 +281,7 @@ func TestRemoveTreeUnlinksLinkInsteadOfEntering(t *testing.T) {
 	link := filepath.Join(root, "pkg", "link")
 	dirLink(t, outside, link)
 
-	if _, err := removeTree(root, nil); err != nil {
+	if _, err := removeTree(context.Background(), root, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Lstat(link); !errors.Is(err, fs.ErrNotExist) {
@@ -318,7 +319,7 @@ func TestRemoveTreeCountsBytesRemovedBeforeFailure(t *testing.T) {
 	}
 	defer held.Close()
 
-	removed, err := removeTree(entry, nil)
+	removed, err := removeTree(context.Background(), entry, nil)
 	if err == nil {
 		t.Fatal("want the walk to fail on the held file")
 	}

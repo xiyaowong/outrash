@@ -6,6 +6,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -34,6 +35,10 @@ type Outcome struct {
 	Failed  int
 	Gone    int
 	Elapsed time.Duration
+	// Canceled marks a run stopped from outside. Runs holds only the steps
+	// that were over; the step in flight at the stop is counted in Freed for
+	// the files it did remove, but is not a finished step.
+	Canceled bool
 }
 
 const (
@@ -105,21 +110,36 @@ func Remove(p *Plan, roots []string) Outcome { return RemoveWith(p, roots, nil) 
 // goes. A step counts as done whether it was removed, was already gone, or
 // failed: the estimate is about time spent, not success.
 func RemoveWith(p *Plan, roots []string, progress func(done, total int64)) Outcome {
-	return removePlan(p, roots, progress, nil)
+	return RemoveStepsContext(context.Background(), p, roots, progress, nil)
 }
 
 // RemoveSteps is RemoveWith, and tells onStep about each step the moment it
 // is over, so a UI can strike its row off while the estimate keeps running.
 func RemoveSteps(p *Plan, roots []string, progress func(done, total int64), onStep func(Removal)) Outcome {
-	return removePlan(p, roots, progress, onStep)
+	return RemoveStepsContext(context.Background(), p, roots, progress, onStep)
 }
 
-func removePlan(p *Plan, roots []string, progress func(done, total int64), onStep func(Removal)) Outcome {
+// RemoveStepsContext is RemoveSteps that stops once ctx is done. The stop is
+// caught at the next file, so an interrupted tree leaves what it had not
+// reached on disk, and the outcome marks itself Canceled.
+func RemoveStepsContext(ctx context.Context, p *Plan, roots []string, progress func(done, total int64), onStep func(Removal)) Outcome {
+	return removePlan(ctx, p, roots, progress, onStep)
+}
+
+func removePlan(ctx context.Context, p *Plan, roots []string, progress func(done, total int64), onStep func(Removal)) Outcome {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	start := time.Now()
 	var out Outcome
 	var done int64
 	for _, s := range p.Steps {
+		if ctx.Err() != nil {
+			out.Canceled = true
+			break
+		}
 		r := Removal{Path: s.Path, Bytes: s.Bytes}
+		stopped := false
 		switch err := check(s.Path, roots); {
 		case errors.Is(err, fs.ErrNotExist):
 			// Nothing to remove; the cache went away on its own.
@@ -131,18 +151,27 @@ func removePlan(p *Plan, roots []string, progress func(done, total int64), onSte
 			// One step can hold most of the plan's bytes on its own, so it
 			// goes file by file and the estimate follows the walk instead of
 			// sitting still until the whole step is over.
-			if removed, err := removeTree(s.Path, func(n int64) {
+			removed, err := removeTree(ctx, s.Path, func(n int64) {
 				if progress != nil {
 					progress(done+n, p.Bytes)
 				}
-			}); err != nil {
-				// The files that did leave the disk before the failure still
-				// count: the report's freed bytes must match what the walk did.
-				out.Freed += removed
+			})
+			// The files that did leave the disk still count, whether the tree
+			// stopped on an error or on a cancel: the report's freed bytes must
+			// match what the walk did.
+			out.Freed += removed
+			switch {
+			case errors.Is(err, context.Canceled):
+				stopped = true
+			case err != nil:
 				r.Err = err
-			} else {
-				out.Freed += removed
 			}
+		}
+		if stopped {
+			// A half-removed step is not a finished one: leaving it out of Runs
+			// keeps the report from claiming it, and keeps its row unstruck.
+			out.Canceled = true
+			break
 		}
 		if r.Err != nil {
 			out.Failed++
@@ -169,9 +198,12 @@ func removePlan(p *Plan, roots []string, progress func(done, total int64), onSte
 // overlap is the unlinking itself, so one tree's directories go through a
 // small pool of workers. A directory, and the tree root, is removed only after
 // its last descendant reports back.
-func removeTree(root string, report func(int64)) (int64, error) {
+func removeTree(ctx context.Context, root string, report func(int64)) (int64, error) {
 	if report == nil {
 		report = func(int64) {}
+	}
+	if ctx.Err() != nil {
+		return 0, context.Canceled
 	}
 	info, err := os.Lstat(root)
 	if err != nil {
@@ -188,9 +220,16 @@ func removeTree(root string, report func(int64)) (int64, error) {
 		report(info.Size())
 		return info.Size(), nil
 	}
-	w := newTreeWalk(report)
+	w := newTreeWalk(ctx, report)
 	err = w.remove(root)
 	w.progress.flush(w.removed.Load())
+	if w.canceled.Load() {
+		// A stop that lands after the last unlink changed nothing: the tree is
+		// gone, so the step finished. Only a root still on disk was cut short.
+		if _, statErr := os.Lstat(root); statErr == nil {
+			return w.removed.Load(), context.Canceled
+		}
+	}
 	return w.removed.Load(), err
 }
 
@@ -216,14 +255,20 @@ type treeWalk struct {
 
 	removed  atomic.Int64
 	progress removalProgress
+	// canceled is the stop signal read on the hot path. A channel select or
+	// ctx.Err per file would cost more than the unlink it guards; the context
+	// is watched once and the flag carries the answer.
+	canceled   atomic.Bool
+	stopCancel func() bool
 
 	errMu sync.Mutex
 	err   error
 }
 
-func newTreeWalk(report func(int64)) *treeWalk {
+func newTreeWalk(ctx context.Context, report func(int64)) *treeWalk {
 	w := &treeWalk{queue: make(chan *dirNode, removalWorkers*8)}
 	w.progress.report = report
+	w.stopCancel = context.AfterFunc(ctx, func() { w.canceled.Store(true) })
 	return w
 }
 
@@ -268,6 +313,9 @@ func (w *treeWalk) remove(root string) error {
 		close(w.queue)
 		w.workers.Wait()
 	}
+	if w.stopCancel != nil {
+		w.stopCancel()
+	}
 	return w.err
 }
 
@@ -276,6 +324,12 @@ func (w *treeWalk) remove(root string) error {
 // cache is unlinked where it sits rather than walked through: the scan refuses
 // a root behind a link, and the walk must not reopen that door from inside.
 func (w *treeWalk) visit(n *dirNode) {
+	if w.canceled.Load() {
+		// The stop still has to unwind the counters, or the root never
+		// settles; it just does so without touching the disk.
+		w.finish(n)
+		return
+	}
 	entries, err := readDir(n.path)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
@@ -286,6 +340,12 @@ func (w *treeWalk) visit(n *dirNode) {
 		return
 	}
 	for _, e := range entries {
+		if w.canceled.Load() {
+			// A directory that stays readable through the stop is left whole,
+			// its unvisited children included: they are on disk either way.
+			n.failed.Store(true)
+			break
+		}
 		p := filepath.Join(n.path, e.Name())
 		if e.IsDir() {
 			child := &dirNode{path: p, parent: n}
@@ -304,6 +364,10 @@ func (w *treeWalk) visit(n *dirNode) {
 // refuses to go is not reported as freed. Files only: on Linux a directory
 // entry carries a size of its own that the estimate must not count.
 func (w *treeWalk) removeFile(n *dirNode, p string, e fs.DirEntry) {
+	if w.canceled.Load() {
+		n.failed.Store(true)
+		return
+	}
 	var size int64
 	if info, err := e.Info(); err == nil {
 		size = info.Size()
@@ -320,12 +384,13 @@ func (w *treeWalk) removeFile(n *dirNode, p string, e fs.DirEntry) {
 
 // finish lowers n's outstanding count and, once it reaches zero, removes n
 // and answers to its parent. Only the last descendant reaches zero, so each
-// directory is removed exactly once, after everything below it.
+// directory is removed exactly once, after everything below it. A canceled
+// walk only unwinds: removing a directory would claim a step it did not finish.
 func (w *treeWalk) finish(n *dirNode) {
 	if n.children.Add(-1) != 0 {
 		return
 	}
-	if !n.failed.Load() {
+	if !n.failed.Load() && !w.canceled.Load() {
 		if err := removePath(n.path); err != nil {
 			w.fail(err)
 			n.failed.Store(true)

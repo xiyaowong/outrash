@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"image/png"
@@ -596,7 +597,7 @@ func TestPlanExecuteVisibleOnlyOutsideDebug(t *testing.T) {
 	// The primary action still cleans straight from the list; the removal is
 	// stubbed, because a test must never delete.
 	started, release := make(chan struct{}), make(chan struct{})
-	a.remove = func(*core.Plan, []string, func(done, total int64), func(core.Removal)) core.Outcome {
+	a.remove = func(context.Context, *core.Plan, []string, func(done, total int64), func(core.Removal)) core.Outcome {
 		close(started)
 		<-release
 		return core.Outcome{}
@@ -749,7 +750,7 @@ func TestCleanupRescansOnlyAfterRemoval(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	posted := make(chan struct{}, 4)
-	a.remove = func(*core.Plan, []string, func(done, total int64), func(core.Removal)) core.Outcome {
+	a.remove = func(context.Context, *core.Plan, []string, func(done, total int64), func(core.Removal)) core.Outcome {
 		close(started)
 		<-release
 		return core.Outcome{Freed: 4096}

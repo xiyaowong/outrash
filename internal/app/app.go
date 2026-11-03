@@ -85,12 +85,17 @@ type App struct {
 
 	// busy is set while a removal runs; no plan may be opened over one.
 	busy bool
+	// cancelClean stops the running removal, and canceling says the stop has
+	// been asked for: the walk ends at its next file, so the window keeps
+	// saying so until finish lands.
+	cancelClean context.CancelFunc
+	canceling   bool
 	// taskbarBusy mirrors the taskbar indicator, so a test can read what the
 	// window was told without a window.
 	taskbarBusy bool
 	// remove runs a plan, and post lands an update on the UI thread. Tests
 	// replace them to observe the order.
-	remove func(*core.Plan, []string, func(done, total int64), func(core.Removal)) core.Outcome
+	remove func(context.Context, *core.Plan, []string, func(done, total int64), func(core.Removal)) core.Outcome
 	post   func(func())
 	// progress is the clean's byte cursor, written by the removal goroutine
 	// and read by the frame that shows the estimate.
@@ -119,7 +124,11 @@ type runRecord struct {
 	failed  int
 	gone    int
 	elapsed time.Duration
-	lines   []string
+	// canceled marks a run the user stopped; untouched is how many planned
+	// steps it never reached.
+	canceled  bool
+	untouched int
+	lines     []string
 }
 
 // progress is what a running clean can say about itself: the plan's total,
@@ -216,6 +225,7 @@ const (
 	modalReport
 	modalAbout
 	modalDetail
+	modalCancel
 )
 
 type report struct {
@@ -225,6 +235,10 @@ type report struct {
 	gone    int
 	items   int
 	elapsed time.Duration
+	// canceled marks a clean the user stopped, and untouched the planned
+	// steps it never reached.
+	canceled  bool
+	untouched int
 	// receipt compares the families before the clean with the rescan that
 	// followed it; nil until a clean starts.
 	receipt *receipt
@@ -299,7 +313,7 @@ func New(cfg *core.Config, o core.Options, buildOpts Options) *App {
 		checked:         map[string]bool{},
 		resultRowsDirty: true,
 		now:             time.Now(),
-		remove:          core.RemoveSteps,
+		remove:          core.RemoveStepsContext,
 		post:            nil,
 		progress:        &progress{},
 	}
@@ -745,7 +759,9 @@ func (a *App) cleanProgress(c *ui.Context) {
 	}
 	done, total, elapsed := pr.read()
 	text := estimate(done, total, elapsed)
-	if finished, steps := pr.count(); steps > 1 {
+	if a.canceling {
+		text = a.T("正在取消…")
+	} else if finished, steps := pr.count(); steps > 1 {
 		text = fmt.Sprintf(a.T("%d/%d 项 · %s"), finished, steps, text)
 	}
 	ui.Text(c, text).Font(core.Mono()).
@@ -1316,6 +1332,17 @@ func (a *App) actionBar(c *ui.Context) {
 				// as one pair, and neither can be mistaken for 开始清理.
 				a.textButton(c, a.T("全不选"), a.clearChecks)
 			}
+			if a.busy {
+				// The one action while a clean runs is stopping it, and it asks
+				// before it acts: a click that is already erasing must not also
+				// be the click that abandons the rest.
+				label := a.T("取消清理")
+				if a.canceling {
+					label = a.T("正在取消…")
+				}
+				a.actionButton(c, label, false, !a.canceling, a.askCancel)
+				return
+			}
 			// A quiet preview next to the one action: the plan sheet, listing
 			// only. A build that refuses to delete does not need it — its
 			// primary button already opens the plan.
@@ -1339,6 +1366,9 @@ func (a *App) barStatus(n int, chosen int64) string {
 	case a.phase == phaseScanning:
 		return a.T("正在扫描…")
 	case a.busy:
+		if a.canceling {
+			return a.T("正在取消…")
+		}
 		return a.T("正在清理…")
 	case a.cache == nil:
 		return a.T("尚未扫描")

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -115,6 +116,8 @@ func (a *App) sheet(c *ui.Context) {
 		a.aboutSheet(c)
 	case modalDetail:
 		a.detailSheet(c)
+	case modalCancel:
+		a.cancelSheet(c)
 	}
 }
 
@@ -164,6 +167,60 @@ func (a *App) detailSheet(c *ui.Context) {
 				}
 				ui.Spacer(c)
 				a.actionButton(c, a.T("关闭"), true, true, a.dismiss)
+			})
+		})
+	})
+}
+
+// askCancel is the confirmation a running clean needs before it is abandoned:
+// the paths already gone will not come back, so one click must not decide it.
+func (a *App) askCancel() {
+	if !a.busy || a.canceling {
+		return
+	}
+	a.modal = modalCancel
+}
+
+// confirmCancel stops the removal. The window stays busy until the walk
+// returns, which is the next file: a step is never left half-reported.
+func (a *App) confirmCancel() {
+	a.modal = modalNone
+	if !a.busy || a.canceling {
+		return
+	}
+	a.canceling = true
+	if a.cancelClean != nil {
+		a.cancelClean()
+	}
+	a.msg = a.T("正在取消…")
+	a.repaint()
+}
+
+// cancelSheet is the second click: what stopping now costs, and the two ways
+// out of the question.
+func (a *App) cancelSheet(c *ui.Context) {
+	p := a.pal
+	a.dialog(c, 420, func() {
+		ui.Column(c).Children(func() {
+			ui.Row(c).Height(64).Padding(0, 24).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, a.T("取消清理？")).FontSize(fz(18)).FontWeight(600).TextColor(p.Ink)
+			})
+			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+			ui.Column(c).Padding(20, 24).Gap(8).Children(func() {
+				ui.Text(c, a.T("已经删除的内容不会恢复，尚未处理的部分会留在磁盘上。")).
+					FontSize(fz(12)).TextColor(p.Ink2)
+				if a.progress != nil {
+					if finished, steps := a.progress.count(); steps > 0 {
+						ui.Text(c, fmt.Sprintf(a.T("已完成 %d/%d 项"), finished, steps)).
+							Font(core.Mono()).FontSize(fz(11)).TextColor(p.Ink3).SingleLine()
+					}
+				}
+			})
+			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
+			ui.Row(c).Height(60).Padding(0, 24).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Spacer(c)
+				a.actionButton(c, a.T("取消清理"), false, true, a.confirmCancel)
+				a.actionButton(c, a.T("继续清理"), true, true, a.dismiss)
 			})
 		})
 	})
@@ -399,6 +456,7 @@ func (a *App) run() {
 	a.modal = modalNone
 	a.shown = nil
 	a.busy = true
+	a.canceling = false
 	a.msg = a.T("正在清理…")
 	a.clearChecks()
 	a.fx = &cleanFx{steps: map[string]core.Removal{}}
@@ -409,7 +467,10 @@ func (a *App) run() {
 	roots := a.roots()
 	a.progress = &progress{total: pl.Bytes, steps: len(pl.Steps), start: time.Now()}
 	pr := a.progress
+	ctx, cancel := context.WithCancel(context.Background())
+	a.cancelClean = cancel
 	go func() {
+		defer cancel()
 		lastUpdate := time.Time{}
 		updateProgress := func(done, total int64) {
 			now := time.Now()
@@ -426,7 +487,7 @@ func (a *App) run() {
 			}
 			a.repaint()
 		}
-		out := a.remove(pl, roots, func(done, total int64) {
+		out := a.remove(ctx, pl, roots, func(done, total int64) {
 			pr.set(done, total)
 			updateProgress(done, total)
 		}, func(r core.Removal) {
@@ -452,6 +513,8 @@ func cleanProgressDue(last, now time.Time, done, total int64) bool {
 // the deletion would list paths that no longer exist.
 func (a *App) finish(out core.Outcome) {
 	a.busy = false
+	a.canceling = false
+	a.cancelClean = nil
 	if a.Window != nil {
 		a.Window.SetProgressBar(mygo.ProgressBar{})
 	}
@@ -461,6 +524,10 @@ func (a *App) finish(out core.Outcome) {
 		a.report = r
 	}
 	r.freed, r.failed, r.gone, r.elapsed = out.Freed, out.Failed, out.Gone, out.Elapsed
+	r.canceled = out.Canceled
+	if out.Canceled {
+		r.untouched = max(r.items-len(out.Runs), 0)
+	}
 	// The rescan starts after this line, so a path written later than it can
 	// only have been created by something other than the removal.
 	if rc := r.receipt; rc != nil {
@@ -476,7 +543,8 @@ func (a *App) finish(out core.Outcome) {
 	}
 	a.log = append(a.log, runRecord{
 		at: time.Now(), freed: out.Freed, items: r.items, failed: out.Failed,
-		gone: out.Gone, elapsed: out.Elapsed, lines: slices.Clone(r.lines),
+		gone: out.Gone, elapsed: out.Elapsed, canceled: out.Canceled,
+		untouched: r.untouched, lines: slices.Clone(r.lines),
 	})
 	a.msg = ""
 	a.modal = modalReport
@@ -499,7 +567,11 @@ func (a *App) reportSheet(c *ui.Context) {
 	a.dialog(c, 420, func() {
 		ui.Column(c).Children(func() {
 			ui.Row(c).Height(64).Padding(0, 24).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, a.T("清理完成")).FontSize(fz(20)).FontWeight(600).TextColor(p.Ink)
+				title := a.T("清理完成")
+				if r.canceled {
+					title = a.T("已取消清理")
+				}
+				ui.Text(c, title).FontSize(fz(20)).FontWeight(600).TextColor(p.Ink)
 			})
 			ui.Box(c).Height(1).Shrink(0).Background(p.Rule)
 			ui.Column(c).Padding(24).Gap(16).Children(func() {
@@ -513,6 +585,10 @@ func (a *App) reportSheet(c *ui.Context) {
 						a.stat(c, a.T("已不存在"), fmt.Sprint(r.gone))
 					}
 				})
+				if r.canceled && r.untouched > 0 {
+					ui.Text(c, fmt.Sprintf(a.T("已停止，还有 %d 个路径未处理。"), r.untouched)).
+						FontSize(fz(12)).TextColor(p.Ink2)
+				}
 				a.receiptBlock(c, r)
 				if len(r.lines) > 0 {
 					ui.Column(c).MaxHeight(160).Children(func() {

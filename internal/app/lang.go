@@ -273,6 +273,17 @@ var en = map[string]string{
 	"共 %d 项，%s":       "%d items, %s",
 	"== 扫描警告 ==":      "== Scan warnings ==",
 
+	// Stopping a running clean.
+	"取消清理":        "Cancel cleanup",
+	"取消清理？":       "Cancel cleanup?",
+	"继续清理":        "Keep cleaning",
+	"正在取消…":       "Canceling…",
+	"已完成 %d/%d 项": "%d/%d steps done",
+	"已经删除的内容不会恢复，尚未处理的部分会留在磁盘上。": "What is already deleted will not come back; the rest stays on disk.",
+	"已取消清理": "Cleanup canceled",
+	"已停止，还有 %d 个路径未处理。": "Stopped with %d paths left untouched.",
+	"已取消": "Canceled",
+
 	// About sheet.
 	"版本 ":             "Version ",
 	"开发版":             "dev build",

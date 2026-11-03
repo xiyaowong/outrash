@@ -19,7 +19,7 @@ Cross-platform cache cleaner for developer tools and everyday apps: whatever a p
 |---|---|
 | `main.go` | flags, window wiring; nothing else lives at the root |
 | `internal/core` | rules: parse + env override + path expansion · scan: walk dirs concurrently, per-entry size/mtime, classify versions · plan: policy → ordered list of `Step` (path, bytes, reason) · clean: guarded `os.RemoveAll`, the only code that deletes · theme: palette + type scale (ledger: paper, ink, one accent) · `rules.json` catalog |
-| `internal/app` | `app.go` window frame: title strip, nav rail, page header, action bar, right info panel, scan/recommend, clean estimate · `pages.go` 概览 intro + 扫描结果 table · 清理记录 (session, memory only) · 规则 (read-only catalog) · `cards.go` family/item/version rows, tri-state check, sort, tags, presets · `sheet.go` plan sheet (no-delete builds only), report sheet, clean run |
+| `internal/app` | `app.go` window frame: title strip, nav rail, page header, action bar, right info panel, scan/recommend, clean estimate · `pages.go` 概览 intro + 扫描结果 table · 清理记录 (session, memory only) · 规则 (read-only catalog) · `cards.go` family/item/version rows, tri-state check, sort, tags, presets · `sheet.go` plan sheet (no-delete builds only), report sheet, cancel confirmation, clean run |
 | `assets` | `icon.svg` the mark (a checked box — 勾上的就是会被删的) · `icon.ico`, `icon-256.png` generated · `genicon/` regenerates them (`just icon`), drawing the SVG's geometry as distance fields, and writes `resources/icon.png` for `mygo build`; the exe's icon and version block come from `mygo build` itself, on every platform |
 
 ## Commands

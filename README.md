@@ -22,8 +22,8 @@ A cross-platform cache cleaner: it scans the rebuildable caches your tools leave
    **Scan**: measures each tool's cache where its environment variables and default locations say it lives, and flags what it could not read.
 2. **挑选**：风险提示、预设与建议泡泡帮忙勾选，也可以只看某个盘、只勾大头。
    **Pick**: risk tags, presets and suggestion bubbles narrow the list; you can also look at one drive only.
-3. **清理**：一次按钮，逐项显示进度，每个缓存怎么回来写得清楚。
-   **Clean**: one button, per-item progress, and next to every path the sentence that says how it comes back.
+3. **清理**：一次按钮，逐项显示进度，中途可取消（会再问一次），每个缓存怎么回来写得清楚。
+   **Clean**: one button, per-item progress, cancelable mid-run (after one confirmation), and next to every path the sentence that says how it comes back.
 
 界面四页：概览、扫描结果、清理记录、规则。界面语言中文、English 可随时切换。
 Four pages: Overview, Scan results, Cleanups, Rules. The interface speaks Chinese and English, switchable any time.
