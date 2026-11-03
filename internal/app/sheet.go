@@ -503,7 +503,11 @@ func (a *App) run() {
 	}()
 }
 
-const cleanProgressInterval = 100 * time.Millisecond
+// cleanProgressInterval is how often a running clean touches the window. The
+// removal reports per file, but every accepted report rebuilds the frame, and
+// at ten a second that work competes with the user's drag; one per second
+// keeps the estimate moving without making the window stutter.
+const cleanProgressInterval = time.Second
 
 func cleanProgressDue(last, now time.Time, done, total int64) bool {
 	return last.IsZero() || now.Sub(last) >= cleanProgressInterval || total > 0 && done >= total
