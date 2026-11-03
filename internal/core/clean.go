@@ -137,12 +137,20 @@ func removeTree(root string, report func(int64)) (int64, error) {
 // walked through: the scan refuses a root behind a link, and the walk must
 // not reopen that door from inside the tree.
 func removeBelow(dir string, removed *int64, report func(int64)) error {
-	entries, err := os.ReadDir(dir)
+	f, err := os.Open(dir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil // the cache went away under the walk
 		}
 		return err
+	}
+	entries, readErr := f.ReadDir(-1)
+	closeErr := f.Close()
+	if readErr != nil {
+		return readErr
+	}
+	if closeErr != nil {
+		return closeErr
 	}
 	for _, e := range entries {
 		p := filepath.Join(dir, e.Name())

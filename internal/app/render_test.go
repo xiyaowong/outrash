@@ -45,6 +45,23 @@ func testAppWith(t *testing.T, so Options) *App {
 	return a
 }
 
+func TestCleanProgressUpdatesAreThrottled(t *testing.T) {
+	start := time.Now()
+	if !cleanProgressDue(time.Time{}, start, 1, 100) {
+		t.Fatal("the first progress update should be immediate")
+	}
+	last := start
+	if cleanProgressDue(last, start.Add(cleanProgressInterval/2), 50, 100) {
+		t.Fatal("an intermediate update inside the interval should be skipped")
+	}
+	if !cleanProgressDue(last, start.Add(cleanProgressInterval), 50, 100) {
+		t.Fatal("progress should update once the interval elapses")
+	}
+	if !cleanProgressDue(last, start.Add(time.Millisecond), 100, 100) {
+		t.Fatal("the final non-empty update should not be delayed")
+	}
+}
+
 func TestResultsListVirtualizesExpandedCache(t *testing.T) {
 	a := testApp(t, false)
 	result := a.cache.Results["go/go-build"]

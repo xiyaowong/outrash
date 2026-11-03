@@ -410,12 +410,13 @@ func (a *App) run() {
 	a.progress = &progress{total: pl.Bytes, steps: len(pl.Steps), start: time.Now()}
 	pr := a.progress
 	go func() {
-		out := a.remove(pl, roots, func(done, total int64) {
-			pr.set(done, total)
-			// The title bar carries the estimate; the taskbar, dock or
-			// launcher carries a bar of its own, on whichever surface the
-			// user turned away to. A plan of zero bytes (empty directories
-			// are legal entries) must send the system a number, not a NaN.
+		lastUpdate := time.Time{}
+		updateProgress := func(done, total int64) {
+			now := time.Now()
+			if !cleanProgressDue(lastUpdate, now, done, total) {
+				return
+			}
+			lastUpdate = now
 			if a.Window != nil {
 				v := 0.0
 				if total > 0 {
@@ -424,16 +425,27 @@ func (a *App) run() {
 				a.Window.SetProgressBar(mygo.ProgressBar{Value: v})
 			}
 			a.repaint()
+		}
+		out := a.remove(pl, roots, func(done, total int64) {
+			pr.set(done, total)
+			updateProgress(done, total)
 		}, func(r core.Removal) {
 			a.fx.add(r)
 			pr.stepDone()
-			a.repaint()
+			done, total, _ := pr.read()
+			updateProgress(done, total)
 		})
 		// The last rows need fxTail to finish their strike; the rescan
 		// would rebuild the table out from under them.
 		time.Sleep(fxTail)
 		a.applyUpdate(func() { a.finish(out) })
 	}()
+}
+
+const cleanProgressInterval = 100 * time.Millisecond
+
+func cleanProgressDue(last, now time.Time, done, total int64) bool {
+	return last.IsZero() || now.Sub(last) >= cleanProgressInterval || total > 0 && done >= total
 }
 
 // finish applies a completed removal and only now rescans: a scan racing
