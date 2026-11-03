@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -38,9 +40,16 @@ const (
 	removalProgressBytes = 1 << 20
 	removalProgressFiles = 256
 	removalProgressTime  = 100 * time.Millisecond
+	// removalWorkers bounds the goroutines unlinking inside one tree. Removal
+	// is metadata-bound, so a few workers overlap the wait; four measured
+	// roughly twice the throughput of one, and eight added little.
+	removalWorkers = 4
 )
 
+// removalProgress batches per-file reports for one tree. Workers report
+// concurrently, so the batch counters sit behind the mutex.
 type removalProgress struct {
+	mu     sync.Mutex
 	report func(int64)
 	last   int64
 	at     time.Time
@@ -55,10 +64,23 @@ func (p *removalProgress) due(done int64) bool {
 	return p.files%removalProgressFiles == 0 || done-p.last >= removalProgressBytes
 }
 
-func (p *removalProgress) file(done int64) {
+// file reports the counter's value once a batch boundary has passed. The load
+// sits under the mutex: workers add between reports, and reading outside it
+// could hand the UI a smaller number after a larger one.
+func (p *removalProgress) file(removed *atomic.Int64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	done := removed.Load()
 	if p.due(done) {
 		p.update(done, time.Now(), false)
 	}
+}
+
+// flush reports the final count whatever the batching would have said.
+func (p *removalProgress) flush(done int64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.update(done, time.Now(), true)
 }
 
 func (p *removalProgress) update(done int64, now time.Time, force bool) {
@@ -141,6 +163,12 @@ func removePlan(p *Plan, roots []string, progress func(done, total int64), onSte
 // removeTree deletes the tree at root bottom-up, reporting the bytes gone so
 // far and returning how much actually left the disk, even on failure: a step
 // that stops halfway has still freed the bytes it got through.
+//
+// Directories cannot be deleted as a unit: every platform unlinks their
+// entries one by one, and rmdir only succeeds once they are empty. What can
+// overlap is the unlinking itself, so one tree's directories go through a
+// small pool of workers. A directory, and the tree root, is removed only after
+// its last descendant reports back.
 func removeTree(root string, report func(int64)) (int64, error) {
 	if report == nil {
 		report = func(int64) {}
@@ -160,59 +188,175 @@ func removeTree(root string, report func(int64)) (int64, error) {
 		report(info.Size())
 		return info.Size(), nil
 	}
-	var removed int64
-	progress := removalProgress{report: report}
-	err = removeBelow(root, &removed, progress.file)
-	progress.update(removed, time.Now(), true)
-	if err != nil {
-		return removed, err
-	}
-	return removed, removePath(root)
+	w := newTreeWalk(report)
+	err = w.remove(root)
+	w.progress.flush(w.removed.Load())
+	return w.removed.Load(), err
 }
 
-// removeBelow empties dir bottom-up. DirEntry.IsDir is false for links, so a
-// junction or symlink inside the cache is unlinked where it sits rather than
-// walked through: the scan refuses a root behind a link, and the walk must
-// not reopen that door from inside the tree.
-func removeBelow(dir string, removed *int64, report func(int64)) error {
-	f, err := os.Open(dir)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil // the cache went away under the walk
+// dirNode is one directory in a running removal. children counts the
+// directory's unfinished subdirectories plus one for its own listing, so the
+// counter reaches zero exactly once: after the directory has been read and
+// every descendant is gone.
+type dirNode struct {
+	path     string
+	parent   *dirNode
+	children atomic.Int32
+	failed   atomic.Bool
+}
+
+// treeWalk removes one tree with a bounded pool. The pool starts on the first
+// subdirectory, so a tree of plain files pays nothing for it.
+type treeWalk struct {
+	queue   chan *dirNode
+	tasks   sync.WaitGroup // queued nodes plus the root being processed
+	workers sync.WaitGroup
+	once    sync.Once
+	started atomic.Bool
+
+	removed  atomic.Int64
+	progress removalProgress
+
+	errMu sync.Mutex
+	err   error
+}
+
+func newTreeWalk(report func(int64)) *treeWalk {
+	w := &treeWalk{queue: make(chan *dirNode, removalWorkers*8)}
+	w.progress.report = report
+	return w
+}
+
+func (w *treeWalk) start() {
+	w.once.Do(func() {
+		w.started.Store(true)
+		for range removalWorkers {
+			w.workers.Add(1)
+			go func() {
+				defer w.workers.Done()
+				for n := range w.queue {
+					w.visit(n)
+					w.tasks.Done()
+				}
+			}()
 		}
-		return err
+	})
+}
+
+func (w *treeWalk) submit(n *dirNode) {
+	w.start()
+	w.tasks.Add(1)
+	select {
+	case w.queue <- n:
+	default:
+		// Every worker is busy and the queue is full; doing the node here
+		// keeps the walk moving instead of blocking a worker on its own queue.
+		w.visit(n)
+		w.tasks.Done()
 	}
-	entries, readErr := f.ReadDir(-1)
-	closeErr := f.Close()
-	if readErr != nil {
-		return readErr
+}
+
+// remove walks the root and waits for every worker, so no report outlives it.
+func (w *treeWalk) remove(root string) error {
+	n := &dirNode{path: root}
+	n.children.Add(1)
+	w.tasks.Add(1)
+	w.visit(n)
+	w.tasks.Done()
+	w.tasks.Wait()
+	if w.started.Load() {
+		close(w.queue)
+		w.workers.Wait()
 	}
-	if closeErr != nil {
-		return closeErr
+	return w.err
+}
+
+// visit reads one directory and unlinks its files. Subdirectories go to the
+// pool; DirEntry.IsDir is false for links, so a junction or symlink inside the
+// cache is unlinked where it sits rather than walked through: the scan refuses
+// a root behind a link, and the walk must not reopen that door from inside.
+func (w *treeWalk) visit(n *dirNode) {
+	entries, err := readDir(n.path)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			w.fail(err)
+			n.failed.Store(true)
+		}
+		w.finish(n)
+		return
 	}
 	for _, e := range entries {
-		p := filepath.Join(dir, e.Name())
-		// Files only: the scan measures file bytes, and on Linux a directory
-		// entry carries its own size that the estimate must not count. The
-		// size joins the total only after the removal succeeds, so a file
-		// that refuses to go is not reported as freed.
-		var size int64
+		p := filepath.Join(n.path, e.Name())
 		if e.IsDir() {
-			if err := removeBelow(p, removed, report); err != nil {
-				return err
-			}
-		} else if info, err := e.Info(); err == nil {
-			size = info.Size()
+			child := &dirNode{path: p, parent: n}
+			child.children.Add(1)
+			n.children.Add(1)
+			w.submit(child)
+			continue
 		}
-		if err := removePath(p); err != nil {
-			return err
-		}
-		*removed += size
-		if !e.IsDir() {
-			report(*removed)
+		w.removeFile(n, p, e)
+	}
+	w.finish(n)
+}
+
+// removeFile unlinks one file and counts the bytes the scan measured for it.
+// The size joins the total only after the removal succeeds, so a file that
+// refuses to go is not reported as freed. Files only: on Linux a directory
+// entry carries a size of its own that the estimate must not count.
+func (w *treeWalk) removeFile(n *dirNode, p string, e fs.DirEntry) {
+	var size int64
+	if info, err := e.Info(); err == nil {
+		size = info.Size()
+	}
+	if err := removePath(p); err != nil {
+		w.fail(err)
+		// A directory that still holds this file cannot be removed either.
+		n.failed.Store(true)
+		return
+	}
+	w.removed.Add(size)
+	w.progress.file(&w.removed)
+}
+
+// finish lowers n's outstanding count and, once it reaches zero, removes n
+// and answers to its parent. Only the last descendant reaches zero, so each
+// directory is removed exactly once, after everything below it.
+func (w *treeWalk) finish(n *dirNode) {
+	if n.children.Add(-1) != 0 {
+		return
+	}
+	if !n.failed.Load() {
+		if err := removePath(n.path); err != nil {
+			w.fail(err)
+			n.failed.Store(true)
 		}
 	}
-	return nil
+	if p := n.parent; p != nil {
+		if n.failed.Load() {
+			p.failed.Store(true)
+		}
+		w.finish(p)
+	}
+}
+
+func (w *treeWalk) fail(err error) {
+	w.errMu.Lock()
+	if w.err == nil {
+		w.err = err
+	}
+	w.errMu.Unlock()
+}
+
+func readDir(dir string) ([]fs.DirEntry, error) {
+	f, err := os.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := f.ReadDir(-1)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return entries, err
 }
 
 // removePath is one unlink, with the retry RemoveAll does: caches mark files
