@@ -48,6 +48,7 @@ func (a *App) leafMenu(c *ui.Context, it itemState, pick core.Pick) func(m *ui.M
 		// menu never grows a 取消… twin for every verb.
 		if m.Item(a.T("勾选")).Checked(on).Chosen() {
 			a.checked[path] = !on
+			a.selectionChanged()
 		}
 		if m.Item(a.T("仅勾选此项")).Chosen() {
 			a.onlyPick(pick)
@@ -72,11 +73,11 @@ func (a *App) leafMenu(c *ui.Context, it itemState, pick core.Pick) func(m *ui.M
 // packageMenu is a versioned package: several versions, one of which 保留最新
 // keeps, so the menu offers that policy rather than only check and uncheck.
 func (a *App) packageMenu(c *ui.Context, it itemState, ent core.Entry, fromEnv bool) func(m *ui.Menu) {
-	picks := versionPicks(ent, fromEnv)
-	// 仅旧版本 goes through setChecks, which does not filter: give it the
-	// bulk set, or a menu on an env-sourced package would check its versions.
-	bulk := autoPicks(picks)
 	return func(m *ui.Menu) {
+		picks := versionPicks(ent, fromEnv)
+		// 仅旧版本 goes through setChecks, which does not filter: give it the
+		// bulk set, or a menu on an env-sourced package would check its versions.
+		bulk := autoPicks(picks)
 		a.selectItems(m, picks, func(m *ui.Menu) {
 			if m.Item(a.T("仅旧版本")).Chosen() {
 				a.setChecks(bulk, core.Select(bulk, core.Policy{KeepNewest: true, Now: a.now}).Steps)
@@ -99,8 +100,8 @@ func (a *App) packageMenu(c *ui.Context, it itemState, ent core.Entry, fromEnv b
 // folderMenu is one level of a deep cache: a folder a check stands for
 // whole through the leaves under it.
 func (a *App) folderMenu(c *ui.Context, it itemState, ent core.Entry, fromEnv bool) func(m *ui.Menu) {
-	picks := entryPicks(ent, fromEnv)
 	return func(m *ui.Menu) {
+		picks := entryPicks(ent, fromEnv)
 		a.selectItems(m, picks, nil)
 		m.Separator()
 		if m.Item(a.T("复制路径")).Chosen() {
@@ -119,13 +120,13 @@ func (a *App) folderMenu(c *ui.Context, it itemState, ent core.Entry, fromEnv bo
 // itemMenu is one cache: the whole thing, across every root the scan found.
 // Its paths are a submenu because naming only the first would be a lie.
 func (a *App) itemMenu(c *ui.Context, it itemState, family string) func(m *ui.Menu) {
-	vr := a.visibleRoots(it.res)
-	picks := picksOf(vr)
-	roots := make([]string, 0, len(vr))
-	for _, r := range vr {
-		roots = append(roots, r.Path)
-	}
 	return func(m *ui.Menu) {
+		vr := a.visibleRoots(it.res)
+		picks := picksOf(vr)
+		roots := make([]string, 0, len(vr))
+		for _, r := range vr {
+			roots = append(roots, r.Path)
+		}
 		a.selectItems(m, picks, nil)
 		m.Separator()
 		a.pathItems(m, a.T("复制缓存路径"), roots, func(p string) { c.WriteClipboard(p) })
@@ -142,15 +143,15 @@ func (a *App) itemMenu(c *ui.Context, it itemState, family string) func(m *ui.Me
 func (a *App) familyMenu(g groupState) func(m *ui.Menu) {
 	// The same set the row's checkbox toggles: a menu on the row must not
 	// quote, or check, leaves the filter is hiding.
-	picks := a.familyPicks(g)
 	key := "g:" + g.group.ID
 	return func(m *ui.Menu) {
+		picks := a.familyPicks(g)
 		label := a.T("展开")
 		if a.open[key] {
 			label = a.T("折叠")
 		}
 		if m.Item(label).Chosen() {
-			a.open[key] = !a.open[key]
+			a.setOpen(key, !a.open[key])
 		}
 		m.Separator()
 		a.selectItems(m, picks, nil)
@@ -204,6 +205,7 @@ func (a *App) dropRecent(picks []core.Pick) {
 			delete(a.checked, p.Path)
 		}
 	}
+	a.selectionChanged()
 }
 
 // dropSmall unchecks the picked paths under 10 MB, the ones that pay little
@@ -214,6 +216,7 @@ func (a *App) dropSmall(picks []core.Pick) {
 			delete(a.checked, p.Path)
 		}
 	}
+	a.selectionChanged()
 }
 
 // pathItems adds one item for a single path, or a submenu of them. A cache
@@ -248,18 +251,21 @@ func (a *App) pathItems(m *ui.Menu, label string, paths []string, act func(strin
 func (a *App) onlyPick(p core.Pick) {
 	a.clearChecks()
 	a.checked[p.Path] = true
+	a.selectionChanged()
 }
 
 func (a *App) checkAll(picks []core.Pick) {
 	for _, p := range picks {
 		a.checked[p.Path] = true
 	}
+	a.selectionChanged()
 }
 
 func (a *App) clearPicks(picks []core.Pick) {
 	for _, p := range picks {
 		delete(a.checked, p.Path)
 	}
+	a.selectionChanged()
 }
 
 // versionPicks is the leaves of one versioned package, in the order the scan

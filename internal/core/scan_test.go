@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -79,6 +80,26 @@ func TestReadEntries(t *testing.T) {
 		if !e.ModTime.Equal(w.mtime) {
 			t.Errorf("entries[%d] (%s) mtime = %v, want %v", i, e.Name, e.ModTime, w.mtime)
 		}
+	}
+}
+
+func TestReadEntriesStreamsLargeDirectory(t *testing.T) {
+	root := t.TempDir()
+	cache := filepath.Join(root, "cache")
+	if err := os.MkdirAll(filepath.Join(cache, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 257 {
+		write(t, filepath.Join(cache, strconv.Itoa(i)), 3)
+	}
+	write(t, filepath.Join(cache, "nested", "payload"), 11)
+
+	l := readEntries(root, 1, nil)
+	if l.err != nil {
+		t.Fatal(l.err)
+	}
+	if len(l.entries) != 1 || l.entries[0].Size != 257*3+11 {
+		t.Fatalf("entries %+v, want one cache entry with %d bytes", l.entries, 257*3+11)
 	}
 }
 

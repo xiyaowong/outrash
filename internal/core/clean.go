@@ -34,6 +34,41 @@ type Outcome struct {
 	Elapsed time.Duration
 }
 
+const (
+	removalProgressBytes = 1 << 20
+	removalProgressFiles = 256
+	removalProgressTime  = 100 * time.Millisecond
+)
+
+type removalProgress struct {
+	report func(int64)
+	last   int64
+	at     time.Time
+	files  int
+}
+
+func (p *removalProgress) due(done int64) bool {
+	p.files++
+	if p.at.IsZero() {
+		return true
+	}
+	return p.files%removalProgressFiles == 0 || done-p.last >= removalProgressBytes
+}
+
+func (p *removalProgress) file(done int64) {
+	if p.due(done) {
+		p.update(done, time.Now(), false)
+	}
+}
+
+func (p *removalProgress) update(done int64, now time.Time, force bool) {
+	if !force && !p.at.IsZero() && done-p.last < removalProgressBytes && now.Sub(p.at) < removalProgressTime {
+		return
+	}
+	p.report(done)
+	p.last, p.at = done, now
+}
+
 // ErrUnsafe marks a path the cleaner refuses to touch. It is an immutable
 // sentinel; the localized sentence is wrapped around it at creation time by
 // unsafeErr, so errors.Is keeps its identity across language switches.
@@ -126,7 +161,10 @@ func removeTree(root string, report func(int64)) (int64, error) {
 		return info.Size(), nil
 	}
 	var removed int64
-	if err := removeBelow(root, &removed, report); err != nil {
+	progress := removalProgress{report: report}
+	err = removeBelow(root, &removed, progress.file)
+	progress.update(removed, time.Now(), true)
+	if err != nil {
 		return removed, err
 	}
 	return removed, removePath(root)
@@ -137,12 +175,20 @@ func removeTree(root string, report func(int64)) (int64, error) {
 // walked through: the scan refuses a root behind a link, and the walk must
 // not reopen that door from inside the tree.
 func removeBelow(dir string, removed *int64, report func(int64)) error {
-	entries, err := os.ReadDir(dir)
+	f, err := os.Open(dir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil // the cache went away under the walk
 		}
 		return err
+	}
+	entries, readErr := f.ReadDir(-1)
+	closeErr := f.Close()
+	if readErr != nil {
+		return readErr
+	}
+	if closeErr != nil {
+		return closeErr
 	}
 	for _, e := range entries {
 		p := filepath.Join(dir, e.Name())

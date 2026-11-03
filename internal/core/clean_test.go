@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 // dirLink makes a directory link. Windows grants mklink /J without the
@@ -142,6 +143,38 @@ func mkdir(t *testing.T, p string) {
 	t.Helper()
 	if err := os.MkdirAll(p, 0o755); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRemovalProgressBatchesFiles(t *testing.T) {
+	start := time.Now()
+	var got []int64
+	p := removalProgress{report: func(n int64) { got = append(got, n) }}
+	emit := func(n int64, now time.Time) {
+		if p.due(n) {
+			p.update(n, now, false)
+		}
+	}
+	emit(1, start)
+	for i := 1; i < removalProgressFiles; i++ {
+		emit(int64(i+1), start.Add(removalProgressTime/2))
+	}
+	if len(got) != 1 {
+		t.Fatalf("reported %d times for %d files, want only the initial update", len(got), removalProgressFiles)
+	}
+	for i := removalProgressFiles; i < removalProgressFiles*2; i++ {
+		now := start.Add(removalProgressTime / 2)
+		if i == removalProgressFiles*2-1 {
+			now = start.Add(removalProgressTime)
+		}
+		emit(int64(i+1), now)
+	}
+	if len(got) != 2 || got[1] != removalProgressFiles*2 {
+		t.Fatalf("batched update = %v, want the latest byte count %d", got, removalProgressFiles*2)
+	}
+	p.update(removalProgressFiles*2+1, start.Add(removalProgressTime), true)
+	if len(got) != 3 || got[2] != removalProgressFiles*2+1 {
+		t.Fatalf("final update = %v, want the exact final byte count", got)
 	}
 }
 

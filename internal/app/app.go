@@ -61,9 +61,13 @@ type App struct {
 	pendingReceipt *receipt
 	stop           context.CancelFunc
 
-	open    map[string]bool
-	checked map[string]bool
-	now     time.Time
+	open             map[string]bool
+	checked          map[string]bool
+	now              time.Time
+	resultRows       []resultRow
+	resultRowsDirty  bool
+	resultsList      ui.ListState
+	selectionVersion uint64
 	// volume narrows the results table to one drive, the way the panel's
 	// filter bubbles set it. Empty means every volume shows.
 	volume string
@@ -287,16 +291,17 @@ type itemState struct {
 
 func New(cfg *core.Config, o core.Options, buildOpts Options) *App {
 	return &App{
-		cfg:       cfg,
-		opts:      o,
-		buildOpts: buildOpts,
-		page:      pageResults,
-		open:      map[string]bool{},
-		checked:   map[string]bool{},
-		now:       time.Now(),
-		remove:    core.RemoveSteps,
-		post:      nil,
-		progress:  &progress{},
+		cfg:             cfg,
+		opts:            o,
+		buildOpts:       buildOpts,
+		page:            pageResults,
+		open:            map[string]bool{},
+		checked:         map[string]bool{},
+		resultRowsDirty: true,
+		now:             time.Now(),
+		remove:          core.RemoveSteps,
+		post:            nil,
+		progress:        &progress{},
 	}
 }
 
@@ -325,7 +330,7 @@ func (a *App) Scan() {
 	a.stop = cancel
 	go func() {
 		defer cancel()
-		cache := core.Run(a.cfg, a.opts, runtime.NumCPU()+2, func(r core.Result) {
+		cache := core.Run(a.cfg, a.opts, min(runtime.NumCPU()+2, 4), func(r core.Result) {
 			a.applyUpdate(func() {
 				if seq != a.seq {
 					return
@@ -393,10 +398,11 @@ func (a *App) recommend() {
 		// first scan does it: a rescan must not undo a collapse the user just
 		// made.
 		if g.size > 0 && !a.expandedOnce {
-			a.open["g:"+g.group.ID] = true
+			a.setOpen("g:"+g.group.ID, true)
 		}
 	}
 	a.expandedOnce = true
+	a.selectionChanged()
 }
 
 func anyVersioned(picks []core.Pick) bool {
@@ -567,6 +573,7 @@ func (a *App) applyUpdate(f func()) {
 }
 
 func (a *App) regroup() {
+	a.resultRowsDirty = true
 	a.groups = a.groups[:0]
 	if a.cache == nil {
 		return
@@ -585,6 +592,15 @@ func (a *App) regroup() {
 		a.groups = append(a.groups, gs)
 	}
 	slices.SortStableFunc(a.groups, func(x, y groupState) int { return cmp.Compare(y.size, x.size) })
+}
+
+func (a *App) setOpen(key string, open bool) {
+	a.open[key] = open
+	a.resultRowsDirty = true
+}
+
+func (a *App) selectionChanged() {
+	a.selectionVersion++
 }
 
 func (a *App) roots() []string {
@@ -1050,12 +1066,14 @@ func (a *App) pageTitle() (title, sub string) {
 
 // pageBody is the scrollable work area under the header.
 func (a *App) pageBody(c *ui.Context) {
+	if a.page == pageResults {
+		a.resultsPage(c)
+		return
+	}
 	ui.Scroll(c).Grow(1).Children(func() {
 		switch a.page {
 		case pageOverview:
 			a.overviewPage(c)
-		case pageResults:
-			a.resultsPage(c)
 		case pageLog:
 			a.logPage(c)
 		case pageRules:
@@ -1103,7 +1121,7 @@ func (a *App) overviewPage(c *ui.Context) {
 				row := ui.Row(c).Height(26).Gap(12).AlignItems(ui.Center).
 					Cursor(ui.CursorPointer).OnClick(func() {
 					a.page = pageResults
-					a.open["g:"+it.gid] = true
+					a.setOpen("g:"+it.gid, true)
 				})
 				row.Background(a.hoverFill(row, ui.Transparent, p.Hover))
 				row.Children(func() {
@@ -1122,23 +1140,27 @@ func (a *App) overviewPage(c *ui.Context) {
 // resultsPage is the work surface: a table of tools, expandable to items and
 // to individual versions, every row checkable.
 func (a *App) resultsPage(c *ui.Context) {
-	ui.Column(c).Children(func() {
+	ui.Column(c).Grow(1).Children(func() {
 		a.tableHead(c)
 		if a.phase == phaseScanning && len(a.groups) == 0 {
 			a.scanning(c)
 			return
 		}
-		n := 0
-		for _, g := range a.sortedGroups() {
-			if !a.familyVisible(g) {
-				continue
-			}
-			n++
-			a.familyRow(c, g)
-		}
-		if n == 0 {
+		rows := a.visibleResultRows()
+		if len(rows) == 0 {
 			a.emptyResults(c)
+			return
 		}
+		ui.List(c, &a.resultsList, len(rows)).
+			Grow(1).
+			ItemKey(func(i int) any { return rows[i].key }).
+			Rows(func(row ui.ListRow) {
+				r := &rows[row.Index]
+				if !r.countsReady || r.countVersion != a.selectionVersion {
+					a.prepareResultRow(r)
+				}
+				a.resultRow(row.Context, *r)
+			})
 	})
 }
 
@@ -1210,10 +1232,12 @@ func (a *App) sortLabel(c *ui.Context, label string, mode sortMode, width float3
 		AlignItems(ui.Center).Gap(4).Radius(6).Cursor(ui.CursorPointer).OnClick(func() {
 		if a.sortBy == mode && mode == sortSize {
 			a.sizeUp = !a.sizeUp
+			a.resultRowsDirty = true
 			return
 		}
 		a.sortBy = mode
 		a.sizeUp = false
+		a.resultRowsDirty = true
 	})
 	row.Background(a.hoverFill(row, ui.Transparent, p.Hover))
 	row.Children(func() {
@@ -1698,9 +1722,11 @@ func (a *App) volumeChip(c *ui.Context, o volumeOpt, active bool) {
 	row.OnClick(func() {
 		if a.volume == o.vol {
 			a.volume = ""
+			a.resultRowsDirty = true
 			return
 		}
 		a.volume = o.vol
+		a.resultRowsDirty = true
 	})
 	bg, border := ui.Transparent, p.RuleStrong
 	if active {
