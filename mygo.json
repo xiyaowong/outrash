@@ -1,6 +1,6 @@
 {
   "name": "outrash",
-  "identifier": "io.github.xiyaowong.outrash",
+  "identifier": "com.vleny.outrash",
   "version": "0.2.8",
   "out": "build",
   "updates": {
