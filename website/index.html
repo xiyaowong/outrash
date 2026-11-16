@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-en="outrash — clear the caches you can rebuild">outrash — 清掉可重建的缓存</title>
+<meta name="description" content="outrash 扫描本机各软件留下的可重建缓存，勾选后一次清掉，下次用到时自动回来。开源、跨平台、离线运行。">
+<meta name="theme-color" content="#F6F8FA" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D1117" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='58' fill='%230969DA'/%3E%3Crect x='56' y='56' width='144' height='144' rx='36' fill='%23fff'/%3E%3Cpath d='M86 132 L120 168 L196 84' fill='none' stroke='%230969DA' stroke-width='26' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top" id="top">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <svg class="mark" viewBox="0 0 256 256" aria-hidden="true">
+        <rect width="256" height="256" rx="58" fill="var(--accent)"/>
+        <rect x="56" y="56" width="144" height="144" rx="36" fill="#FFFFFF"/>
+        <path d="M86 132 L120 168 L196 84" fill="none" stroke="var(--accent)" stroke-width="26"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>outrash</span>
+    </a>
+
+    <nav class="nav">
+      <a href="#what" data-en="How it works">它做什么</a>
+      <a href="#wont" data-en="What it won't do">它不做什么</a>
+      <a href="#catalog" data-en="Catalog">收录范围</a>
+      <a href="#download" data-en="Download">下载</a>
+    </nav>
+
+    <div class="top-right">
+      <a class="gh" href="https://github.com/xiyaowong/outrash" target="_blank" rel="noopener">GitHub ↗</a>
+      <div class="lang" role="group" aria-label="语言 / Language">
+        <button type="button" data-lang="zh" aria-pressed="true">中文</button>
+        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow" data-en="Open source · Cross-platform · Offline">开源 · 跨平台 · 离线运行</p>
+      <h1>
+        <span data-en="Clear the cache.">清掉缓存，</span>
+        <span data-en="It rebuilds itself.">下次用到时，它自己回来。</span>
+      </h1>
+      <p class="lede" data-en="outrash scans the rebuildable caches your software leaves behind: developer dependencies, browser and editor temp files. Check what you want gone, clear it in one pass. Only what can be downloaded or rebuilt is ever listed.">outrash 扫描本机各软件留下的可重建缓存——开发依赖、浏览器和编辑器的临时文件——勾选后一次清掉。只碰能重新下载或重新编译的部分。</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/xiyaowong/outrash/releases/latest"
+           target="_blank" rel="noopener" data-en="Download outrash">下载 outrash</a>
+        <a class="btn" href="https://github.com/xiyaowong/outrash"
+           target="_blank" rel="noopener" data-en="View source ↗">查看源码 ↗</a>
+      </div>
+      <p class="fine" data-en="Windows · macOS · Linux · MIT licence">Windows · macOS · Linux · MIT 许可</p>
+    </div>
+
+    <figure class="shot">
+      <img src="../docs/screenshot.png" width="1200" height="784"
+           alt="outrash 扫描结果页：按分组列出缓存、文件数量与大小，勾选的路径就是会被删除的路径">
+      <figcaption data-en="Scan results, grouped, with size and risk per cache.">扫描结果：按分组列出每个缓存、占用空间与风险状态。</figcaption>
+    </figure>
+  </section>
+
+  <section class="section" id="what">
+    <p class="label" data-en="01 · How it works">01 · 怎么用</p>
+    <div>
+      <h2 data-en="Three steps. The list is the plan.">三步，列表就是计划。</h2>
+      <div class="steps">
+        <article class="step">
+          <p class="step-no">01</p>
+          <h3 data-en="Scan">扫描</h3>
+          <p class="step-text" data-en="It measures each tool's cache where that tool's environment variables and default locations point. Anything it cannot read is marked as such.">按各工具的环境变量和默认位置逐个统计；读不到的位置会如实标出。</p>
+        </article>
+        <article class="step">
+          <p class="step-no">02</p>
+          <h3 data-en="Pick">挑选</h3>
+          <p class="step-text" data-en="The recommendation is already checked: only caches unused for 30+ days, and the newest version of each package is kept. You can also look at one drive only.">推荐已经勾好：只勾超过 30 天没用过的，多版本的包保留最新版。也可以只看某个盘。</p>
+        </article>
+        <article class="step">
+          <p class="step-no">03</p>
+          <h3 data-en="Clean">清理</h3>
+          <p class="step-text" data-en="One button, per-item progress, cancelable mid-run. Next to each path is the sentence that says how it comes back.">一个按钮，逐项显示进度，中途可取消；每个缓存怎么回来，写在路径旁边。</p>
+        </article>
+      </div>
+      <p class="note" data-en="Four pages: Overview, Scan results, Cleanups, Rules. Switch between Chinese and English at any time.">界面四页：概览、扫描结果、清理记录、规则。中文 / English 随时切换。</p>
+    </div>
+  </section>
+
+  <section class="section" id="wont">
+    <p class="label" data-en="02 · What it won't do">02 · 不做的事</p>
+    <div>
+      <h2 data-en="Six limits.">六条边界。</h2>
+      <ul class="wonts">
+        <li><div><strong data-en="No deleting on its own.">不自动删。</strong>
+          <span data-en="The list is the plan: only checked paths are removed.">列表就是计划：勾选的路径才是会被删除的路径。</span></div></li>
+        <li><div><strong data-en="No touching sources.">不碰源码。</strong>
+          <span data-en="Project folders, runtimes and consoles stay as they are.">项目目录、运行环境、控制台一律不动。</span></div></li>
+        <li><div><strong data-en="No config written.">不写配置。</strong>
+          <span data-en="No config files, registry or logs; the cleanup log lives in memory and dies with the window.">没有配置文件、注册表、日志；清理记录只存在内存里，关窗即消失。</span></div></li>
+        <li><div><strong data-en="No background process.">不常驻。</strong>
+          <span data-en="Close the window and it exits.">关掉窗口，进程就结束。</span></div></li>
+        <li><div><strong data-en="No connecting on its own.">不自动联网。</strong>
+          <span data-en="It goes online only when you press Check for updates on the About sheet, and never downloads updates by itself.">只有「关于」里手动点「检查更新」才联网，也不会自动下载。</span></div></li>
+        <li><div><strong data-en="No ads.">不放广告。</strong>
+          <span data-en="The window holds nothing but scan results.">窗口里只有扫描结果。</span></div></li>
+      </ul>
+      <p class="note mono" data-en="Two more hard limits: links are never followed, and drive roots plus their first-level folders are always refused.">另有两条硬限制：不跟随链接；盘符根及其下一级目录一律拒绝。</p>
+    </div>
+  </section>
+
+  <section class="section" id="catalog">
+    <p class="label" data-en="03 · Coverage">03 · 收录范围</p>
+    <div>
+      <h2 data-en="13 groups, 49 caches across all three platforms.">13 组，49 个缓存项（三平台合计）。</h2>
+      <p class="lead" data-en="Everything listed is rebuilt by the software itself: downloaded dependencies, compile output, temp files from browsers and editors.">收录的都是软件会自行重建的内容：下载来的依赖、编译产物、浏览器与编辑器的临时文件。</p>
+      <ul class="chips">
+        <li>Node.js</li>
+        <li>.NET</li>
+        <li>Go</li>
+        <li>Rust</li>
+        <li>Python</li>
+        <li data-en="AI models">AI 模型</li>
+        <li>Ruby</li>
+        <li>JVM</li>
+        <li data-en="Browsers">浏览器</li>
+        <li data-en="Editors">编辑器</li>
+        <li data-en="Messaging">通讯</li>
+        <li data-en="Media">媒体</li>
+        <li data-en="Other">其他</li>
+      </ul>
+      <p class="note" data-en="The full list is on the app's Rules page: every path and the environment variable it reads first are there. Cache elsewhere? Set that variable and the app prefers it.">完整清单在应用的「规则」页：每条路径和优先读取的环境变量都在那里。缓存放在别处？设置对应环境变量，程序会优先读取。</p>
+    </div>
+  </section>
+
+  <section class="section" id="download">
+    <p class="label" data-en="04 · Download">04 · 下载</p>
+    <div>
+      <h2 data-en="Pick your platform.">选你的平台。</h2>
+      <p class="lead" data-en="The latest build is on GitHub Releases. Free, open source, MIT licence.">最新版在 GitHub Releases。免费、开源、MIT 许可。</p>
+
+      <div class="platforms">
+        <div class="platform">
+          <h3>Windows</h3>
+          <p data-en="Installer, or a standalone .exe">安装包，或免安装的 .exe</p>
+        </div>
+        <div class="platform">
+          <h3>macOS</h3>
+          <p data-en=".app for Apple silicon and Intel">Apple 芯片与 Intel 的 .app</p>
+        </div>
+        <div class="platform">
+          <h3>Linux</h3>
+          <p data-en=".deb, or an executable tar.gz (amd64 / arm64)">.deb，或可执行 tar.gz（amd64 / arm64）</p>
+        </div>
+      </div>
+
+      <div class="dl-line">
+        <a class="btn primary" href="https://github.com/xiyaowong/outrash/releases/latest"
+           target="_blank" rel="noopener" data-en="Open GitHub Releases ↗">前往 GitHub Releases ↗</a>
+      </div>
+      <p class="note" data-en="macOS builds are unsigned: right-click the app and choose Open the first time.">macOS 包未签名：首次打开请右键 → 打开。</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>outrash · MIT · © 2026 xiyaowong</p>
+    <nav>
+      <a href="https://github.com/xiyaowong/outrash" target="_blank" rel="noopener">GitHub ↗</a>
+      <a href="https://github.com/xiyaowong/outrash/issues" target="_blank" rel="noopener" data-en="Issues">反馈</a>
+      <a href="#top" data-en="Back to top">回到顶部</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
