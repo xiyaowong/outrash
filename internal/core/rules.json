@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "staleDays": 30,
   "groups": [
     {
@@ -11,6 +11,7 @@
           "name": "npm 缓存",
           "note": "下次安装依赖时自动重新下载",
           "env": ["npm_config_cache"],
+          "probe": { "cmd": "npm", "args": ["config", "get", "cache"], "always": true },
           "paths": {
             "windows": ["%LOCALAPPDATA%/npm-cache"],
             "darwin": ["~/.npm"],
@@ -23,6 +24,7 @@
           "name": "pnpm 存储",
           "note": "下次安装依赖时自动重新下载",
           "env": ["npm_config_store_dir"],
+          "probe": { "cmd": "pnpm", "args": ["store", "path"], "always": true },
           "paths": {
             "windows": ["%LOCALAPPDATA%/pnpm/store"],
             "darwin": ["~/Library/pnpm/store"],
@@ -143,6 +145,7 @@
           "name": "构建缓存",
           "note": "go build 时自动重新编译",
           "env": ["GOCACHE"],
+          "probe": { "cmd": "go", "args": ["env", "GOCACHE"], "always": true },
           "paths": {
             "windows": ["%LOCALAPPDATA%/go-build"],
             "darwin": ["~/Library/Caches/go-build"],
@@ -155,6 +158,7 @@
           "name": "模块缓存",
           "note": "构建时自动重新下载",
           "env": ["GOMODCACHE"],
+          "probe": { "cmd": "go", "args": ["env", "GOMODCACHE"], "always": true },
           "paths": {
             "windows": ["%GOPATH%/pkg/mod", "%USERPROFILE%/go/pkg/mod"],
             "darwin": ["%GOPATH%/pkg/mod", "~/go/pkg/mod"],
@@ -204,6 +208,7 @@
           "name": "pip 缓存",
           "note": "下次安装时自动重新下载",
           "env": ["PIP_CACHE_DIR"],
+          "probe": { "cmd": "pip", "args": ["cache", "dir"], "always": true },
           "paths": {
             "windows": ["%LOCALAPPDATA%/pip/cache"],
             "darwin": ["~/Library/Caches/pip"],
@@ -216,6 +221,7 @@
           "name": "uv 缓存",
           "note": "下次安装时自动重新下载",
           "env": ["UV_CACHE_DIR"],
+          "probe": { "cmd": "uv", "args": ["cache", "dir"], "always": true },
           "paths": {
             "windows": ["%LOCALAPPDATA%/uv/cache"],
             "darwin": ["~/.cache/uv"],
@@ -228,6 +234,7 @@
           "name": "Poetry 缓存",
           "note": "下次安装时自动重新下载",
           "env": ["POETRY_CACHE_DIR"],
+          "probe": { "cmd": "poetry", "args": ["config", "cache-dir"], "always": true },
           "paths": {
             "windows": ["%LOCALAPPDATA%/pypoetry/Cache"],
             "darwin": ["~/Library/Caches/pypoetry"],
@@ -711,6 +718,7 @@
           "name": "Composer 缓存",
           "note": "下次安装时自动重新下载",
           "env": ["COMPOSER_CACHE_DIR"],
+          "probe": { "cmd": "composer", "args": ["config", "--global", "cache-dir"], "always": true },
           "paths": {
             "windows": ["%LOCALAPPDATA%/Composer"],
             "darwin": ["~/Library/Caches/composer"],

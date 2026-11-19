@@ -174,7 +174,7 @@ var en = map[string]string{
 	"选择方式":   "Presets",
 	"读取不全":   "Partial read",
 	"近期用过":   "Used this week",
-	"环境变量指向": "Named by env var",
+	"配置指向": "Set by config",
 	"可清理":    "Cleanable",
 	"失败":     "Failed",
 	"今天":     "today",
@@ -244,7 +244,7 @@ var en = map[string]string{
 	"按子项":   "entries",
 	"按版本":   "versions",
 	"%d 层":  "%d levels",
-	"可以设置环境变量把缓存放到别处，程序会优先读取它。": "An environment variable can move a cache elsewhere; the app reads it first.",
+	"可以用环境变量或工具自己的配置把缓存放到别处，程序会先问工具。": "An environment variable or the tool's own config can move a cache elsewhere; the app asks the tool first.",
 
 	// Sheets.
 	"没有需要清理的内容":   "Nothing to clean",

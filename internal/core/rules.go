@@ -66,6 +66,11 @@ type Item struct {
 type Probe struct {
 	Cmd  string   `json:"cmd"`
 	Args []string `json:"args"`
+	// Always asks the tool on every scan, not only when no default path
+	// exists. A tool keeps its config in a file, so moving its cache leaves
+	// the default folder behind; a probe that only runs as a last resort
+	// would keep reading the folder the tool no longer writes to.
+	Always bool `json:"always"`
 }
 
 // Parse reads and checks a catalog.
@@ -113,6 +118,9 @@ func Parse(data []byte) (*Config, error) {
 			if it.Depth > 1 && it.Unit == UnitVersioned {
 				return nil, fmt.Errorf("rules: %s/%s: a versioned unit cannot add depth", g.ID, it.ID)
 			}
+			if it.Probe != nil && it.Probe.Cmd == "" {
+				return nil, fmt.Errorf("rules: %s/%s: a probe needs a command", g.ID, it.ID)
+			}
 		}
 	}
 	return &c, nil
@@ -144,8 +152,9 @@ type Options struct {
 	GOOS   string
 	Home   string
 	Getenv func(string) string
-	// Run asks a tool where it keeps its cache. It is only called for
-	// items whose environment and default paths both came up empty.
+	// Run asks a tool where it keeps its cache. It is called for an item
+	// whose probe is marked always, and otherwise only when the item's
+	// default paths came up empty.
 	Run func(cmd string, args []string) (string, error)
 }
 
@@ -182,9 +191,9 @@ func runOnce(name string, args []string) (string, error) {
 
 // Roots returns the directories this item may keep files in, existing or
 // not, in the order they should be tried. fromEnv marks the roots an
-// environment variable named: the tool's own config says where to look, but
-// nothing vouches for what the value actually is, so callers treat those
-// roots as a claim to display, not as a verified cache.
+// environment variable or a tool's own config named: either says where to
+// look, but nothing vouches for what the value actually is, so callers treat
+// those roots as a claim to display, not as a verified cache.
 func (it Item) Roots(o Options) (dirs []string, source string, fromEnv bool) {
 	for _, name := range it.Env {
 		if v := strings.TrimSpace(o.Getenv(name)); v != "" {
@@ -212,18 +221,47 @@ func (it Item) Roots(o Options) (dirs []string, source string, fromEnv bool) {
 		dirs = append(dirs, d)
 	}
 	dirs = unique(dirs)
-	if anyExists(dirs) {
-		return dirs, L("默认位置", "Default location"), false
-	}
-	if it.Probe == nil || o.Run == nil {
-		return dirs, L("默认位置", "Default location"), false
-	}
-	if out, err := o.Run(it.Probe.Cmd, it.Probe.Args); err == nil {
-		if d, ok := clean(out, o); ok && exists(d) {
-			return append(dirs, d), it.Probe.Cmd + " " + strings.Join(it.Probe.Args, " "), false
+	if it.Probe != nil && o.Run != nil && (it.Probe.Always || !anyExists(dirs)) {
+		if out, err := o.Run(it.Probe.Cmd, it.Probe.Args); err == nil && probePath(out) {
+			if d, ok := clean(out, o); ok && (it.Probe.Always || exists(d)) {
+				source := strings.TrimSpace(it.Probe.Cmd + " " + strings.Join(it.Probe.Args, " "))
+				// An answer the catalog itself names is a verified root; one
+				// the tool moved elsewhere is a claim, like a variable's.
+				claim := !isDefault(d, dirs)
+				if it.Probe.Always {
+					// The tool's own config wins: a default folder still on
+					// disk is one the tool no longer writes to.
+					return []string{d}, source, claim
+				}
+				return append(dirs, d), source, claim
+			}
 		}
 	}
 	return dirs, L("默认位置", "Default location"), false
+}
+
+// probePath reports whether a probe's answer is a path the catalog may use.
+// A tool answers "off" or a sentence where it keeps no cache, and clean
+// would otherwise resolve that against the working directory. A bare "~" is
+// not a cache either: it names the home directory, which no root may hold.
+func probePath(s string) bool {
+	s = strings.Trim(strings.TrimSpace(s), `"'`)
+	if filepath.IsAbs(s) {
+		return true
+	}
+	return len(s) > 2 && s[0] == '~' && (s[1] == '/' || s[1] == '\\')
+}
+
+// isDefault reports whether d is one of the item's own default paths. The
+// comparison folds case where the platform's paths do, because a tool may
+// spell a drive or a user name differently from the catalog.
+func isDefault(d string, dirs []string) bool {
+	for _, dir := range dirs {
+		if rel, err := filepath.Rel(dir, d); err == nil && rel == "." {
+			return true
+		}
+	}
+	return false
 }
 
 // expand resolves ~ and %VAR% in a path template. It reports false when a
