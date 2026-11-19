@@ -614,7 +614,7 @@ func (a *App) statusTag(c *ui.Context, res core.Result, recent bool) {
 		// The rows under this cache answer to leaf checks only, and the tag
 		// is why: the tool's own config named the place, nothing vouches for
 		// what it holds.
-		tag(c, a.T("环境变量指向"), p.Warning, p.WarningSubtle)
+		tag(c, a.T("配置指向"), p.Warning, p.WarningSubtle)
 	case recent:
 		tag(c, a.T("近期用过"), p.Warning, p.WarningSubtle)
 	default:

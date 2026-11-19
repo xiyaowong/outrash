@@ -125,15 +125,16 @@ func (a *App) rulesPage(c *ui.Context) {
 }
 
 // ruleSource names where the item looks: its environment variables first,
-// then the tool's own answer about where it keeps the cache, then the
-// default paths for this system.
+// then the default paths for this system. A probe marked always answers
+// before the default paths, so it is named before them; a fallback probe
+// only runs when no default path exists and is named last.
 func ruleSource(it core.Item) string {
 	var parts []string
 	for _, e := range it.Env {
 		parts = append(parts, "%"+e+"%")
 	}
-	if it.Probe != nil {
-		parts = append(parts, it.Probe.Cmd+" "+strings.Join(it.Probe.Args, " "))
+	if it.Probe != nil && it.Probe.Always {
+		parts = append(parts, probeCommand(it))
 	}
 	// The row has to name the location this machine's scan actually tries,
 	// so the current platform's template comes first; a tool the catalog
@@ -150,5 +151,12 @@ func ruleSource(it core.Item) string {
 	if len(paths) > 0 {
 		parts = append(parts, paths[0])
 	}
+	if it.Probe != nil && !it.Probe.Always {
+		parts = append(parts, probeCommand(it))
+	}
 	return strings.Join(parts, "  ")
+}
+
+func probeCommand(it core.Item) string {
+	return it.Probe.Cmd + " " + strings.Join(it.Probe.Args, " ")
 }

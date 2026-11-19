@@ -191,9 +191,9 @@ func runOnce(name string, args []string) (string, error) {
 
 // Roots returns the directories this item may keep files in, existing or
 // not, in the order they should be tried. fromEnv marks the roots an
-// environment variable named: the tool's own config says where to look, but
-// nothing vouches for what the value actually is, so callers treat those
-// roots as a claim to display, not as a verified cache.
+// environment variable or a tool's own config named: either says where to
+// look, but nothing vouches for what the value actually is, so callers treat
+// those roots as a claim to display, not as a verified cache.
 func (it Item) Roots(o Options) (dirs []string, source string, fromEnv bool) {
 	for _, name := range it.Env {
 		if v := strings.TrimSpace(o.Getenv(name)); v != "" {
@@ -225,12 +225,15 @@ func (it Item) Roots(o Options) (dirs []string, source string, fromEnv bool) {
 		if out, err := o.Run(it.Probe.Cmd, it.Probe.Args); err == nil && probePath(out) {
 			if d, ok := clean(out, o); ok && (it.Probe.Always || exists(d)) {
 				source := strings.TrimSpace(it.Probe.Cmd + " " + strings.Join(it.Probe.Args, " "))
+				// An answer the catalog itself names is a verified root; one
+				// the tool moved elsewhere is a claim, like a variable's.
+				claim := !isDefault(d, dirs)
 				if it.Probe.Always {
 					// The tool's own config wins: a default folder still on
 					// disk is one the tool no longer writes to.
-					return []string{d}, source, false
+					return []string{d}, source, claim
 				}
-				return append(dirs, d), source, false
+				return append(dirs, d), source, claim
 			}
 		}
 	}
@@ -239,10 +242,26 @@ func (it Item) Roots(o Options) (dirs []string, source string, fromEnv bool) {
 
 // probePath reports whether a probe's answer is a path the catalog may use.
 // A tool answers "off" or a sentence where it keeps no cache, and clean
-// would otherwise resolve that against the working directory.
+// would otherwise resolve that against the working directory. A bare "~" is
+// not a cache either: it names the home directory, which no root may hold.
 func probePath(s string) bool {
 	s = strings.Trim(strings.TrimSpace(s), `"'`)
-	return filepath.IsAbs(s) || strings.HasPrefix(s, "~/") || strings.HasPrefix(s, `~\`)
+	if filepath.IsAbs(s) {
+		return true
+	}
+	return len(s) > 2 && s[0] == '~' && (s[1] == '/' || s[1] == '\\')
+}
+
+// isDefault reports whether d is one of the item's own default paths. The
+// comparison folds case where the platform's paths do, because a tool may
+// spell a drive or a user name differently from the catalog.
+func isDefault(d string, dirs []string) bool {
+	for _, dir := range dirs {
+		if rel, err := filepath.Rel(dir, d); err == nil && rel == "." {
+			return true
+		}
+	}
+	return false
 }
 
 // expand resolves ~ and %VAR% in a path template. It reports false when a

@@ -50,10 +50,10 @@ type Version struct {
 type Root struct {
 	Path   string
 	Source string
-	// EnvSrc marks a root an environment variable pointed at. It is scanned
-	// and listed, but the recommendation leaves it unchecked: a mis-set
-	// variable would otherwise turn one click into a sweep of whatever it
-	// names.
+	// EnvSrc marks a root an environment variable or a tool's own config
+	// pointed at. It is scanned and listed, but the recommendation leaves it
+	// unchecked: a mis-set value would otherwise turn one click into a sweep
+	// of whatever it names.
 	EnvSrc bool
 	Size   int64
 	Count  int
@@ -98,8 +98,9 @@ func (r Result) Failed() bool {
 }
 
 // EnvSourced reports whether any root of this result was named by an
-// environment variable. Such a root is a claim to read, not a cache
-// anything vouches for, which the window says where the status column does.
+// environment variable or a tool's own config. Such a root is a claim to
+// read, not a cache anything vouches for, which the window says where the
+// status column does.
 func (r Result) EnvSourced() bool {
 	for _, root := range r.Roots {
 		if root.EnvSrc {

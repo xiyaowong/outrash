@@ -36,9 +36,10 @@ type Pick struct {
 	// Package groups versions of the same dependency, so KeepNewest can
 	// keep one of them. Empty for entries that are not versioned.
 	Package string
-	// EnvSrc marks a pick whose root an environment variable named: a claim
-	// to read, not a cache anything vouches for, so one-click selections
-	// skip it and only a check on a row that shows the path may take it.
+	// EnvSrc marks a pick whose root an environment variable or a tool's own
+	// config named: a claim to read, not a cache anything vouches for, so
+	// one-click selections skip it and only a check on a row that shows the
+	// path may take it.
 	EnvSrc bool
 }
 
