@@ -75,7 +75,7 @@
         <article class="step">
           <p class="step-no">01</p>
           <h3 data-en="Scan">扫描</h3>
-          <p class="step-text" data-en="It measures each tool's cache where that tool's environment variables and default locations point. Anything it cannot read is marked as such.">按各工具的环境变量和默认位置逐个统计；读不到的位置会如实标出。</p>
+          <p class="step-text" data-en="It measures each tool's cache where that tool's environment variables and default locations point. Anything it cannot read is marked as such. Only directory metadata is read, never file contents.">按各工具的环境变量和默认位置逐个统计；读不到的位置会如实标出。只读目录元数据，不读文件内容。</p>
         </article>
         <article class="step">
           <p class="step-no">02</p>
@@ -95,7 +95,7 @@
   <section class="section" id="wont">
     <p class="label" data-en="02 · What it won't do">02 · 不做的事</p>
     <div>
-      <h2 data-en="Six limits.">六条边界。</h2>
+      <h2 data-en="Seven limits.">七条边界。</h2>
       <ul class="wonts">
         <li><div><strong data-en="No deleting on its own.">不自动删。</strong>
           <span data-en="The list is the plan: only checked paths are removed.">列表就是计划：勾选的路径才是会被删除的路径。</span></div></li>
@@ -107,6 +107,8 @@
           <span data-en="Close the window and it exits.">关掉窗口，进程就结束。</span></div></li>
         <li><div><strong data-en="No connecting on its own.">不自动联网。</strong>
           <span data-en="It goes online only when you press Check for updates on the About sheet, and never downloads updates by itself.">只有「关于」里手动点「检查更新」才联网，也不会自动下载。</span></div></li>
+        <li><div><strong data-en="No index.">不建索引。</strong>
+          <span data-en="No whole-disk read, no index file, no administrator rights: each run reads only the metadata of the catalog's cache directories. A first scan takes as long as the disk does — seconds once the system has cached it, longer on a slow drive.">不读整盘、不写索引、不要管理员权限：每次只按规则读缓存目录的元数据。第一次扫描的快慢取决于磁盘，系统缓存已热时几秒内完成，机械盘冷读会慢一些。</span></div></li>
         <li><div><strong data-en="No ads.">不放广告。</strong>
           <span data-en="The window holds nothing but scan results.">窗口里只有扫描结果。</span></div></li>
       </ul>

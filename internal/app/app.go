@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -319,7 +321,13 @@ func New(cfg *core.Config, o core.Options, buildOpts Options) *App {
 	}
 }
 
-func (a *App) Scan() {
+func (a *App) Scan() { a.scan(a.cfg, true) }
+
+// scan walks cfg and lands its results in a.cache. A partial scan — the
+// rescan after a clean, which walks only the items the removal touched —
+// merges instead of replacing: every item it does not walk keeps the result
+// the last full scan gave it.
+func (a *App) scan(cfg *core.Config, replace bool) {
 	// A clean in flight must not be walked while its paths are disappearing;
 	// finish clears busy before its own rescan.
 	if a.busy {
@@ -344,7 +352,7 @@ func (a *App) Scan() {
 	a.stop = cancel
 	go func() {
 		defer cancel()
-		cache := core.Run(a.cfg, a.opts, min(runtime.NumCPU()+2, 4), func(r core.Result) {
+		cache := core.Run(cfg, a.opts, min(runtime.NumCPU()+2, 4), func(r core.Result) {
 			a.applyUpdate(func() {
 				if seq != a.seq {
 					return
@@ -360,18 +368,82 @@ func (a *App) Scan() {
 			if seq != a.seq {
 				return
 			}
-			a.cache = cache
+			if replace || a.cache == nil {
+				a.cache = cache
+			} else {
+				maps.Copy(a.cache.Results, cache.Results)
+				a.cache.At, a.cache.Elapsed = cache.At, cache.Elapsed
+			}
 			a.phase = phaseReady
 			a.now = time.Now()
 			a.regroup()
 			a.recommend()
 			a.busyBar(false)
-			a.closeReceipt(cache)
+			a.closeReceipt(a.cache)
 			if a.buildOpts.Debug {
 				a.printScanWarnings(cache)
 			}
 		})
 	}()
+}
+
+// rescanCleaned walks the items a clean touched and no others. A stopped run
+// is the one case that needs the whole catalog: the step it stopped inside
+// was half removed, and nothing recorded which item that was.
+func (a *App) rescanCleaned(out core.Outcome) {
+	if out.Canceled || a.cache == nil {
+		a.scan(a.cfg, true)
+		return
+	}
+	a.scan(a.subset(touchedItems(a.cache, out.Runs)), false)
+}
+
+// touchedItems names the catalog items whose roots hold a path the removal
+// acted on. A clean changes nothing outside them, so they are all the rescan
+// has to read.
+func touchedItems(cache *core.Cache, runs []core.Removal) map[string]bool {
+	keys := map[string]bool{}
+	for key, res := range cache.Results {
+		for _, root := range res.Roots {
+			for _, r := range runs {
+				if under(r.Path, root.Path) {
+					keys[key] = true
+					break
+				}
+			}
+			if keys[key] {
+				break
+			}
+		}
+	}
+	return keys
+}
+
+// under reports whether p is dir itself or a path below it.
+func under(p, dir string) bool {
+	rel, err := filepath.Rel(dir, p)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+// subset is the catalog cut down to keys: the same groups, each holding only
+// the items the scan still has to walk.
+func (a *App) subset(keys map[string]bool) *core.Config {
+	c := &core.Config{Version: a.cfg.Version, StaleDays: a.cfg.StaleDays}
+	for _, g := range a.cfg.Groups {
+		var items []core.Item
+		for _, it := range g.Items {
+			if keys[g.ID+"/"+it.ID] {
+				items = append(items, it)
+			}
+		}
+		if len(items) > 0 {
+			c.Groups = append(c.Groups, core.Group{ID: g.ID, Name: g.Name, Items: items})
+		}
+	}
+	return c
 }
 
 // recommend checks what the product would clean on its own: stale entries,
