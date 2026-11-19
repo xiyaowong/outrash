@@ -6,12 +6,14 @@
 package core
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -133,6 +135,10 @@ func removePlan(ctx context.Context, p *Plan, roots []string, progress func(done
 	start := time.Now()
 	var out Outcome
 	var done int64
+	// Parents a finished step leaves behind. They are pruned once every step
+	// is over: a cache root with thousands of entries would otherwise be
+	// listed again after each one.
+	var emptied []string
 	for _, s := range p.Steps {
 		if ctx.Err() != nil {
 			out.Canceled = true
@@ -175,6 +181,8 @@ func removePlan(ctx context.Context, p *Plan, roots []string, progress func(done
 		}
 		if r.Err != nil {
 			out.Failed++
+		} else if !r.Gone {
+			emptied = append(emptied, filepath.Dir(filepath.Clean(s.Path)))
 		}
 		out.Runs = append(out.Runs, r)
 		if onStep != nil {
@@ -185,8 +193,74 @@ func removePlan(ctx context.Context, p *Plan, roots []string, progress func(done
 			progress(done, p.Bytes)
 		}
 	}
+	if !out.Canceled {
+		// A stop should return at once; whatever it left empty can go with
+		// the next clean.
+		pruneEmptyParents(emptied, roots)
+	}
 	out.Elapsed = time.Since(start)
 	return out
+}
+
+// pruneEmptyParents removes the directories a clean leaves empty, up to and
+// including the cache root they sat under. A tree cache is listed by its
+// leaves — the versions of a package, the modules under a site — so removing
+// them empties the folders between a leaf and the root, and those husks are
+// what a user sees after a clean. Only an empty directory is removed, and
+// only one a root the scan measured holds, so this can never reach anything
+// the plan did not already account for.
+func pruneEmptyParents(parents, roots []string) {
+	dirs := unique(parents)
+	// Deepest first: a folder is only read after the folders under it are
+	// gone, so each is listed once.
+	slices.SortStableFunc(dirs, func(a, b string) int { return cmp.Compare(pathDepth(b), pathDepth(a)) })
+	for _, dir := range dirs {
+		pruneUp(dir, roots)
+	}
+}
+
+// pruneUp removes dir while it is empty, then its parent, and stops at the
+// cache root that holds it.
+func pruneUp(dir string, roots []string) {
+	root, ok := rootHolding(dir, roots)
+	if !ok {
+		return
+	}
+	for covers(root, dir) {
+		info, err := os.Lstat(dir)
+		if err != nil || !info.IsDir() || isLink(info) {
+			return
+		}
+		entries, err := readDir(dir)
+		if err != nil || len(entries) > 0 {
+			return
+		}
+		if removePath(dir) != nil || samePath(dir, root) {
+			return
+		}
+		dir = filepath.Dir(dir)
+	}
+}
+
+// rootHolding returns the nearest root that holds p, or false when no root
+// does.
+func rootHolding(p string, roots []string) (string, bool) {
+	var best string
+	for _, root := range roots {
+		if len(root) > len(best) && covers(root, p) {
+			best = root
+		}
+	}
+	return best, best != ""
+}
+
+func samePath(a, b string) bool {
+	rel, err := filepath.Rel(a, b)
+	return err == nil && rel == "."
+}
+
+func pathDepth(p string) int {
+	return strings.Count(strings.TrimPrefix(p, filepath.VolumeName(p)), string(filepath.Separator))
 }
 
 // removeTree deletes the tree at root bottom-up, reporting the bytes gone so
