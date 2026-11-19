@@ -66,6 +66,11 @@ type Item struct {
 type Probe struct {
 	Cmd  string   `json:"cmd"`
 	Args []string `json:"args"`
+	// Always asks the tool on every scan, not only when no default path
+	// exists. A tool keeps its config in a file, so moving its cache leaves
+	// the default folder behind; a probe that only runs as a last resort
+	// would keep reading the folder the tool no longer writes to.
+	Always bool `json:"always"`
 }
 
 // Parse reads and checks a catalog.
@@ -113,6 +118,9 @@ func Parse(data []byte) (*Config, error) {
 			if it.Depth > 1 && it.Unit == UnitVersioned {
 				return nil, fmt.Errorf("rules: %s/%s: a versioned unit cannot add depth", g.ID, it.ID)
 			}
+			if it.Probe != nil && it.Probe.Cmd == "" {
+				return nil, fmt.Errorf("rules: %s/%s: a probe needs a command", g.ID, it.ID)
+			}
 		}
 	}
 	return &c, nil
@@ -144,8 +152,9 @@ type Options struct {
 	GOOS   string
 	Home   string
 	Getenv func(string) string
-	// Run asks a tool where it keeps its cache. It is only called for
-	// items whose environment and default paths both came up empty.
+	// Run asks a tool where it keeps its cache. It is called for an item
+	// whose probe is marked always, and otherwise only when the item's
+	// default paths came up empty.
 	Run func(cmd string, args []string) (string, error)
 }
 
@@ -212,18 +221,28 @@ func (it Item) Roots(o Options) (dirs []string, source string, fromEnv bool) {
 		dirs = append(dirs, d)
 	}
 	dirs = unique(dirs)
-	if anyExists(dirs) {
-		return dirs, L("默认位置", "Default location"), false
-	}
-	if it.Probe == nil || o.Run == nil {
-		return dirs, L("默认位置", "Default location"), false
-	}
-	if out, err := o.Run(it.Probe.Cmd, it.Probe.Args); err == nil {
-		if d, ok := clean(out, o); ok && exists(d) {
-			return append(dirs, d), it.Probe.Cmd + " " + strings.Join(it.Probe.Args, " "), false
+	if it.Probe != nil && o.Run != nil && (it.Probe.Always || !anyExists(dirs)) {
+		if out, err := o.Run(it.Probe.Cmd, it.Probe.Args); err == nil && probePath(out) {
+			if d, ok := clean(out, o); ok && (it.Probe.Always || exists(d)) {
+				source := strings.TrimSpace(it.Probe.Cmd + " " + strings.Join(it.Probe.Args, " "))
+				if it.Probe.Always {
+					// The tool's own config wins: a default folder still on
+					// disk is one the tool no longer writes to.
+					return []string{d}, source, false
+				}
+				return append(dirs, d), source, false
+			}
 		}
 	}
 	return dirs, L("默认位置", "Default location"), false
+}
+
+// probePath reports whether a probe's answer is a path the catalog may use.
+// A tool answers "off" or a sentence where it keeps no cache, and clean
+// would otherwise resolve that against the working directory.
+func probePath(s string) bool {
+	s = strings.Trim(strings.TrimSpace(s), `"'`)
+	return filepath.IsAbs(s) || strings.HasPrefix(s, "~/") || strings.HasPrefix(s, `~\`)
 }
 
 // expand resolves ~ and %VAR% in a path template. It reports false when a

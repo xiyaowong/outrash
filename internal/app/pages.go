@@ -119,17 +119,21 @@ func (a *App) rulesPage(c *ui.Context) {
 			}
 		})
 		ui.Column(c).Gap(4).Children(func() {
-			ui.Text(c, a.T("可以设置环境变量把缓存放到别处，程序会优先读取它。")).FontSize(fz(11)).TextColor(p.Ink3)
+			ui.Text(c, a.T("可以用环境变量或工具自己的配置把缓存放到别处，程序会先问工具。")).FontSize(fz(11)).TextColor(p.Ink3)
 		})
 	})
 }
 
 // ruleSource names where the item looks: its environment variables first,
-// then the default paths for this system.
+// then the tool's own answer about where it keeps the cache, then the
+// default paths for this system.
 func ruleSource(it core.Item) string {
 	var parts []string
 	for _, e := range it.Env {
 		parts = append(parts, "%"+e+"%")
+	}
+	if it.Probe != nil {
+		parts = append(parts, it.Probe.Cmd+" "+strings.Join(it.Probe.Args, " "))
 	}
 	// The row has to name the location this machine's scan actually tries,
 	// so the current platform's template comes first; a tool the catalog
