@@ -508,7 +508,9 @@ func TestScanItemStops(t *testing.T) {
 
 	stop := make(chan struct{})
 	close(stop)
-	if r := scanItem("grp", it, o, stop); !errors.Is(r.Err, ErrStopped) || len(r.Roots) != 0 {
+	pool := newMeasurePool(stop)
+	defer pool.close()
+	if r := scanItem("grp", it, o, pool); !errors.Is(r.Err, ErrStopped) || len(r.Roots) != 0 {
 		t.Fatalf("stopped scanItem = err %v, %d roots; want ErrStopped and none", r.Err, len(r.Roots))
 	}
 	if r := scanItem("grp", it, o, nil); r.Err != nil || len(r.Roots) != 1 {
@@ -517,7 +519,7 @@ func TestScanItemStops(t *testing.T) {
 
 	// The walk inside measure also unwinds, which is the multi-gigabyte case:
 	// the check has to reach below the top-level ReadDir.
-	l := readEntries(root, 1, stop)
+	l := readEntries(root, 1, pool)
 	if !l.stopped || len(l.entries) != 0 {
 		t.Fatalf("stopped listing = %+v, want stopped and empty", l)
 	}
