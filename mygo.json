@@ -1,7 +1,7 @@
 {
   "name": "outrash",
   "identifier": "com.vleny.outrash",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "out": "build",
   "updates": {
     "publicKey": "CLnWT8Q3/dLSb+fGuj3ikmAF+sgm3wnW6VEv425pEOg=",
