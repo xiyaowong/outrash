@@ -514,7 +514,8 @@ func cleanProgressDue(last, now time.Time, done, total int64) bool {
 }
 
 // finish applies a completed removal and only now rescans: a scan racing
-// the deletion would list paths that no longer exist.
+// the deletion would list paths that no longer exist. The rescan reads the
+// items the removal touched; everything else still measures what it did.
 func (a *App) finish(out core.Outcome) {
 	a.busy = false
 	a.canceling = false
@@ -558,7 +559,7 @@ func (a *App) finish(out core.Outcome) {
 	if rc := r.receipt; rc != nil {
 		a.pendingReceipt = rc
 	}
-	a.Scan()
+	a.rescanCleaned(out)
 }
 
 func (a *App) reportSheet(c *ui.Context) {
